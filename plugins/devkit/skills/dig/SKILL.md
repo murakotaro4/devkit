@@ -4,6 +4,7 @@ description: "AskUserQuestionToolで徹底的に深掘り質問を続ける"
 user-invocable: true
 disable-model-invocation: true
 argument-hint: "[topic]"
+allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 ---
 
 # /dig - 深掘りインタビュー
