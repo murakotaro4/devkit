@@ -1,8 +1,6 @@
 ---
 name: codex
-description: Codex（GPT）にタスクを委譲するオーケストレーター
-user-invocable: true
-disable-model-invocation: true
+description: "Codex（GPT）にタスクを委譲するオーケストレーター"
 argument-hint: "[topic]"
 allowed-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]
 ---
