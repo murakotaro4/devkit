@@ -1,0 +1,14 @@
+{
+  "name": "murakotaro4",
+  "metadata": {
+    "description": "Personal marketplace for murakotaro4's Claude Code plugins"
+  },
+  "owner": { "name": "murakotaro4" },
+  "plugins": [
+    {
+      "name": "devkit",
+      "source": "./plugins/devkit",
+      "description": "Personal development toolkit with Codex orchestration and deep-dive interview skills"
+    }
+  ]
+}
