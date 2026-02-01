@@ -1,6 +1,6 @@
 ---
 description: "agent-browserでChatGPT Proを自動操作し、Web検索・調査を委譲する"
-argument-hint: "[質問内容（例: 最新のReact状態管理ライブラリを比較して）]"
+argument-hint: "[topic]"
 ---
 
 [COMMAND_SHIM_MARKER]

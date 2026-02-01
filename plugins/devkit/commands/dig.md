@@ -1,6 +1,6 @@
 ---
 description: "AskUserQuestionToolで徹底的に深掘り質問を続ける"
-argument-hint: "[トピック（例: API設計, 認証システム）]"
+argument-hint: "[topic]"
 ---
 
 [COMMAND_SHIM_MARKER]
