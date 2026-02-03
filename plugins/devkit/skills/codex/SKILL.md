@@ -1,5 +1,4 @@
 ---
-name: codex
 description: "Codex（GPT）にタスクを委譲するオーケストレーター"
 argument-hint: "[topic]"
 allowed-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]

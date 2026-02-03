@@ -1,5 +1,4 @@
 ---
-name: codex-search
 description: "Codex --searchでウェブ検索を実行。「調べて」「最新の〜」「〜を比較」「〜の仕様」で起動"
 argument-hint: "[topic]"
 allowed-tools: ["Bash", "Read", "Grep", "Glob", "WebSearch", "Task"]

@@ -1,5 +1,4 @@
 ---
-name: gpt-pro
 description: "agent-browserでChatGPT Proを自動操作し、Web検索・調査を委譲する"
 argument-hint: "[topic]"
 allowed-tools: ["Bash", "Read"]
