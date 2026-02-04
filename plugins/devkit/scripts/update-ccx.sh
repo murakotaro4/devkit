@@ -340,12 +340,32 @@ main() {
         echo -n "Updating opencode ($opencode_install)... "
         case "$opencode_install" in
             npm)
-                if npm update -g opencode-ai; then
+                # npm update を実行し、stderrをキャプチャ
+                local update_output
+                local update_exit
+                update_output=$(npm update -g opencode-ai 2>&1)
+                update_exit=$?
+
+                if [[ $update_exit -eq 0 ]]; then
                     echo "✓"
+                elif grep -qF -- "Could not find package" <<<"$update_output"; then
+                    # プラットフォーム固有パッケージ解決エラーの場合のみフォールバック
+                    echo -n "(reinstalling) "
+                    local install_output
+                    local install_exit
+                    install_output=$(npm_config_optional=true npm install -g opencode-ai 2>&1)
+                    install_exit=$?
+                    if [[ $install_exit -eq 0 ]]; then
+                        echo "✓"
+                    else
+                        echo "✗"
+                        printf '%s\n' "$install_output" >&2
+                        ERRORS+=("opencode: reinstall failed (exit code $install_exit)")
+                    fi
                 else
-                    local exit_code=$?
                     echo "✗"
-                    ERRORS+=("opencode: npm update failed (exit code $exit_code)")
+                    printf '%s\n' "$update_output" >&2
+                    ERRORS+=("opencode: npm update failed (exit code $update_exit)")
                 fi
                 ;;
             brew:opencode)
