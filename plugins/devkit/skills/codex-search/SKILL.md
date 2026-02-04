@@ -1,7 +1,7 @@
 ---
 description: "Codex --searchでウェブ検索を実行。「調べて」「最新の〜」「〜を比較」「〜の仕様」で起動"
 argument-hint: "[topic]"
-allowed-tools: ["Bash", "Read", "Grep", "Glob", "WebSearch", "Task"]
+allowed-tools: ["Bash", "Read", "Grep", "Glob", "Task"]
 ---
 
 # /codex-search - ウェブ検索スキル
@@ -74,15 +74,16 @@ $ARGUMENTS
 
 ### Phase 3: 並列検索実行
 
-各クエリを並列で実行:
+各クエリを **複数の Bash ツールを同時に呼び出して** 並列実行する。
 
-```bash
-# 並列実行（バックグラウンド）
-codex exec --search -m gpt-5.2 -s read-only "クエリ1" &
-codex exec --search -m gpt-5.2 -s read-only "クエリ2" &
-codex exec --search -m gpt-5.2 -s read-only "クエリ3" &
-wait
-```
+**実行方法**:
+- 同一メッセージ内で複数の Bash ツールを呼び出す
+- 例:
+  - Bash: `codex --search exec -m o3 -s read-only "クエリ1"`
+  - Bash: `codex --search exec -m o3 -s read-only "クエリ2"`
+  - Bash: `codex --search exec -m o3 -s read-only "クエリ3"`
+- 同一メッセージで複数の Bash ツールを呼び出すと並列実行される
+- 全ての結果が返ってきたら Phase 4 へ
 
 **上限設定**:
 - 最大並列数: 6
@@ -90,8 +91,11 @@ wait
 - タイムアウト: 10分（全体）
 
 **エラーハンドリング**:
-- 429/timeout: 指数バックオフでリトライ（最大2回）
-- その他エラー: 並列数を減らして再試行
+- 429/timeout: 指数バックオフ（5s→15s+ジッタ）でリトライ（最大2回）
+- 429が続く場合: 段階的縮退（並列数 6→3→1）で再試行
+- 失敗したクエリは明示的に報告して継続
+- 全て失敗した場合はエラーを報告して終了
+- 全体10分を超えたら部分結果で返答
 
 ### Phase 4: 結果統合・要約
 
@@ -121,13 +125,6 @@ wait
 - [推奨されるアクション]
 ```
 
-### フォールバック（検索不可時）
-
-Codex検索が失敗した場合:
-1. Claude Code の WebSearch ツールを代替使用
-2. ローカル文脈のみで推論
-3. 「検索できませんでした」と明示して暫定回答
-
 ## 使用例
 
 ```
@@ -142,5 +139,5 @@ Codex検索が失敗した場合:
 
 - **出典必須**: 検索を使ったなら出典は必須。未検索なら「出典なし（未検索）」と明示
 - **秘密情報除外**: .env, credentials等は絶対に検索クエリに含めない
-- **並列実行**: Task ツールで run_in_background=true を使用
+- **並列実行**: 複数の Bash ツールを同一メッセージで呼び出す
 - **タイムアウト**: 全体で10分を超えたら部分結果で返答
