@@ -74,15 +74,30 @@ $ARGUMENTS
 
 ### Phase 3: 並列検索実行
 
-各クエリを **複数の Bash ツールを同時に呼び出して** 並列実行する。
+各クエリを **シェルレベルで並列実行** する。
 
 **実行方法**:
-- 同一メッセージ内で複数の Bash ツールを呼び出す
-- 例:
-  - Bash: `codex --search exec -m o3 -s read-only "クエリ1"`
-  - Bash: `codex --search exec -m o3 -s read-only "クエリ2"`
-  - Bash: `codex --search exec -m o3 -s read-only "クエリ3"`
-- 同一メッセージで複数の Bash ツールを呼び出すと並列実行される
+シェルの `&` と `wait` で並列実行し、結果をファイルに出力:
+
+```bash
+# 一時ディレクトリ作成
+TMPDIR=$(mktemp -d)
+
+# 並列実行（バックグラウンド）
+codex --search exec -m o3 -s read-only "クエリ1" > "$TMPDIR/result1.txt" 2>&1 &
+codex --search exec -m o3 -s read-only "クエリ2" > "$TMPDIR/result2.txt" 2>&1 &
+codex --search exec -m o3 -s read-only "クエリ3" > "$TMPDIR/result3.txt" 2>&1 &
+
+# 全プロセスの完了を待機
+wait
+
+# 結果を読み込み
+cat "$TMPDIR"/*.txt
+rm -rf "$TMPDIR"
+```
+
+- 各クエリの結果は別ファイルに出力して混在を防ぐ
+- `wait` で全プロセスの完了を待機
 - 全ての結果が返ってきたら Phase 4 へ
 
 **上限設定**:
@@ -139,5 +154,5 @@ $ARGUMENTS
 
 - **出典必須**: 検索を使ったなら出典は必須。未検索なら「出典なし（未検索）」と明示
 - **秘密情報除外**: .env, credentials等は絶対に検索クエリに含めない
-- **並列実行**: 複数の Bash ツールを同一メッセージで呼び出す
+- **並列実行**: シェルの `&` と `wait` で並列実行、結果はファイル出力
 - **タイムアウト**: 全体で10分を超えたら部分結果で返答
