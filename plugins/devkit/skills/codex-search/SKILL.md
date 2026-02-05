@@ -1,7 +1,7 @@
 ---
 description: "Codex --searchでウェブ検索を実行。「調べて」「最新の〜」「〜を比較」「〜の仕様」で起動"
 argument-hint: "[topic]"
-allowed-tools: ["Bash", "Read", "Grep", "Glob", "Task"]
+allowed-tools: ["Bash", "Read", "Grep", "Glob"]
 ---
 
 # /codex-search - ウェブ検索スキル
@@ -74,43 +74,25 @@ $ARGUMENTS
 
 ### Phase 3: 並列検索実行
 
-各クエリを **シェルレベルで並列実行** する。
+Python asyncio スクリプトで並列実行する。
 
 **実行方法**:
-シェルの `&` と `wait` で並列実行し、結果をファイルに出力:
-
 ```bash
-# 一時ディレクトリ作成
-TMPDIR=$(mktemp -d)
-
-# 並列実行（バックグラウンド）
-codex --search exec -m o3 -s read-only "クエリ1" > "$TMPDIR/result1.txt" 2>&1 &
-codex --search exec -m o3 -s read-only "クエリ2" > "$TMPDIR/result2.txt" 2>&1 &
-codex --search exec -m o3 -s read-only "クエリ3" > "$TMPDIR/result3.txt" 2>&1 &
-
-# 全プロセスの完了を待機
-wait
-
-# 結果を読み込み
-cat "$TMPDIR"/*.txt
-rm -rf "$TMPDIR"
+python3 scripts/parallel_search.py \
+  --queries '["クエリ1", "クエリ2", "クエリ3"]' \
+  --model gpt-5.2 \
+  --max-concurrent 5
 ```
 
-- 各クエリの結果は別ファイルに出力して混在を防ぐ
-- `wait` で全プロセスの完了を待機
-- 全ての結果が返ってきたら Phase 4 へ
-
-**上限設定**:
-- 最大並列数: 6
-- 最大クエリ数: 10
-- タイムアウト: 10分（全体）
+**オプション**:
+- `--queries, -q`: JSON配列形式のクエリ（必須）
+- `--model, -m`: 使用モデル（デフォルト: gpt-5.2）
+- `--max-concurrent, -c`: 最大同時実行数（デフォルト: 5）
 
 **エラーハンドリング**:
-- 429/timeout: 指数バックオフ（5s→15s+ジッタ）でリトライ（最大2回）
-- 429が続く場合: 段階的縮退（並列数 6→3→1）で再試行
-- 失敗したクエリは明示的に報告して継続
-- 全て失敗した場合はエラーを報告して終了
-- 全体10分を超えたら部分結果で返答
+- 各クエリは独立して実行され、失敗しても他に影響しない
+- 失敗したクエリは結果に `[✗]` マークで表示
+- 全体タイムアウト: 10分（Bash ツールのデフォルト）
 
 ### Phase 4: 結果統合・要約
 
@@ -152,7 +134,7 @@ rm -rf "$TMPDIR"
 
 ## 重要
 
-- **出典必須**: 検索を使ったなら出典は必須。未検索なら「出典なし（未検索）」と明示
-- **秘密情報除外**: .env, credentials等は絶対に検索クエリに含めない
-- **並列実行**: シェルの `&` と `wait` で並列実行、結果はファイル出力
-- **タイムアウト**: 全体で10分を超えたら部分結果で返答
+- **出典必須**: 検索結果には必ず出典を含める
+- **秘密情報除外**: .env, credentials等は検索クエリに含めない
+- **並列実行**: asyncio スクリプト（`scripts/parallel_search.py`）で確実に並列化
+- **モデル**: `gpt-5.2` を使用
