@@ -1,0 +1,35 @@
+{
+  "session_id": "session-1770200013",
+  "parent_session_id": null,
+  "state": "stopped",
+  "started_at": "2026-02-04T10:13:33Z",
+  "updated_at": "2026-02-13T06:36:25Z",
+  "event_seq": 6,
+  "last_event_id": "event-000006",
+  "state_version": 1,
+  "cwd": "/Users/murakotaro/PycharmProjects/devkit",
+  "project_name": "devkit",
+  "resumed_at": "2026-02-13T06:35:19Z",
+  "git": {
+    "branch": "main",
+    "uncommitted_changes": 34,
+    "last_commit": "de7e820"
+  },
+  "plans": {
+    "exists": false,
+    "last_modified": 0,
+    "wip_tasks": 0,
+    "todo_tasks": 0,
+    "pending_tasks": 0,
+    "completed_tasks": 0
+  },
+  "orchestration": {
+    "max_state_retries": 3,
+    "retry_backoff_seconds": 10
+  },
+  "prompt_seq": 1,
+  "intent": "literal",
+  "ended_at": "2026-02-13T06:36:25Z",
+  "duration_minutes": 13282,
+  "memory_logged": true
+}

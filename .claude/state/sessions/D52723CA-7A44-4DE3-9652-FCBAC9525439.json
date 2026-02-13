@@ -1,0 +1,62 @@
+{
+  "session_id": "D52723CA-7A44-4DE3-9652-FCBAC9525439",
+  "parent_session_id": null,
+  "state": "stopped",
+  "state_version": 1,
+  "started_at": "2026-01-30T08:28:22Z",
+  "updated_at": "2026-01-31T01:40:23Z",
+  "resume_token": "393D4273-B3E9-4BC1-B6BB-3C85CF7C6900",
+  "event_seq": 6,
+  "last_event_id": "event-000006",
+  "fork_count": 0,
+  "orchestration": {
+    "max_state_retries": 3,
+    "retry_backoff_seconds": 10
+  },
+  "cwd": "/Users/murakotaro/PycharmProjects/devkit",
+  "project_name": "devkit",
+  "prompt_seq": 1,
+  "git": {
+    "branch": "main",
+    "uncommitted_changes": 5,
+    "last_commit": "2d82a74"
+  },
+  "plans": {
+    "exists": false,
+    "last_modified": 0,
+    "wip_tasks": 0,
+    "todo_tasks": 0,
+    "pending_tasks": 0,
+    "completed_tasks": 0
+  },
+  "changes_this_session": [
+    {
+      "file": "/Users/murakotaro/.claude/plans/mossy-sprouting-cloud.md",
+      "action": "Write",
+      "timestamp": "2026-01-30T08:30:23Z",
+      "important": false
+    },
+    {
+      "file": "/Users/murakotaro/.claude/plans/mossy-sprouting-cloud.md",
+      "action": "Edit",
+      "timestamp": "2026-01-31T01:38:26Z",
+      "important": false
+    },
+    {
+      "file": "plugins/devkit/commands/dig.md",
+      "action": "Write",
+      "timestamp": "2026-01-31T01:40:17Z",
+      "important": false
+    },
+    {
+      "file": "plugins/devkit/commands/gpt-pro.md",
+      "action": "Write",
+      "timestamp": "2026-01-31T01:40:17Z",
+      "important": false
+    }
+  ],
+  "intent": "semantic",
+  "ended_at": "2026-01-31T01:40:23Z",
+  "duration_minutes": 1572,
+  "memory_logged": true
+}

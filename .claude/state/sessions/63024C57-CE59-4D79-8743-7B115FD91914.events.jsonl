@@ -1,0 +1,11 @@
+{"type":"session.start","ts":"2026-01-31T01:44:42Z","state":"initialized","data":{"cc_session_id":"426a442e-2c46-4b4b-8c9b-6a5571c1342d"}}
+{"id":"event-000001","type":"session.start","ts":"2026-01-31T01:44:42Z","state":"initialized"}
+{"id":"event-000002","type":"session.resume","ts":"2026-01-31T01:45:12Z","state":"initialized"}
+{"id":"event-000003","type":"tool.bash","ts":"2026-01-31T01:46:07Z","state":"initialized","data":{"command":"git status plugins/devkit/commands/"}}
+{"id":"event-000004","type":"tool.bash","ts":"2026-01-31T01:46:11Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/ 2>/dev/null || echo "No cache directory""}}
+{"id":"event-000005","type":"tool.bash","ts":"2026-01-31T01:46:16Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/0.2.7/commands/ 2>/dev/null || echo "No commands directory in cache""}}
+{"id":"event-000006","type":"tool.bash","ts":"2026-01-31T01:46:25Z","state":"initialized","data":{"command":"git log --oneline -5 && echo "---" && git show 9deb876 --stat | head -20"}}
+{"id":"event-000007","type":"tool.write","ts":"2026-01-31T01:46:39Z","state":"initialized","data":{"file_path":"/Users/murakotaro/.claude/plans/mighty-watching-volcano.md"}}
+{"id":"event-000008","type":"tool.bash","ts":"2026-01-31T01:47:07Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/*/commands/ 2>/dev/null || echo "キャッシュディレクトリが見つかりません""}}
+{"id":"event-000009","type":"tool.bash","ts":"2026-01-31T01:47:16Z","state":"initialized","data":{"command":"rm -rf ~/.claude/plugins/cache/murakotaro4/devkit/ && echo "キャッシュを削除しました""}}
+{"id":"event-000010","type":"session.stop","ts":"2026-01-31T01:47:21Z","state":"stopped"}

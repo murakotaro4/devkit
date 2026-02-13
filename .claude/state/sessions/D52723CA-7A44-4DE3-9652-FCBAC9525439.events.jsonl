@@ -1,0 +1,7 @@
+{"type":"session.start","ts":"2026-01-30T08:28:23Z","state":"initialized","data":{"cc_session_id":"2d45ad0f-617f-4f26-bd62-f07986f2dbc8"}}
+{"id":"event-000001","type":"session.start","ts":"2026-01-30T08:28:22Z","state":"initialized"}
+{"id":"event-000002","type":"tool.write","ts":"2026-01-30T08:30:23Z","state":"initialized","data":{"file_path":"/Users/murakotaro/.claude/plans/mossy-sprouting-cloud.md"}}
+{"id":"event-000003","type":"tool.edit","ts":"2026-01-31T01:38:26Z","state":"initialized","data":{"file_path":"/Users/murakotaro/.claude/plans/mossy-sprouting-cloud.md"}}
+{"id":"event-000004","type":"tool.write","ts":"2026-01-31T01:40:17Z","state":"initialized","data":{"file_path":"/Users/murakotaro/PycharmProjects/devkit/plugins/devkit/commands/dig.md"}}
+{"id":"event-000005","type":"tool.write","ts":"2026-01-31T01:40:17Z","state":"initialized","data":{"file_path":"/Users/murakotaro/PycharmProjects/devkit/plugins/devkit/commands/gpt-pro.md"}}
+{"id":"event-000006","type":"session.stop","ts":"2026-01-31T01:40:23Z","state":"stopped"}

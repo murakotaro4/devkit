@@ -1,0 +1,45 @@
+{
+  "session_id": "63024C57-CE59-4D79-8743-7B115FD91914",
+  "parent_session_id": null,
+  "state": "stopped",
+  "state_version": 1,
+  "started_at": "2026-01-31T01:44:42Z",
+  "updated_at": "2026-01-31T01:47:21Z",
+  "resume_token": "CD055AF5-DCEC-4C48-8BC6-549872FAE041",
+  "event_seq": 10,
+  "last_event_id": "event-000010",
+  "fork_count": 0,
+  "orchestration": {
+    "max_state_retries": 3,
+    "retry_backoff_seconds": 10
+  },
+  "cwd": "/Users/murakotaro/PycharmProjects/devkit",
+  "project_name": "devkit",
+  "prompt_seq": 1,
+  "git": {
+    "branch": "main",
+    "uncommitted_changes": 6,
+    "last_commit": "9deb876"
+  },
+  "plans": {
+    "exists": false,
+    "last_modified": 0,
+    "wip_tasks": 0,
+    "todo_tasks": 0,
+    "pending_tasks": 0,
+    "completed_tasks": 0
+  },
+  "changes_this_session": [
+    {
+      "file": "/Users/murakotaro/.claude/plans/mighty-watching-volcano.md",
+      "action": "Write",
+      "timestamp": "2026-01-31T01:46:39Z",
+      "important": false
+    }
+  ],
+  "resumed_at": "2026-01-31T01:45:12Z",
+  "intent": "literal",
+  "ended_at": "2026-01-31T01:47:21Z",
+  "duration_minutes": 542,
+  "memory_logged": true
+}

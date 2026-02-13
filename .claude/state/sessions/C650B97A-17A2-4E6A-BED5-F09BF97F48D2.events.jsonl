@@ -1,0 +1,13 @@
+{"type":"session.start","ts":"2026-01-30T05:38:30Z","state":"initialized","data":{"cc_session_id":"19c5dd05-32df-41a9-a4b2-a9c86dce729a"}}
+{"id":"event-000001","type":"session.start","ts":"2026-01-30T05:38:30Z","state":"initialized"}
+{"id":"event-000002","type":"session.resume","ts":"2026-01-30T05:55:03Z","state":"initialized"}
+{"id":"event-000003","type":"tool.bash","ts":"2026-01-30T05:55:45Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/ 2>/dev/null || echo "Cache directory not found""}}
+{"id":"event-000004","type":"tool.bash","ts":"2026-01-30T05:55:45Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/.claude-plugin/ 2>/dev/null || echo "Marketplace directory not found""}}
+{"id":"event-000005","type":"tool.bash","ts":"2026-01-30T05:55:56Z","state":"initialized","data":{"command":"ls -laR ~/.claude/plugins/cache/murakotaro4/devkit/0.2.6/skills/ 2>/dev/null || echo "Skills directory not found in cache""}}
+{"id":"event-000006","type":"tool.bash","ts":"2026-01-30T05:55:56Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/0.2.6/"}}
+{"id":"event-000007","type":"tool.bash","ts":"2026-01-30T05:56:06Z","state":"initialized","data":{"command":"head -50 ~/.claude/plugins/cache/claude-code-harness-marketplace/claude-code-harness/2.14.9/skills/impl/SKILL.md 2>/dev/null || echo "harness skill not found""}}
+{"id":"event-000008","type":"tool.bash","ts":"2026-01-30T05:56:06Z","state":"initialized","data":{"command":"head -50 ~/.claude/plugins/cache/murakotaro4/devkit/0.2.6/skills/codex/SKILL.md"}}
+{"id":"event-000009","type":"tool.bash","ts":"2026-01-30T05:56:31Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/marketplaces/"}}
+{"id":"event-000010","type":"tool.bash","ts":"2026-01-30T05:56:32Z","state":"initialized","data":{"command":"find ~/.claude/plugins/marketplaces -name "marketplace.json" -type f 2>/dev/null"}}
+{"id":"event-000011","type":"tool.bash","ts":"2026-01-30T05:56:52Z","state":"initialized","data":{"command":"head -20 ~/.claude/plugins/cache/claude-code-harness-marketplace/claude-code-harness/2.14.9/skills/impl/SKILL.md ~/.claude/plugins/cache/claude-code-harness-marketplace/claude-code-harness/2.14.9/skil"}}
+{"id":"event-000012","type":"session.stop","ts":"2026-01-30T05:57:09Z","state":"stopped"}

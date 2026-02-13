@@ -1,0 +1,17 @@
+{"type":"session.start","ts":"2026-01-31T02:01:05Z","state":"initialized","data":{"cc_session_id":"60499404-de02-494a-98a0-8443e077a59c"}}
+{"id":"event-000001","type":"session.start","ts":"2026-01-31T02:01:05Z","state":"initialized"}
+{"id":"event-000002","type":"session.resume","ts":"2026-01-31T02:16:32Z","state":"initialized"}
+{"id":"event-000003","type":"session.resume","ts":"2026-01-31T02:22:53Z","state":"initialized"}
+{"id":"event-000004","type":"session.resume","ts":"2026-01-31T02:25:02Z","state":"initialized"}
+{"id":"event-000005","type":"session.resume","ts":"2026-01-31T02:27:59Z","state":"initialized"}
+{"id":"event-000006","type":"session.resume","ts":"2026-01-31T02:28:26Z","state":"initialized"}
+{"id":"event-000007","type":"session.resume","ts":"2026-01-31T05:29:09Z","state":"initialized"}
+{"id":"event-000008","type":"session.resume","ts":"2026-01-31T05:58:09Z","state":"initialized"}
+{"id":"event-000009","type":"session.resume","ts":"2026-01-31T06:21:23Z","state":"initialized"}
+{"id":"event-000010","type":"session.resume","ts":"2026-01-31T06:21:58Z","state":"initialized"}
+{"id":"event-000011","type":"session.resume","ts":"2026-02-01T00:41:32Z","state":"initialized"}
+{"id":"event-000012","type":"session.resume","ts":"2026-02-01T00:47:04Z","state":"initialized"}
+{"id":"event-000013","type":"tool.write","ts":"2026-02-01T01:04:10Z","state":"initialized","data":{"file_path":"/Users/murakotaro/.claude/plans/mighty-sleeping-fox.md"}}
+{"id":"event-000013","type":"tool.bash","ts":"2026-02-01T01:04:27Z","state":"initialized","data":{"command":"rm -f .claude-plugin/CLAUDE.md plugins/devkit/.claude-plugin/CLAUDE.md plugins/devkit/commands/CLAUDE.md plugins/devkit/skills/codex/CLAUDE.md plugins/devkit/skills/dig/CLAUDE.md"}}
+{"id":"event-000014","type":"tool.bash","ts":"2026-02-01T01:04:31Z","state":"initialized","data":{"command":"git status"}}
+{"id":"event-000015","type":"session.stop","ts":"2026-02-01T01:04:36Z","state":"stopped"}

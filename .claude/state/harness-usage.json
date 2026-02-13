@@ -1,0 +1,78 @@
+{
+  "version": "1.0",
+  "updatedAt": "2026-02-13T06:36:08.882Z",
+  "skills": {
+    "codex": {
+      "count": 1,
+      "lastUsed": "2026-01-30T05:24:22.002Z"
+    },
+    "dig": {
+      "count": 1,
+      "lastUsed": "2026-02-03T12:39:18.274Z"
+    },
+    "codex-search": {
+      "count": 1,
+      "lastUsed": "2026-02-03T14:15:21.005Z"
+    }
+  },
+  "commands": {
+    "dig": {
+      "count": 3,
+      "lastUsed": "2026-01-29T15:48:33.815Z"
+    },
+    "codex-review": {
+      "count": 4,
+      "lastUsed": "2026-01-31T01:40:39.751Z"
+    },
+    "devkit:codex": {
+      "count": 2,
+      "lastUsed": "2026-01-30T05:57:41.356Z"
+    },
+    "devkit:dig": {
+      "count": 5,
+      "lastUsed": "2026-02-03T14:34:13.086Z"
+    },
+    "dev-tools-setup": {
+      "count": 1,
+      "lastUsed": "2026-01-29T17:04:11.312Z"
+    },
+    "devkit": {
+      "count": 5,
+      "lastUsed": "2026-01-31T02:23:48.002Z"
+    },
+    "devkit:codex-search": {
+      "count": 1,
+      "lastUsed": "2026-02-03T14:15:16.786Z"
+    }
+  },
+  "agents": {
+    "Explore": {
+      "count": 14,
+      "lastUsed": "2026-02-03T14:21:34.334Z"
+    },
+    "claude-code-guide": {
+      "count": 5,
+      "lastUsed": "2026-01-30T07:39:30.550Z"
+    },
+    "Plan": {
+      "count": 2,
+      "lastUsed": "2026-02-03T14:23:22.547Z"
+    },
+    "claude-code-harness:code-reviewer": {
+      "count": 3,
+      "lastUsed": "2026-02-13T06:36:08.881Z"
+    }
+  },
+  "hooks": {
+    "pretooluse-guard": {
+      "triggered": 16,
+      "blocked": 16,
+      "lastTriggered": "2026-02-04T10:10:51.010Z"
+    },
+    "session-init": {
+      "triggered": 55,
+      "blocked": 0,
+      "lastTriggered": "2026-02-13T06:35:19.586Z"
+    }
+  }
+}
