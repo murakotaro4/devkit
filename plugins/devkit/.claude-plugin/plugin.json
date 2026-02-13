@@ -1,5 +1,5 @@
 {
   "name": "devkit",
-  "description": "Personal global skills for Claude Code - Codex orchestrator and PlanMode-integrated deep-dive interviewer",
-  "version": "0.2.11"
+  "description": "Personal global skills for Claude Code - multi-provider orchestration core/adapters plus research and utility skills",
+  "version": "0.3.0"
 }

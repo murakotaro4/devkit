@@ -1,0 +1,20 @@
+provider: anthropic
+runtime: claude-code
+profiles:
+  max_reasoning:
+    model: opus
+    effort: high
+  high_fast:
+    model: sonnet
+    effort: high
+  fast_first:
+    model: sonnet
+    effort: medium
+fallbacks:
+  - when: model_unavailable
+    use:
+      model: sonnet
+      effort: high
+  - when: overloaded
+    use:
+      effort: medium

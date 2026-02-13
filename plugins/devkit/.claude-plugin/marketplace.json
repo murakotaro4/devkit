@@ -8,7 +8,7 @@
     {
       "name": "devkit",
       "source": "./",
-      "description": "Personal development toolkit with Codex orchestration and deep-dive interview skills",
+      "description": "Personal development toolkit with multi-provider orchestration core/adapters and deep-dive utility skills",
       "strict": true
     }
   ]
