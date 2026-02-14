@@ -42,6 +42,7 @@ ln -s "$HOME/.agent/skills/gpt-pro" "$HOME/.codex/skills/gpt-pro"
 ln -s "$HOME/.agent/skills/deep-research" "$HOME/.codex/skills/deep-research"
 ln -s "$HOME/.agent/skills/mermaid-show" "$HOME/.codex/skills/mermaid-show"
 ln -s "$HOME/.agent/skills/amazon-search" "$HOME/.codex/skills/amazon-search"
+ln -s "$HOME/.agent/skills/improve-skill" "$HOME/.codex/skills/improve-skill"
 ```
 
 プロンプト（例: `~/.codex/prompts/devkit-dig.md`）:
@@ -55,7 +56,7 @@ $dig
 User input: $ARGUMENTS
 ```
 
-同様に `devkit-codex.md` / `devkit-agent-orch-core.md` / `devkit-gpt-pro.md` / `devkit-deep-research.md` を作成する。
+同様に `devkit-codex.md` / `devkit-agent-orch-core.md` / `devkit-gpt-pro.md` / `devkit-deep-research.md` / `devkit-improve-skill.md` を作成する。
 
 ### 4) （任意）各プロジェクトで AGENTS.md 同期
 
@@ -65,14 +66,14 @@ npx openskills@latest sync -y
 
 ## 使い方（スラッシュ）
 
-- Claude Code: `/devkit:dig` `/devkit:codex` `/devkit:agent-orch-core` `/devkit:agent-orch-openai` `/devkit:agent-orch-anthropic` `/devkit:agent-orch-google` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:mermaid-show` `/devkit:amazon-search`
+- Claude Code: `/devkit:dig` `/devkit:codex` `/devkit:agent-orch-core` `/devkit:agent-orch-openai` `/devkit:agent-orch-anthropic` `/devkit:agent-orch-google` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:mermaid-show` `/devkit:amazon-search` `/devkit:improve-skill`
 - OpenCode: 環境の標準手段でインストール済みスキルを呼び出し（`/devkit-*` はローカルで定義した場合のみ）
-- Codex CLI: `/prompts:devkit-dig` `/prompts:devkit-codex` `/prompts:devkit-agent-orch-core` `/prompts:devkit-gpt-pro` `/prompts:devkit-deep-research`
+- Codex CLI: `/prompts:devkit-dig` `/prompts:devkit-codex` `/prompts:devkit-agent-orch-core` `/prompts:devkit-gpt-pro` `/prompts:devkit-deep-research` `/prompts:devkit-improve-skill`
 
 ## 更新
 
 ```bash
-npx openskills@latest update dig,codex,agent-orch-core,agent-orch-openai,agent-orch-anthropic,agent-orch-google,gpt-pro,deep-research,mermaid-show,amazon-search
+npx openskills@latest update dig,codex,agent-orch-core,agent-orch-openai,agent-orch-anthropic,agent-orch-google,gpt-pro,deep-research,mermaid-show,amazon-search,improve-skill
 ```
 
 必要なら OpenCode / Codex を再起動。
@@ -80,11 +81,11 @@ npx openskills@latest update dig,codex,agent-orch-core,agent-orch-openai,agent-o
 ## ロールバック
 
 ```bash
-npx openskills@latest remove dig,codex,agent-orch-core,agent-orch-openai,agent-orch-anthropic,agent-orch-google,gpt-pro,deep-research,mermaid-show,amazon-search
+npx openskills@latest remove dig,codex,agent-orch-core,agent-orch-openai,agent-orch-anthropic,agent-orch-google,gpt-pro,deep-research,mermaid-show,amazon-search,improve-skill
 ```
 
 - OpenCode: `~/.config/opencode/skills` の symlink を削除（旧方式の `~/.config/opencode/commands/devkit-*.md` を作成している場合はあわせて削除）
-- Codex: `~/.codex/prompts/devkit-*.md` と `~/.codex/skills/{dig,codex,agent-orch-core,agent-orch-openai,agent-orch-anthropic,agent-orch-google,gpt-pro,deep-research,mermaid-show,amazon-search}` の symlink を削除
+- Codex: `~/.codex/prompts/devkit-*.md` と `~/.codex/skills/{dig,codex,agent-orch-core,agent-orch-openai,agent-orch-anthropic,agent-orch-google,gpt-pro,deep-research,mermaid-show,amazon-search,improve-skill}` の symlink を削除
 - AGENTS.md を同期していた場合は該当ブロックを削除
 
 ## トラブルシュート（最小）

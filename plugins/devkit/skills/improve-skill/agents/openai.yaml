@@ -1,0 +1,4 @@
+interface:
+  display_name: "Improve Skill"
+  short_description: "Improve and create skills from session context"
+  default_prompt: "Use $improve-skill to refine or create a skill from this session context."
