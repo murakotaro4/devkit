@@ -112,28 +112,33 @@ ExitPlanMode 後:
 
 ## クロスモデルレビュー（計画レビュー）
 
+> **スキル競合の回避**
+> このステップは **Bash ツールで `codex exec` を直接実行** する。
+> Skill ツールは呼ばない。`/harness-review`・`/codex-review` 等のスキルは使用しない。
+> 理由: これらのスキルのトリガーキーワードが「レビュー」と競合し、意図しない起動を招くため。
+
 ### 原則
 - plan file 完成後、ExitPlanMode 前に必ず実行する。
 - 自身と異なるモデルファミリーでレビューする（AGENTS.md 準拠）。
 - 停止条件: critical/high = 0 になるまで修正→再レビュー。
 
-### コマンド
+### コマンド（Bash ツールで直接実行）
 
 Claude Code 対話中:
 ```bash
 codex exec -m gpt-5.3-codex-spark -c 'model_reasoning_effort="medium"' \
-  "以下のプランファイルをレビューしてください: <path>。観点: 実現可能性、既存構造との整合性、見落としているエッジケース"
+  "以下のプランファイルをレビューしてください: <path>。観点: 実現可能性、既存構造との整合性、見落としているエッジケース。重大度(critical/high/medium/low)を付けて指摘してください。"
 ```
 
 Codex が親の時:
 ```bash
 claude -p --model haiku --tools 'Read,Grep,Glob' \
-  "以下のプランファイルをレビューしてください: <path>。観点: 実現可能性、既存構造との整合性、見落としているエッジケース"
+  "以下のプランファイルをレビューしてください: <path>。観点: 実現可能性、既存構造との整合性、見落としているエッジケース。重大度(critical/high/medium/low)を付けて指摘してください。"
 ```
 
 ### モデル運用切替規則
 - `gpt-5.3-codex-spark` を第一候補とする。
-- レートリミット時のみ `gpt-5.3-codex`（`model_reasoning_effort="medium"`）へ切替可。実施時は理由・範囲・終了条件を `Plans.md` に記録する。
+- レートリミット時のみ `gpt-5.3-codex`（`model_reasoning_effort="medium"`）へ切替可。実施時は理由・範囲・終了条件を Plans.md に記録する。
 - レートリミット以外の失敗は停止して原因特定。
 
 ### レビュー観点
@@ -179,3 +184,4 @@ claude -p --model haiku --tools 'Read,Grep,Glob' \
 - **ユーザーの思考を引き出す**: 答えを与えるのではなく、質問で引き出す
 - **コードベース調査を積極的に**: 具体的な文脈に基づいた質問を行う
 - **終了時は必ず確認**: ユーザーに確認してから終了する
+- **クロスモデルレビューは Bash で直接実行**（Claude親: `codex exec`、Codex親: `claude -p`）: Skill ツール経由のレビューは使わない
