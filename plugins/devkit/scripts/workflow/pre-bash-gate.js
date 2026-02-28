@@ -99,7 +99,7 @@ function main() {
     ? state.phases_passed
     : [];
   const hasReview =
-    phasesPassed.includes("plan_review") ||
+    phasesPassed.includes("plan_review") &&
     phasesPassed.includes("impl_review");
 
   if (isGitCommit && !hasReview) {

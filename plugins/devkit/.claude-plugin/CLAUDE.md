@@ -58,6 +58,36 @@
 | 7 | 実装レビュー | critical/high=0 |
 | 8 | コミット&プッシュ | push 完了 |
 
+### Tasks によるフェーズ管理（必須）
+
+タスク開始時に全フェーズの Task を一括作成し、進捗を管理する。
+
+**通常タスク（小規模以上）**: 8 Task を作成（[Phase 1]〜[Phase 8]）。各 Task に blockedBy で前 Task を設定。
+**極小タスク（typo等）**: 3 Task を作成（[Phase 1-3,6], [Phase 5,7], [Phase 8]）。
+
+Task 作成ルール:
+- subject: `[Phase N] フェーズ名` 形式
+- metadata: `{phase: "phase_key"}` を必ず含める（極小は `{phases: ["key1","key2"]}` 配列形式）
+- Phase 完了時 TaskUpdate: status="completed" と metadata に phase/phases を含める
+
+phase_key マッピング:
+
+| Phase | phase_key | ゲート |
+|---|---|---|
+| 1 | phase_1 | - |
+| 2 | phase_2 | - |
+| 3 | phase_3 | - |
+| 4 | phase_4 | - |
+| 5 | plan_review | commit |
+| 6 | phase_6 | - |
+| 7 | impl_review | commit |
+| 8 | commit_review | push |
+
+Phase 6 実装分解:
+- Phase 4-5 通過後、実装内容を `[Phase 6.N] 内容` 形式のサブタスクに分解
+- サブタスク間の blockedBy を設定、Phase 6 本体に addBlockedBy でサブタスクを紐付け
+- **全サブタスク完了を TaskList で確認してから** Phase 6 本体を completed にする
+
 ### Phase 1: 調査1（初期理解）
 
 - Grep/Glob/Read で対象ファイル・仕様・依存関係を把握
