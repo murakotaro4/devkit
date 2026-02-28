@@ -1,0 +1,30 @@
+{
+  "description": "devkit: 統一ワークフロー補助フック",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow/pre-bash-gate.js\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/workflow/session-init.js\"",
+            "timeout": 10,
+            "once": true
+          }
+        ]
+      }
+    ]
+  }
+}
