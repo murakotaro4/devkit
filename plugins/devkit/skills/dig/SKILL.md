@@ -46,6 +46,15 @@ AI判断で十分な情報が集まったと判断したら、終了確認を行
 plan file への計画記載が完了したら、ExitPlanMode を呼ぶ前に必ずクロスモデルレビューを実行する。
 停止条件: critical/high の指摘が 0 件になるまで修正→再レビューを反復する。
 
+> **計画のコミットセクション構成ルール**
+> 計画にコミット+プッシュを含める場合、コミットセクションは必ず以下の3ステップで構成する:
+> 1. ステージング (`git add`)
+> 2. コミット前クロスモデルレビュー（AGENTS.md「コミットレビュー」セクション準拠）
+>    - Claude Code 対話中: `codex exec review --uncommitted -m gpt-5.3-codex-spark`
+>    - Codex が親の時: `claude -p --model haiku --tools 'Read,Grep,Glob'` + uncommitted review プロンプト
+> 3. コミット+プッシュ (`git commit` + `git push`)
+> Step 4 の「計画レビュー」と上記の「コミット前レビュー」は別物。両方必須。
+
 ### 5. ExitPlanMode呼び出し
 深掘りが完了したら **ExitPlanMode ツールを呼び出してユーザー承認を得る**。
 
@@ -185,3 +194,4 @@ claude -p --model haiku --tools 'Read,Grep,Glob' \
 - **コードベース調査を積極的に**: 具体的な文脈に基づいた質問を行う
 - **終了時は必ず確認**: ユーザーに確認してから終了する
 - **クロスモデルレビューは Bash で直接実行**（Claude親: `codex exec`、Codex親: `claude -p`）: Skill ツール経由のレビューは使わない
+- **計画のコミットセクションは3ステップ構成**: ステージング → コミット前クロスモデルレビュー → コミット+プッシュ（レビューを省略しない）
