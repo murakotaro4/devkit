@@ -13,8 +13,8 @@
 
 | 優先度 | コマンド | 条件 |
 |--------|---------|------|
-| 1st | `codex exec -m gpt-5.3-codex-spark` | デフォルト |
-| 2nd | `codex exec -m gpt-5.3-codex` (effort=medium) | spark レートリミット時 |
+| 1st | `codex exec review --uncommitted -m gpt-5.3-codex-spark` | デフォルト |
+| 2nd | `codex exec review --uncommitted -m gpt-5.3-codex` (effort=medium) | spark レートリミット時 |
 | 3rd | レビュースキップ + ユーザー通知 | codex CLI 未インストール or 全モデル不可時 |
 
 **Codex CLI が親の場合**（agent-orch-core 経由等）:
