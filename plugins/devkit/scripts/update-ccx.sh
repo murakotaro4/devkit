@@ -2,7 +2,7 @@
 #
 # update-ccx.sh - Claude Code, Codex CLI & opencode 一括アップデートスクリプト
 #
-# 対応環境: macOS (Homebrew / npm) / WSL (native / npm)
+# 対応環境: macOS (Homebrew / npm) / WSL (native / npm) / Windows (Git Bash)
 #
 # Usage:
 #   update-ccx.sh           # 全ツールを更新
@@ -25,6 +25,7 @@ detect_os() {
                 echo "linux"
             fi
             ;;
+        MINGW*|MSYS*) echo "windows" ;;
         *) echo "unknown" ;;
     esac
 }
@@ -75,10 +76,10 @@ detect_claude_install() {
     fi
 
     # パスベースで判定（最優先: PATH上のバイナリの実際の場所）
-    if [[ "$resolved_path" == *".local/share/claude/"* ]]; then
+    if [[ "$resolved_path" == *".local/share/claude/"* ]] || [[ "$resolved_path" == *".local/bin/claude"* ]]; then
         echo "native"
         return
-    elif [[ "$resolved_path" == *"node_modules"* ]] || [[ "$claude_path" == *".nvm/"* ]] || [[ "$claude_path" == *".npm/"* ]]; then
+    elif [[ "$resolved_path" == *"node_modules"* ]] || [[ "$claude_path" == *".nvm/"* ]] || [[ "$claude_path" == *".npm/"* ]] || [[ "$claude_path" == */fnm/* ]] || [[ "$resolved_path" == */fnm/* ]]; then
         echo "npm"
         return
     fi
@@ -135,7 +136,7 @@ detect_codex_install() {
     fi
 
     # パスベースで判定（npm vs brew）
-    if [[ "$resolved_path" == *"node_modules"* ]] || [[ "$codex_path" == *".nvm/"* ]] || [[ "$codex_path" == *".npm/"* ]]; then
+    if [[ "$resolved_path" == *"node_modules"* ]] || [[ "$codex_path" == *".nvm/"* ]] || [[ "$codex_path" == *".npm/"* ]] || [[ "$codex_path" == */fnm/* ]] || [[ "$resolved_path" == */fnm/* ]]; then
         echo "npm"
         return
     fi
@@ -190,7 +191,7 @@ detect_opencode_install() {
     fi
 
     # パスベースで判定（npm vs brew）
-    if [[ "$resolved_path" == *"node_modules"* ]] || [[ "$opencode_path" == *".nvm/"* ]] || [[ "$opencode_path" == *".npm/"* ]]; then
+    if [[ "$resolved_path" == *"node_modules"* ]] || [[ "$opencode_path" == *".nvm/"* ]] || [[ "$opencode_path" == *".npm/"* ]] || [[ "$opencode_path" == */fnm/* ]] || [[ "$resolved_path" == */fnm/* ]]; then
         echo "npm"
         return
     fi
