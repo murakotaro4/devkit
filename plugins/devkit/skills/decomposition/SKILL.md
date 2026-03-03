@@ -15,7 +15,7 @@ $ARGUMENTS
 ## 入力ソース
 
 ### dig からの連携時（主要ユースケース）
-- dig の Step 3.5 から呼び出される
+- dig の Step 4 から呼び出される
 - $ARGUMENTS に plan file パスが渡される
 - plan file を Read で読み込み、分解の入力とする
 

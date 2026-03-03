@@ -25,6 +25,106 @@ function emitDecision(decision, reason, additionalContext) {
   process.stdout.write(JSON.stringify(out));
 }
 
+function findPluginJsonRelPath() {
+  try {
+    const { execSync } = require("child_process");
+    const repoRoot = execSync("git rev-parse --show-toplevel", {
+      encoding: "utf8",
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+
+    const candidates = [
+      "plugins/devkit/.claude-plugin/plugin.json",
+      ".claude-plugin/plugin.json",
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(path.join(repoRoot, c))) return c;
+    }
+  } catch {
+    // not in a git repo
+  }
+  return null;
+}
+
+function getGitVersion(ref, relPath) {
+  try {
+    const { execSync } = require("child_process");
+    const output = execSync(`git show ${ref}:${relPath}`, {
+      encoding: "utf8",
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const data = JSON.parse(output);
+    return data.version || null;
+  } catch {
+    return null;
+  }
+}
+
+function suggestVersion(currentVersion) {
+  const { execSync } = require("child_process");
+  const [major, minor, patch] = currentVersion.split(".").map(Number);
+
+  try {
+    const log = execSync("git log HEAD --format=%s -20", {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    const messages = log.trim().split("\n");
+
+    let hasBreaking = false;
+    let hasFeat = false;
+
+    for (const msg of messages) {
+      if (/^.*!:/.test(msg) || /BREAKING CHANGE/.test(msg)) hasBreaking = true;
+      if (/^feat(\(.*\))?:/.test(msg)) hasFeat = true;
+      if (/^chore.*bump version/.test(msg)) break;
+    }
+
+    if (hasBreaking)
+      return { version: `${major + 1}.0.0`, reason: "BREAKING CHANGE 検出" };
+    if (hasFeat)
+      return {
+        version: `${major}.${minor + 1}.0`,
+        reason: "feat コミット検出",
+      };
+    return {
+      version: `${major}.${minor}.${patch + 1}`,
+      reason: "デフォルト patch",
+    };
+  } catch {
+    return {
+      version: `${major}.${minor}.${patch + 1}`,
+      reason: "デフォルト patch",
+    };
+  }
+}
+
+function checkVersionBump() {
+  const relPath = findPluginJsonRelPath();
+  if (!relPath) {
+    return { blocked: false };
+  }
+
+  const headVersion = getGitVersion("HEAD", relPath);
+  const remoteVersion = getGitVersion("origin/main", relPath);
+
+  if (!headVersion || !remoteVersion) {
+    return { blocked: false };
+  }
+
+  if (headVersion === remoteVersion) {
+    const recommended = suggestVersion(remoteVersion);
+    return {
+      blocked: true,
+      message: `[devkit-workflow] ⛔ git push がブロックされました。plugin.json のバージョンが変更されていません（現在: ${remoteVersion}）。\n推奨バージョン: ${recommended.version}（理由: ${recommended.reason}）\nplugin.json の version を更新してからコミットし直してください。`,
+    };
+  }
+
+  return { blocked: false };
+}
+
 function main() {
   let input = "";
   try {
@@ -118,6 +218,19 @@ function main() {
       `[devkit-workflow] \u26a0\ufe0f git push \u304c\u691c\u51fa\u3055\u308c\u307e\u3057\u305f\u304c\u3001\u30b3\u30df\u30c3\u30c8\u524d\u30ec\u30d3\u30e5\u30fc\uff08Phase 8 Step 2\uff09\u306e\u5b8c\u4e86\u30de\u30fc\u30ab\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002`
     );
     return;
+  }
+
+  // Version bump check for git push
+  if (isGitPush) {
+    const versionCheck = checkVersionBump();
+    if (versionCheck.blocked) {
+      emitDecision(
+        "block",
+        "plugin.json version not bumped",
+        versionCheck.message
+      );
+      return;
+    }
   }
 
   // All checks passed
