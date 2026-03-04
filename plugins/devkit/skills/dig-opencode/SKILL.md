@@ -1,4 +1,4 @@
-﻿---
+---
 name: "dig-opencode"
 description: "dig の OpenCode adapter。Plan agent + question を優先し、不可時はメッセージ質問や Build agent 切替で dig-core 契約を実行する。"
 argument-hint: "[topic]"

@@ -1,4 +1,4 @@
-﻿---
+---
 name: "dig-codex"
 description: "dig の Codex adapter。Plan Mode 必須で request_user_input を使い dig-core 契約を実行する。"
 argument-hint: "[topic]"

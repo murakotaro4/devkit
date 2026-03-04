@@ -1,4 +1,4 @@
-﻿---
+---
 name: "dig-claude"
 description: "dig の Claude adapter。AskUserQuestionTool と EnterPlanMode/ExitPlanMode を使って dig-core 契約を実行する。"
 argument-hint: "[topic]"

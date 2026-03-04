@@ -1,4 +1,4 @@
-﻿---
+---
 name: "dig-core"
 description: "dig 系の共通実行契約。深掘り質問、終了確認、タスク分解、計画レビュー、実行の共通ステップを定義する。"
 argument-hint: "[topic]"

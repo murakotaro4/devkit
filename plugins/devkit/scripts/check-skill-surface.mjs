@@ -37,6 +37,23 @@ for (const rel of required) {
   if (!fs.existsSync(path.join(root, rel))) problems.push(`missing required: ${rel}`);
 }
 
+const digSkills = [
+  "plugins/devkit/skills/dig/SKILL.md",
+  "plugins/devkit/skills/dig-core/SKILL.md",
+  "plugins/devkit/skills/dig-claude/SKILL.md",
+  "plugins/devkit/skills/dig-codex/SKILL.md",
+  "plugins/devkit/skills/dig-opencode/SKILL.md",
+];
+
+for (const rel of digSkills) {
+  const abs = path.join(root, rel);
+  if (!fs.existsSync(abs)) continue;
+  const buf = fs.readFileSync(abs);
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    problems.push(`BOM not allowed in dig skill frontmatter: ${rel}`);
+  }
+}
+
 if (phase === "B") {
   for (const rel of removed) {
     if (fs.existsSync(path.join(root, rel))) problems.push(`must be removed in phase B: ${rel}`);

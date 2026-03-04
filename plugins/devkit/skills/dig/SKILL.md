@@ -1,4 +1,4 @@
-﻿---
+---
 name: "dig"
 description: "深掘り質問の共通入口。runtime=claude|codex|opencode を解決し、dig-core と各 adapter に委譲する。"
 argument-hint: "[runtime=<claude|codex|opencode>] [topic]"

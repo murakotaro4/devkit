@@ -215,6 +215,9 @@ npx openskills@latest sync -y
 - OpenCode: 環境の標準手段でインストール済みスキルを呼び出し（`/devkit-*` はローカルで定義した場合のみ）
 - Codex CLI: `/prompts:devkit-dig` `/prompts:devkit-gpt-pro` `/prompts:devkit-deep-research` `/prompts:devkit-improve-skill`
 
+補足（Codex の `$dig` 利用）:
+- `~/.codex/skills/dig*/SKILL.md` は UTF-8 BOM なしであること（BOM があると frontmatter の `---` を解釈できず `$dig` が読み込まれない）
+
 ## 更新
 
 ### スキル更新（OpenSkills）
