@@ -184,6 +184,25 @@ User input: $ARGUMENTS
 
 同様に `devkit-gpt-pro.md` / `devkit-deep-research.md` / `devkit-improve-skill.md` を作成する。
 
+#### Windows (PowerShell) の推奨セットアップ（自動）
+
+上記を手動で行う代わりに、次のスクリプトで一括セットアップできる。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\setup-codex-dig.ps1" -RegisterDailyTask
+```
+
+実行内容:
+- `~/.codex/skills` / `~/.codex/prompts` / `~/.codex/bin` / `~/.codex/logs` を作成
+- 12スキル（`dig` 系 + utility）のリンクを作成（SymbolicLink優先、不可ならJunction）
+- `~/.codex/prompts/devkit-dig.md` をテンプレートから配置
+- `~/.codex/bin/devkit-skill-update.ps1` を配置
+- Task Scheduler に `DevKitSkillsDailyUpdate`（毎日07:00）を登録
+
+リンク競合ポリシー:
+- 既存の実ディレクトリが `~/.codex/skills/<skill>` にある場合は `BLOCKED_EXISTING_DIR` で停止（自動上書きしない）
+- 指示された `Rename-Item` を実行して再試行する
+
 ### 4) （任意）各プロジェクトで AGENTS.md 同期
 
 ```bash
@@ -205,6 +224,17 @@ npx openskills@latest update dig,dig-core,dig-claude,dig-codex,dig-opencode,gpt-
 ```
 
 必要なら OpenCode / Codex を再起動。
+
+Windows (PowerShell) で毎朝更新を使う場合の手動実行:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.codex\bin\devkit-skill-update.ps1"
+```
+
+更新失敗時:
+- Codex 利用自体は継続可能（非ブロック運用）
+- 更新ジョブは非ゼロ終了コードで失敗を返す（Task Scheduler で可観測）
+- 復旧に成功した場合は `~/.codex/logs/devkit-skill-update-status.json` に `rolled_back` が記録される
 
 ### CLIツール一括更新: update-ccx.sh
 
