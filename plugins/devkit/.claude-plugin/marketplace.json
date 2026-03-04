@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "murakotaro4",
   "metadata": {
     "description": "Personal marketplace for murakotaro4's Claude Code plugins"
@@ -8,7 +8,7 @@
     {
       "name": "devkit",
       "source": "./",
-      "description": "Personal development toolkit with multi-provider orchestration core/adapters and deep-dive utility skills",
+      "description": "Personal development toolkit with dig runtime adapters and deep-dive utility skills",
       "strict": true
     }
   ]
