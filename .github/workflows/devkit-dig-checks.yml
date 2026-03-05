@@ -32,7 +32,7 @@ jobs:
       - name: Run prek (pre-push stage)
         uses: j178/prek-action@0bb87d7f00b0c99306c8bcb8b8beba1eb581c037
         with:
-          args: run --all-files --hook-stage pre-push
+          extra-args: --all-files --hook-stage pre-push
 
       - name: Summary
         if: always()
