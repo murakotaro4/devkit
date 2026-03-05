@@ -28,8 +28,20 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 ## レビュー契約
 
 - レビューは Bash で直接実行する。
+- レビュー結果の最終行は次の機械可読マーカーを必須とする:
+  - `REVIEW_RESULT_MARKER=REVIEW_COUNTS`
+  - `REVIEW_COUNTS critical=<int> high=<int>`
 - 判定は `critical/high` で行う。
+- `REVIEW_COUNTS` がパース不能な場合は「レビュー不能」として扱う。
 - 停止条件: `critical=0` かつ `high=0`
+
+## 停止時出力契約
+
+- 停止時は以下3行を必須とする:
+  - `ERROR_CODE: <CODE>`
+  - `RERUN_COMMAND: <one-line command>`
+  - `DIAGNOSTIC_COMMAND: <one-line command>`
+- `STOP_OUTPUT_FIELDS: ERROR_CODE,RERUN_COMMAND,DIAGNOSTIC_COMMAND`
 
 ## コミット契約
 

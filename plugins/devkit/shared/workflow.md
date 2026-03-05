@@ -9,21 +9,13 @@
 
 ### レビュー CLI フォールバック戦略
 
-**Claude Code が親の場合**（通常の対話セッション）:
+全 runtime 共通で次の順序を使う:
 
 | 優先度 | コマンド | 条件 |
 |--------|---------|------|
-| 1st | `codex exec review --uncommitted -m gpt-5.3-codex-spark` | デフォルト |
-| 2nd | `codex exec review --uncommitted -m gpt-5.3-codex` (effort=medium) | spark レートリミット時 |
-| 3rd | レビュースキップ + ユーザー通知 | codex CLI 未インストール or 全モデル不可時 |
-
-**Codex CLI が親の場合**（dig-codex 経由等）:
-
-| 優先度 | コマンド | 条件 |
-|--------|---------|------|
-| 1st | `claude -p --model haiku --tools 'Read,Grep,Glob'` | デフォルト |
-| 2nd | `claude -p --model sonnet --tools 'Read,Grep,Glob'` | haiku 不可時 |
-| 3rd | レビュースキップ + ユーザー通知 | claude CLI 未インストール or 全モデル不可時 |
+| 1st | `codex -a never exec review --uncommitted -m gpt-5.3-codex-spark` | デフォルト |
+| 2nd | `codex -a never exec review --uncommitted -m gpt-5.3-codex -c 'model_reasoning_effort="medium"'` | spark 不可 / レートリミット時 |
+| 3rd | レビュースキップ + ユーザー通知 | codex CLI 未インストール or 全モデル不可時（ただし dig-codex の Phase 5 は適用外） |
 
 ## 8フェーズ必須フロー
 
@@ -58,6 +50,7 @@
 
 - クロスモデルレビューを Bash で直接実行（Skill ツール経由禁止）
 - 停止条件: `critical=0` かつ `high=0`
+- `dig-codex` の Phase 5 は fail-close。レビュー不能時は `DIG_CODEX_PLAN_REVIEW_UNAVAILABLE`、レビュー結果が `critical>0` または `high>0` の場合は `DIG_CODEX_PLAN_REVIEW_BLOCKED` で停止する。
 
 ### Phase 8: コミット&プッシュ
 
