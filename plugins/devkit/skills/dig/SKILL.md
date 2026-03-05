@@ -14,8 +14,8 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 優先順位:
 1. 先頭メタ行 `runtime=<claude|codex|opencode>`
 2. 入口既定値
-   - Claude `/devkit:dig` -> `claude`
-   - Codex `/prompts:devkit-dig` -> `codex`
+   - Claude `/dig` -> `claude`
+   - Codex `$dig` -> `codex`
    - OpenCode `/dig` template -> `opencode`
 
 解決不能時は停止し、`DIG_RUNTIME_UNRESOLVED` を返す。

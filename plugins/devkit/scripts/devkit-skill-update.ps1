@@ -25,7 +25,6 @@ $UserHome = $env:USERPROFILE
 $AgentSkills = Join-Path $UserHome ".agent\skills"
 $CodexRoot = Join-Path $UserHome ".codex"
 $CodexSkills = Join-Path $CodexRoot "skills"
-$CodexPrompts = Join-Path $CodexRoot "prompts"
 $CodexLogs = Join-Path $CodexRoot "logs"
 $BackupDir = Join-Path $CodexLogs "backups"
 $LogPath = Join-Path $CodexLogs "devkit-skill-update.log"
@@ -129,17 +128,6 @@ function Validate-SkillLinks {
   }
 }
 
-function Validate-Prompt {
-  $path = Join-Path $CodexPrompts "devkit-dig.md"
-  if (-not (Test-Path -LiteralPath $path)) {
-    throw "MISSING_PROMPT_FILE: $path"
-  }
-  $raw = Get-Content -LiteralPath $path -Raw -Encoding UTF8
-  if ($raw -notmatch "runtime=codex") {
-    throw "PROMPT_RUNTIME_MISSING: $path"
-  }
-}
-
 Ensure-Dir $CodexLogs
 Ensure-Dir $BackupDir
 
@@ -163,7 +151,6 @@ try {
   Log "OpenSkills update completed."
 
   Validate-SkillLinks
-  Validate-Prompt
   Log "Post-update validation passed."
 
   Write-Status -Status "ok" -Message "Update successful." -ExitCode 0

@@ -1,0 +1,18 @@
+name: DevKit Dig Checks
+
+on:
+  pull_request:
+
+jobs:
+  dig-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run prek (pre-push stage)
+        uses: j178/prek-action@0bb87d7f00b0c99306c8bcb8b8beba1eb581c037
+        with:
+          args: run --all-files --hook-stage pre-push
