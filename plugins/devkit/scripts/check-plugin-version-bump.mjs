@@ -16,9 +16,10 @@ function runGit(args) {
 }
 
 function parseVersion(raw, sourceLabel) {
+  const normalized = raw.replace(/^\uFEFF/, "");
   let json;
   try {
-    json = JSON.parse(raw);
+    json = JSON.parse(normalized);
   } catch (err) {
     throw new Error(`invalid JSON in ${sourceLabel}: ${err.message}`);
   }
@@ -70,7 +71,7 @@ function readHeadVersion() {
   if (!fs.existsSync(abs)) {
     throw new Error(`missing file: ${pluginJsonRel}`);
   }
-  const raw = fs.readFileSync(abs, "utf8").replace(/^\uFEFF/, "");
+  const raw = fs.readFileSync(abs, "utf8");
   return parseVersion(raw, `${pluginJsonRel} (HEAD)`);
 }
 
