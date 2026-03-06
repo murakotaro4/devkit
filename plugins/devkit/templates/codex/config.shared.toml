@@ -1,0 +1,32 @@
+# Managed by DevKit.
+# Re-run devkit-setup.ps1 or devkit-skill-update.ps1 after updating DevKit.
+# Put machine-specific additions in ~/.codex/config.local.toml.
+approval_policy = "never"
+model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+plan_mode_reasoning_effort = "xhigh"
+model_context_window = 1000000
+model_auto_compact_token_limit = 9000000
+personality = "pragmatic"
+network_access = true
+web_search = "live"
+
+[features]
+js_repl = true
+multi_agent = true
+apps = true
+prevent_idle_sleep = true
+plan_tool = true
+view_image_tool = true
+streamable_shell = false
+# Not listed in the current public config reference; enabled intentionally.
+rmcp_client = true
+skills = true
+parallel = true
+unified_exec = true
+shell_snapshot = true
+steer = true
+fast_mode = true
+
+[notice]
+hide_full_access_warning = true

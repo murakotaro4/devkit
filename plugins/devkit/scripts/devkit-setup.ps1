@@ -28,6 +28,9 @@ $AgentSkills = Join-Path $UserHome ".agent\skills"
 $CodexRoot = Join-Path $UserHome ".codex"
 $CodexSkills = Join-Path $CodexRoot "skills"
 $CodexBin = Join-Path $CodexRoot "bin"
+$CodexDevKit = Join-Path $CodexRoot "devkit"
+$CodexDevKitTemplates = Join-Path $CodexDevKit "templates\codex"
+$CodexDevKitSourceRoot = Join-Path $CodexDevKit "source-root.txt"
 $CodexLogs = Join-Path $CodexRoot "logs"
 $TaskName = "DevKitSkillsDailyUpdate"
 
@@ -135,6 +138,14 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
   [IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
 }
 
+function Copy-DevKitTextFile([string]$SourcePath, [string]$DestinationPath) {
+  if (-not (Test-Path -LiteralPath $SourcePath)) {
+    throw "MISSING_SOURCE_FILE: $SourcePath"
+  }
+  $content = Get-Content -LiteralPath $SourcePath -Raw -Encoding UTF8
+  Write-Utf8NoBom -Path $DestinationPath -Content $content
+}
+
 function Register-DailyTask([string]$UpdaterPath, [string]$At) {
   $atTime = [datetime]::ParseExact($At, "HH:mm", $null)
   $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$UpdaterPath`""
@@ -149,6 +160,7 @@ try {
   Ensure-Dir $CodexSkills
   Ensure-Dir $CodexBin
   Ensure-Dir $CodexLogs
+  Ensure-Dir $CodexDevKitTemplates
 
   if (-not $SkipInstall) {
     Write-Info "Installing/updating skills from allowlisted source via OpenSkills."
@@ -178,8 +190,34 @@ try {
     throw "MISSING_UPDATER_SCRIPT: $updaterSrc"
   }
   $updaterDst = Join-Path $CodexBin "devkit-skill-update.ps1"
-  $updaterContent = Get-Content -LiteralPath $updaterSrc -Raw -Encoding UTF8
-  Write-Utf8NoBom -Path $updaterDst -Content $updaterContent
+  Copy-DevKitTextFile -SourcePath $updaterSrc -DestinationPath $updaterDst
+
+  $configHelperSrc = Join-Path $PSScriptRoot "devkit-codex-config.ps1"
+  $configHelperDst = Join-Path $CodexBin "devkit-codex-config.ps1"
+  Copy-DevKitTextFile -SourcePath $configHelperSrc -DestinationPath $configHelperDst
+
+  $templateSrcRoot = Join-Path (Split-Path -Parent $PSScriptRoot) "templates\codex"
+  $pluginRoot = Split-Path -Parent $PSScriptRoot
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $templateSrcRoot "config.shared.toml") `
+    -DestinationPath (Join-Path $CodexDevKitTemplates "config.shared.toml")
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $templateSrcRoot "config.windows.toml") `
+    -DestinationPath (Join-Path $CodexDevKitTemplates "config.windows.toml")
+  Write-Utf8NoBom -Path $CodexDevKitSourceRoot -Content ($pluginRoot + "`n")
+
+  . $configHelperDst
+  $configResult = Install-DevKitCodexConfig -UserHome $UserHome -OsName "windows"
+  if ($configResult.BootstrappedLocalOverlay) {
+    Write-Info "Bootstrapped local Codex overlay from the existing config."
+  }
+  if ($configResult.BackupPath) {
+    Write-Info "Codex config backup saved to: $($configResult.BackupPath)"
+  }
+  if ($configResult.UsedLocalOverlay) {
+    Write-Info "Applied local Codex overlay: $($configResult.LocalOverlayPath)"
+  }
+  Write-Info "Codex config refreshed."
 
   if ($RegisterDailyTask) {
     Write-Info "Registering scheduled task '$TaskName' at $TaskTime."
@@ -189,7 +227,7 @@ try {
   Write-Info "Setup completed."
   Write-Host ""
   Write-Host "Run dig from Codex:"
-  Write-Host "  \$dig <topic>"
+  Write-Host '  $dig <topic>'
   Write-Host ""
   Write-Host "Manual update command:"
   Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$updaterDst`""

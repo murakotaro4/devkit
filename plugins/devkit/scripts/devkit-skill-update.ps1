@@ -24,6 +24,10 @@ $SkillManifest = @(
 $UserHome = $env:USERPROFILE
 $AgentSkills = Join-Path $UserHome ".agent\skills"
 $CodexRoot = Join-Path $UserHome ".codex"
+$CodexBin = Join-Path $CodexRoot "bin"
+$CodexDevKit = Join-Path $CodexRoot "devkit"
+$CodexDevKitTemplates = Join-Path $CodexDevKit "templates\codex"
+$CodexDevKitSourceRoot = Join-Path $CodexDevKit "source-root.txt"
 $CodexSkills = Join-Path $CodexRoot "skills"
 $CodexLogs = Join-Path $CodexRoot "logs"
 $BackupDir = Join-Path $CodexLogs "backups"
@@ -34,6 +38,19 @@ function Ensure-Dir([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) {
     New-Item -ItemType Directory -Path $Path -Force | Out-Null
   }
+}
+
+function Write-Utf8NoBom([string]$Path, [string]$Content) {
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
+function Copy-DevKitTextFile([string]$SourcePath, [string]$DestinationPath) {
+  if (-not (Test-Path -LiteralPath $SourcePath)) {
+    throw "MISSING_SOURCE_FILE: $SourcePath"
+  }
+  $content = Get-Content -LiteralPath $SourcePath -Raw -Encoding UTF8
+  Write-Utf8NoBom -Path $DestinationPath -Content $content
 }
 
 function Convert-ToFullPath([string]$Path) {
@@ -128,6 +145,50 @@ function Validate-SkillLinks {
   }
 }
 
+function Sync-DevKitCodexAssets {
+  if (-not (Test-Path -LiteralPath $CodexDevKitSourceRoot)) {
+    return $false
+  }
+
+  $sourceRoot = (Get-Content -LiteralPath $CodexDevKitSourceRoot -Raw -Encoding UTF8).Trim()
+  if ([string]::IsNullOrWhiteSpace($sourceRoot)) {
+    return $false
+  }
+
+  $sourceScripts = Join-Path $sourceRoot "scripts"
+  $sourceTemplates = Join-Path $sourceRoot "templates\codex"
+  $required = @(
+    (Join-Path $sourceScripts "devkit-codex-config.ps1"),
+    (Join-Path $sourceScripts "devkit-skill-update.ps1"),
+    (Join-Path $sourceTemplates "config.shared.toml"),
+    (Join-Path $sourceTemplates "config.windows.toml")
+  )
+
+  foreach ($path in $required) {
+    if (-not (Test-Path -LiteralPath $path)) {
+      return $false
+    }
+  }
+
+  Ensure-Dir $CodexBin
+  Ensure-Dir $CodexDevKitTemplates
+
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $sourceScripts "devkit-codex-config.ps1") `
+    -DestinationPath (Join-Path $CodexBin "devkit-codex-config.ps1")
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $sourceScripts "devkit-skill-update.ps1") `
+    -DestinationPath (Join-Path $CodexBin "devkit-skill-update.ps1")
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $sourceTemplates "config.shared.toml") `
+    -DestinationPath (Join-Path $CodexDevKitTemplates "config.shared.toml")
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $sourceTemplates "config.windows.toml") `
+    -DestinationPath (Join-Path $CodexDevKitTemplates "config.windows.toml")
+
+  return $true
+}
+
 Ensure-Dir $CodexLogs
 Ensure-Dir $BackupDir
 
@@ -153,7 +214,36 @@ try {
   Validate-SkillLinks
   Log "Post-update validation passed."
 
-  Write-Status -Status "ok" -Message "Update successful." -ExitCode 0
+  try {
+    if (Sync-DevKitCodexAssets) {
+      Log "Refreshed Codex config helper/templates from the DevKit source checkout."
+    }
+
+    $configHelperPath = Join-Path $CodexBin "devkit-codex-config.ps1"
+    if (-not (Test-Path -LiteralPath $configHelperPath)) {
+      throw "MISSING_CONFIG_HELPER: $configHelperPath"
+    }
+
+    . $configHelperPath
+    $configResult = Install-DevKitCodexConfig -UserHome $UserHome -OsName "windows"
+    if ($configResult.BootstrappedLocalOverlay) {
+      Log "Bootstrapped local Codex overlay from the existing config."
+    }
+    if ($configResult.BackupPath) {
+      Log ("Codex config backup saved: " + $configResult.BackupPath)
+    }
+    if ($configResult.UsedLocalOverlay) {
+      Log ("Applied local Codex overlay: " + $configResult.LocalOverlayPath)
+    }
+    Log "Codex config refreshed."
+  } catch {
+    $configError = $_.Exception.Message
+    Log ("Codex config refresh failed: " + $configError)
+    Write-Status -Status "warn" -Message ("Skills updated, but Codex config was restored after refresh failure: " + $configError) -ExitCode 4
+    exit 4
+  }
+
+  Write-Status -Status "ok" -Message "Update successful. Codex config refreshed." -ExitCode 0
   exit 0
 } catch {
   $rootError = $_.Exception.Message
