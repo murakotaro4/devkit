@@ -1,0 +1,37 @@
+minimum_pre_commit_version = "4.0.0"
+default_install_hook_types = ["pre-commit", "pre-push"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "dig-routing"
+name = "Check dig routing"
+entry = "node plugins/devkit/scripts/check-dig-routing.mjs"
+language = "system"
+pass_filenames = false
+stages = ["pre-commit", "pre-push"]
+
+[[repos.hooks]]
+id = "skill-surface-phase-b"
+name = "Check skill surface (phase B)"
+entry = "node plugins/devkit/scripts/check-skill-surface.mjs --phase=B"
+language = "system"
+pass_filenames = false
+stages = ["pre-commit", "pre-push"]
+
+[[repos.hooks]]
+id = "dig-migration-repo"
+name = "Check dig migration (repo mode)"
+entry = "node plugins/devkit/scripts/check-dig-migration.mjs --mode=repo"
+language = "system"
+pass_filenames = false
+stages = ["pre-commit", "pre-push"]
+
+[[repos.hooks]]
+id = "plugin-version-bump"
+name = "Check plugin version bump"
+entry = "node plugins/devkit/scripts/check-plugin-version-bump.mjs"
+language = "system"
+pass_filenames = false
+stages = ["pre-push"]

@@ -13,6 +13,8 @@ const artifactPath = artifactArg ? artifactArg.split("=")[1] : "";
 
 const root = process.cwd();
 const legacyPatterns = [
+  /\/devkit:dig\b/g,
+  /\/prompts:devkit-dig\b/g,
   /\/devkit:codex(?!-)\b/g,
   /\/devkit:agent-orch-(core|openai|anthropic|google)\b/g,
   /devkit-codex(?!-)\b/g,
