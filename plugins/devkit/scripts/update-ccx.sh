@@ -2,6 +2,8 @@
 #
 # update-ccx.sh - Claude Code, Codex CLI & opencode セットアップ＆アップデート
 #
+# Windows PowerShell / cmd users should use update-ccx.ps1 or update-ccx.cmd.
+#
 # 対応環境: macOS (Homebrew / npm) / WSL (native / npm) / Linux / Windows (Git Bash)
 #
 # Usage:

@@ -1,130 +1,136 @@
 # devkit/scripts
 
-開発環境用のユーティリティスクリプト集。
+補助スクリプト置き場。
 
-## update-ccx.sh
+## update-ccx
 
-Claude Code, Codex CLI, opencode を一括更新するスクリプト。
+Claude Code、Codex CLI、opencode をまとめて install / update する。
 
-### 対応環境
+### 入口
+
+| 環境 | 推奨コマンド | 補足 |
+|------|--------------|------|
+| Windows (PowerShell / cmd) | `update-ccx` | setup 後は `~/.local/bin/update-ccx.cmd` shim からどこでも呼べる |
+| Windows (Git Bash / WSL) | `update-ccx.sh` | `.sh` は LF 固定。Git Bash / WSL から直接使う |
+| macOS / Linux | `update-ccx.sh` | 既存の bash 入口 |
+
+> `devkit-setup.ps1` は Codex 向けスキル配置・設定同期用。ただし Windows では `update-ccx` の shim 配置もここで行う。
+
+### 対応内容
 
 | 環境 | Claude Code | Codex CLI | opencode |
 |------|-------------|-----------|----------|
-| macOS | Homebrew Cask / npm / native | Homebrew / npm | Homebrew / npm |
+| Windows (PowerShell / cmd) | native / npm | npm / legacy prefix migration | npm |
+| Windows (Git Bash) | native / npm | npm (fnm 対応) | npm (fnm 対応) |
 | WSL | native / npm | npm | npm |
+| macOS | Homebrew Cask / npm / native | Homebrew / npm | Homebrew / npm |
 | Linux | native / npm | npm | npm |
-| Windows (Git Bash) | native / npm | npm (fnm対応) | npm (fnm対応) |
 
-### セットアップ
+### Windows での使い方
 
-スクリプトにPATHを通す必要があります。
+`devkit-setup.ps1` 実行済みなら、PowerShell / cmd からどこでも:
 
-#### macOS (zsh)
-
-```bash
-echo 'export PATH="$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts:$PATH"' >> ~/.zshrc
-source ~/.zshrc
+```cmd
+update-ccx
+update-ccx --version
 ```
 
-#### WSL / Linux (bash)
+setup 前、または shim が未配置の場合:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\update-ccx.ps1" --version
+& "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\update-ccx.cmd"
+```
+
+### Windows の npm 自己修復
+
+PowerShell / cmd 版は、active/default の fnm 管理 Node から `npm` が消えている場合、更新前に同じ Node バージョンの自己修復を 1 回試す。
+
+流れ:
+
+1. Setup で `npm` の欠落を検知
+2. `fnm install <current-version>` と `fnm default <current-version>` を実行
+3. まだ `npm` が戻らない場合は壊れた install root を `.update-ccx-broken.<timestamp>` として退避し、同じバージョンを再取得
+4. 失敗時は npm 系の更新を `SKIPPED` にし、診断エラーを 1 件だけ出す
+
+補足:
+
+- 別の Node バージョンには自動切替しない
+- `other_npm_ready_versions=` は手動復旧候補
+
+### Git Bash / WSL / Unix の使い方
 
 ```bash
+# PATH を追加
 echo 'export PATH="$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts:$PATH"' >> ~/.bashrc
 source ~/.bashrc
-```
 
-#### Windows (Git Bash)
-
-```bash
-echo 'export PATH="$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-fnm を使用している場合は、`.bashrc` で fnm の PATH 設定が先に行われていることを確認してください:
-
-```bash
-# fnm の PATH を通す（winget の場合の例）
-export PATH="/c/Users/<username>/AppData/Local/Microsoft/WinGet/Packages/Schniz.fnm_Microsoft.Winget.Source_8wekyb3d8bbwe:$PATH"
-eval "$(fnm env --use-on-cd --shell bash)"
-```
-
-#### 実行権限付与（初回のみ）
-
-```bash
-chmod +x ~/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/update-ccx.sh
-```
-
-### 使用方法
-
-```bash
-# 全ツールを更新
+# 実行
 update-ccx.sh
-
-# 現在のバージョンを表示
 update-ccx.sh --version
 update-ccx.sh -v
 ```
 
-### 出力例
+macOS の zsh は `~/.zshrc` に同じ PATH を追加する。
 
-```
-=== Claude Code, Codex CLI & opencode Update ===
-Environment: wsl
+### Windows の Codex 自動移行
 
-[Before]
-claude:   1.0.57 (native)
-codex:    0.1.2505301636 (npm)
-opencode: 0.3.5 (npm)
+PowerShell / cmd 版は、`%USERPROFILE%\.npmrc` に次の legacy prefix がある場合だけ Codex を自動移行する。
 
-Updating Claude Code (native)... ✓
-Updating Codex CLI (npm)... ✓
-Updating opencode (npm)... ✓
-
-[After]
-claude:   1.0.58
-codex:    0.1.2505301636
-opencode: 0.3.5
-
-✓ Update completed
+```text
+prefix=C:\Users\<username>\.npm-global
 ```
 
-### インストール方法の自動検出
+実行内容:
 
-スクリプトは各ツールのインストール方法を自動検出し、適切な更新コマンドを実行します。
+1. `~/.npmrc.update-ccx.bak.<timestamp>` を作成
+2. legacy prefix から `@openai/codex` を uninstall
+3. `.npmrc` から上記 `prefix=` 行だけ削除
+4. 現在の Windows npm global prefix (`npm config get prefix`) に `@openai/codex` を再 install
+5. その prefix が user PATH に無ければ先頭へ追加
 
-| ツール | 検出方法 | 更新コマンド |
-|--------|---------|-------------|
-| Claude Code (native) | `claude update --help` の存在 | `claude update` |
-| Claude Code (homebrew-cask) | `brew list --cask claude` | `brew upgrade --cask claude` |
-| Claude Code (npm) | node_modules パス | `npm update -g @anthropic-ai/claude-code` |
-| Codex CLI (npm) | `npm list -g @openai/codex` | `npm update -g @openai/codex` |
-| Codex CLI (brew) | `brew list codex` | `brew upgrade codex` |
-| opencode (npm) | `npm list -g opencode-ai` | `npm update -g opencode-ai` |
-| opencode (brew) | `brew list opencode` | `brew upgrade opencode` |
+注意点:
+
+- 上記以外の custom prefix は自動書き換えしない。手動確認が必要というエラーで停止する
+- 既存の standalone `codex.exe` は削除しない
+- `where.exe codex` に複数候補が残る場合は warning を出す
+
+### 自動検出
+
+| ツール | 検出方針 | 更新コマンド |
+|--------|----------|--------------|
+| Claude Code (native) | `claude update --help` と配置パス | `claude update` |
+| Claude Code (npm) | npm / fnm 系パス | `npm update -g @anthropic-ai/claude-code` |
+| Codex CLI (npm) | `Get-Command codex` の優先結果 + `where.exe codex` | `npm update -g @openai/codex` |
+| opencode (npm) | npm / fnm 系パス | `npm update -g opencode-ai` |
 
 ### トラブルシューティング
 
-#### "command not found" エラー
+#### `update-ccx.cmd` / `update-ccx.sh` が見つからない
 
-PATHが正しく設定されているか確認:
+- スクリプトディレクトリを PATH に追加する
+- またはフルパスで `update-ccx.ps1` / `update-ccx.cmd` / `update-ccx.sh` を実行する
 
-```bash
-echo $PATH | tr ':' '\n' | grep devkit
-```
+#### Windows で Codex 移行が止まる
 
-#### 権限エラー
+- `%USERPROFILE%\.npmrc` に想定外の `prefix=` がないか確認する
+- 移行対象は `C:\Users\<username>\.npm-global` だけ
+- 失敗時は `~/.npmrc.update-ccx.bak.<timestamp>` から戻せる
 
-実行権限を付与:
+#### Windows で npm が見つからない
 
-```bash
-chmod +x ~/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/update-ccx.sh
-```
+- PowerShell / cmd 版は同じ Node バージョンの自己修復を 1 回試す
+- 失敗時は `install_root=` と `expected_npm=` を確認する
+- `other_npm_ready_versions=` は手動で `fnm default <version>` する際の候補
+- 自動で別バージョンへは切り替えない
 
-#### npm update が失敗する
+#### `where.exe codex` に複数候補が出る
 
-npm のグローバルディレクトリの権限を確認:
+- `fnm` 管理の Codex と standalone `codex.exe` が混在している
+- `update-ccx` は standalone 側を削除しない
+- PATH の優先順位を見直して、fnm 管理側が先に解決されるようにする
+補足:
 
-```bash
-npm config get prefix
-ls -la $(npm config get prefix)/lib/node_modules/
-```
+- 実体は `~/.codex/bin/update-ccx.ps1` / `update-ccx.cmd`
+- `~/.local/bin/update-ccx.cmd` shim から呼び出す
+- `~/.local/bin` が user PATH に無ければ setup/update 時に追加する

@@ -11,22 +11,11 @@ personality = "pragmatic"
 network_access = true
 web_search = "live"
 
-[features]
-js_repl = true
-multi_agent = true
-apps = true
-prevent_idle_sleep = true
-plan_tool = true
-view_image_tool = true
-streamable_shell = false
-# Not listed in the current public config reference; enabled intentionally.
-rmcp_client = true
-skills = true
-parallel = true
-unified_exec = true
-shell_snapshot = true
-steer = true
-fast_mode = true
+features.js_repl = true
+features.multi_agent = true
+features.apps = true
+features.prevent_idle_sleep = true
+features.unified_exec = true
+features.fast_mode = true
 
-[notice]
-hide_full_access_warning = true
+notice.hide_full_access_warning = true

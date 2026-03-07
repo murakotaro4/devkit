@@ -5,10 +5,22 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+const LEGACY_PHASE_MAP = {
+  plan_review: "plan_review_completed",
+  impl_review: "implementation_review_completed",
+  commit_review: "commit_review_completed",
+  phase_6: "implementation_completed",
+};
+
 function sanitizeSessionId(id) {
   if (!id) return crypto.randomUUID();
   const sanitized = id.replace(/[^a-zA-Z0-9-]/g, "");
   return sanitized || crypto.randomUUID();
+}
+
+function normalizePhaseToken(token) {
+  if (!token || typeof token !== "string") return null;
+  return LEGACY_PHASE_MAP[token] || token;
 }
 
 function emitDecision(decision, reason, additionalContext) {
@@ -190,32 +202,32 @@ function main() {
     emitDecision(
       "ask",
       `git ${action} detected without workflow state`,
-      `[devkit-workflow] \u26a0\ufe0f git ${action} \u304c\u691c\u51fa\u3055\u308c\u307e\u3057\u305f\u3002\u30ef\u30fc\u30af\u30d5\u30ed\u30fc\u72b6\u614b\u304c\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3002\u30ec\u30d3\u30e5\u30fc\u30d5\u30a7\u30fc\u30ba\uff08Phase 5/7\uff09\u3092\u5b8c\u4e86\u3057\u3066\u3044\u307e\u3059\u304b\uff1f`
+      `[devkit-workflow] \u26a0\ufe0f git ${action} \u304c\u691c\u51fa\u3055\u308c\u307e\u3057\u305f\u3002\u30ef\u30fc\u30af\u30d5\u30ed\u30fc\u72b6\u614b\u304c\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3002\u30ec\u30d3\u30e5\u30fc\u30b2\u30fc\u30c8\uff08Phase 5/7\uff09\u3092\u5b8c\u4e86\u3057\u3066\u3044\u307e\u3059\u304b\uff1f`
     );
     return;
   }
 
   const phasesPassed = Array.isArray(state.phases_passed)
-    ? state.phases_passed
+    ? state.phases_passed.map(normalizePhaseToken).filter(Boolean)
     : [];
   const hasReview =
-    phasesPassed.includes("plan_review") &&
-    phasesPassed.includes("impl_review");
+    phasesPassed.includes("plan_review_completed") &&
+    phasesPassed.includes("implementation_review_completed");
 
   if (isGitCommit && !hasReview) {
     emitDecision(
       "ask",
       "git commit detected without review phase marker",
-      `[devkit-workflow] \u26a0\ufe0f git commit \u304c\u691c\u51fa\u3055\u308c\u307e\u3057\u305f\u304c\u3001\u30ec\u30d3\u30e5\u30fc\u30d5\u30a7\u30fc\u30ba\u306e\u5b8c\u4e86\u30de\u30fc\u30ab\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002\n8\u30d5\u30a7\u30fc\u30ba\u30ef\u30fc\u30af\u30d5\u30ed\u30fc\u306e Phase 5\uff08\u8a08\u753b\u30ec\u30d3\u30e5\u30fc\uff09\u307e\u305f\u306f Phase 7\uff08\u5b9f\u88c5\u30ec\u30d3\u30e5\u30fc\uff09\u3092\u5b8c\u4e86\u3057\u3066\u304b\u3089\u30b3\u30df\u30c3\u30c8\u3057\u3066\u304f\u3060\u3055\u3044\u3002`
+      `[devkit-workflow] \u26a0\ufe0f git commit \u304c\u691c\u51fa\u3055\u308c\u307e\u3057\u305f\u304c\u3001\u30ec\u30d3\u30e5\u30fc\u30b2\u30fc\u30c8\u306e\u5b8c\u4e86\u30de\u30fc\u30ab\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002\nagent team \u30ef\u30fc\u30af\u30d5\u30ed\u30fc\u306e Phase 5\uff08Plan Review Gate\uff09\u307e\u305f\u306f Phase 7\uff08Implementation Review & Verification\uff09\u3092\u5b8c\u4e86\u3057\u3066\u304b\u3089\u30b3\u30df\u30c3\u30c8\u3057\u3066\u304f\u3060\u3055\u3044\u3002`
     );
     return;
   }
 
-  if (isGitPush && !phasesPassed.includes("commit_review")) {
+  if (isGitPush && !phasesPassed.includes("commit_review_completed")) {
     emitDecision(
       "ask",
       "git push detected without commit review marker",
-      `[devkit-workflow] \u26a0\ufe0f git push \u304c\u691c\u51fa\u3055\u308c\u307e\u3057\u305f\u304c\u3001\u30b3\u30df\u30c3\u30c8\u524d\u30ec\u30d3\u30e5\u30fc\uff08Phase 8 Step 2\uff09\u306e\u5b8c\u4e86\u30de\u30fc\u30ab\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002`
+      `[devkit-workflow] \u26a0\ufe0f git push \u304c\u691c\u51fa\u3055\u308c\u307e\u3057\u305f\u304c\u3001\u30b3\u30df\u30c3\u30c8\u524d\u78ba\u8a8d\uff08Phase 8 Step 2\uff09\u306e\u5b8c\u4e86\u30de\u30fc\u30ab\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002`
     );
     return;
   }

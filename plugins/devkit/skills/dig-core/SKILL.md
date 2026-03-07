@@ -14,7 +14,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 1. 深掘り質問
 2. 終了確認
 3. タスク分解（オプション）
-4. 計画レビュー（クロスモデル）
+4. 計画レビュー（review gate）
 5. 実行
 
 ## 安全ガード
@@ -27,8 +27,10 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 
 ## レビュー契約
 
-- レビューは Bash で直接実行する。
-- レビュー結果の最終行は次の機械可読マーカーを必須とする:
+- レビューゲートは runtime 契約に従う。
+- Bash で直接実行できる場合はそれを優先する。
+- Bash 実行が unavailable な runtime では、adapter 契約に従って独立 reviewer を代替経路として使ってよい。
+- Bash 経路を使う場合、レビュー結果の最終行は次の機械可読マーカーを必須とする:
   - `REVIEW_RESULT_MARKER=REVIEW_COUNTS`
   - `REVIEW_COUNTS critical=<int> high=<int>`
 - 判定は `critical/high` で行う。
@@ -47,5 +49,5 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 
 コミット計画を含む場合は必ず以下の順序:
 1. `git add`
-2. コミット前クロスモデルレビュー
+2. コミット前レビューゲート
 3. `git commit` + `git push`

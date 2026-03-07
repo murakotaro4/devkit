@@ -1,3 +1,57 @@
+# AGENTS.md
+
+このファイルを、このリポジトリ直下のエージェント向け指示の正本とする。`CLAUDE.md` は参照入口として扱い、実質的なルールはここへ集約する。
+
+## Repo Context
+
+- このリポジトリは DevKit の共有ワークフロー、セットアップ/更新スクリプト、skills、templates を管理する
+- 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
+- ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
+
+## Maintenance Rules
+
+- ルートのエージェント向けルールを変更するときは、まずこのファイルを更新する
+- `plugins/devkit/shared/workflow.md` は downstream 同期用の共有ワークフロー本体なので、共有フローを変える場合はこのファイル内のコピーと一緒に更新する
+- スクリプトの仕様変更時は `README.md` と `plugins/devkit/scripts/README.md` を同期する
+- スキル契約を変える場合は対応する `SKILL.md` と必要な templates / scripts を同期する
+
+## Key Paths
+
+- `README.md`: リポジトリ全体の導入・運用説明
+- `plugins/devkit/shared/workflow.md`: 他プロジェクトへ同期する共有ワークフロー
+- `plugins/devkit/scripts/`: setup / update 系スクリプト
+- `plugins/devkit/skills/`: 配布する skill 定義
+- `plugins/devkit/templates/`: Codex / OpenCode 向けテンプレート
+
+## Commit Rules
+
+- コミットメッセージは Conventional Commits を使う
+- 基本形は ``<type>(<scope>): <summary>`` とし、`scope` は必要な場合だけ付ける
+- `type` は `feat` `fix` `docs` `refactor` `test` `chore` `ci` `build` `perf` `revert` を優先して使う
+- `summary` は必ず日本語で簡潔に書く
+- 本文を書く場合も日本語で統一し、変更理由・影響範囲・補足を必要最小限で書く
+- 破壊的変更は `type!:` または `type(scope)!:` を使い、必要なら本文に `BREAKING CHANGE:` で日本語説明を付ける
+- 英語だけの要約や、Conventional Commits に沿わない自由形式のコミットメッセージは使わない
+
+例:
+
+- `feat(update-ccx): Windows で npm 欠落時の自己修復を追加`
+- `docs(agents): コミット規約を AGENTS.md に追記`
+
+## Release Rules
+
+- この repo は Claude Code Marketplace plugin を含む
+- `plugins/devkit/**` または `.claude-plugin/**` を変更した場合、push 前に `plugins/devkit/.claude-plugin/plugin.json` の version を上げる
+- pre-push gate は version が `origin/main` と同じなら push を block する
+- version の目安:
+  - `patch`: docs / bugfix only
+  - `minor`: workflow contract / user-visible behavior 変更
+  - `major`: breaking change
+
+<!-- devkit:workflow:start -->
+<!-- このセクションは shared/workflow.md の静的コピー。共有フローを変更したら両方更新すること。 -->
+## Shared Workflow
+
 # devkit 統一開発ワークフロー（agent team 運用契約）
 
 この文書は全 runtime 共通の**運用契約**を定義する。原則すべてのタスクを agent team 前提で進める。軽微なタスクでも reviewer は必須とし、必要なら役割兼務で縮退する。
@@ -188,3 +242,4 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - implementer による単独自己レビュー
 - 実装レビューなしのコミット
 - `Coordinator` の判断なしにスコープを拡張すること
+<!-- devkit:workflow:end -->

@@ -5,10 +5,38 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+const LEGACY_PHASE_MAP = {
+  plan_review: "plan_review_completed",
+  impl_review: "implementation_review_completed",
+  commit_review: "commit_review_completed",
+  phase_6: "implementation_completed",
+};
+
 function sanitizeSessionId(id) {
   if (!id) return crypto.randomUUID();
   const sanitized = id.replace(/[^a-zA-Z0-9-]/g, "");
   return sanitized || crypto.randomUUID();
+}
+
+function normalizePhaseToken(token) {
+  if (!token || typeof token !== "string") return null;
+  return LEGACY_PHASE_MAP[token] || token;
+}
+
+function normalizeState(state) {
+  const phasesPassed = Array.isArray(state?.phases_passed)
+    ? state.phases_passed.map(normalizePhaseToken).filter(Boolean)
+    : [];
+
+  return {
+    ...state,
+    workflow_version: 2,
+    current_phase_token:
+      normalizePhaseToken(state?.current_phase_token) ||
+      phasesPassed[phasesPassed.length - 1] ||
+      "",
+    phases_passed: [...new Set(phasesPassed)],
+  };
 }
 
 function main() {
@@ -62,11 +90,19 @@ function main() {
 
   // Reuse existing state file if present
   if (fs.existsSync(stateFile)) {
+    try {
+      const currentState = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+      const normalizedState = normalizeState(currentState);
+      fs.writeFileSync(stateFile, JSON.stringify(normalizedState, null, 2));
+    } catch {
+      // ignore migration failure and keep the existing file
+    }
+
     const out = {
       hookSpecificOutput: {
         hookEventName: "SessionStart",
         additionalContext:
-          "[devkit-workflow] Existing workflow state loaded. 8-phase workflow active.",
+          "[devkit-workflow] Existing workflow state loaded. agent-team workflow active.",
       },
     };
     process.stdout.write(JSON.stringify(out));
@@ -75,10 +111,11 @@ function main() {
 
   // Create new state file
   const state = {
+    workflow_version: 2,
     session_id: sessionId,
     created_at: new Date().toISOString(),
     task: "",
-    current_phase: 0,
+    current_phase_token: "",
     phases_passed: [],
   };
 
@@ -113,7 +150,7 @@ function main() {
     hookSpecificOutput: {
       hookEventName: "SessionStart",
       additionalContext:
-        "[devkit-workflow] Workflow state initialized. 8-phase mandatory workflow active.",
+        "[devkit-workflow] Workflow state initialized. agent-team workflow contract active.",
     },
   };
   process.stdout.write(JSON.stringify(out));
