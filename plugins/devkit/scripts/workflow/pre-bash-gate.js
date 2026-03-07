@@ -5,10 +5,22 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+const LEGACY_PHASE_MAP = {
+  plan_review: "plan_review_completed",
+  impl_review: "implementation_review_completed",
+  commit_review: "commit_review_completed",
+  phase_6: "implementation_completed",
+};
+
 function sanitizeSessionId(id) {
   if (!id) return crypto.randomUUID();
   const sanitized = id.replace(/[^a-zA-Z0-9-]/g, "");
   return sanitized || crypto.randomUUID();
+}
+
+function normalizePhaseToken(token) {
+  if (!token || typeof token !== "string") return null;
+  return LEGACY_PHASE_MAP[token] || token;
 }
 
 function emitDecision(decision, reason, additionalContext) {
@@ -196,11 +208,11 @@ function main() {
   }
 
   const phasesPassed = Array.isArray(state.phases_passed)
-    ? state.phases_passed
+    ? state.phases_passed.map(normalizePhaseToken).filter(Boolean)
     : [];
   const hasReview =
-    phasesPassed.includes("plan_review") &&
-    phasesPassed.includes("impl_review");
+    phasesPassed.includes("plan_review_completed") &&
+    phasesPassed.includes("implementation_review_completed");
 
   if (isGitCommit && !hasReview) {
     emitDecision(
@@ -211,7 +223,7 @@ function main() {
     return;
   }
 
-  if (isGitPush && !phasesPassed.includes("commit_review")) {
+  if (isGitPush && !phasesPassed.includes("commit_review_completed")) {
     emitDecision(
       "ask",
       "git push detected without commit review marker",

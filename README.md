@@ -52,6 +52,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ci\assert-pr-check
 - 新規 workflow 追加直後は GitHub 側の登録タイミングによりチェック表示が遅れることがある。
 - その場合は上記コマンドで状態を確認し、必要に応じて `workflow_dispatch` で手動起動する。
 
+## Marketplace Plugin Release Rule
+
+この repo は Claude Code Marketplace plugin を含む。
+
+- plugin 実体: `plugins/devkit/.claude-plugin/plugin.json`
+- `plugins/devkit/**` または `.claude-plugin/**` を変更した場合、push 前に `plugin.json` の version を上げる
+- pre-push gate は `origin/main` と同じ version のままなら push を block する
+- version の目安:
+  - `patch`: docs / bugfix only
+  - `minor`: workflow contract / user-visible behavior 変更
+  - `major`: breaking change
+
 ## 前提条件
 
 ### 必須ツール

@@ -9,6 +9,19 @@
 - `team_shape`、`role_assignment`、`write_scope` は plan または task note に明示する運用義務とする
 - 上記 3 項目は、現時点では全 runtime 共通に機械検証される前提ではない
 
+## Workflow State Tokens
+
+runtime-specific hook / state が phase を記録する場合、canonical token は次を使う:
+
+- `intake_declared`
+- `requirements_confirmed`
+- `research_completed`
+- `plan_drafted`
+- `plan_review_completed`
+- `implementation_completed`
+- `implementation_review_completed`
+- `commit_review_completed`
+
 ## Review Gate Prerequisites
 
 - Codex CLI は標準 review gate として**推奨**する

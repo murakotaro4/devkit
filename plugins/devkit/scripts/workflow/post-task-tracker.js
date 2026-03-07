@@ -5,10 +5,22 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+const LEGACY_PHASE_MAP = {
+  plan_review: "plan_review_completed",
+  impl_review: "implementation_review_completed",
+  commit_review: "commit_review_completed",
+  phase_6: "implementation_completed",
+};
+
 function sanitizeSessionId(id) {
   if (!id) return crypto.randomUUID();
   const sanitized = id.replace(/[^a-zA-Z0-9-]/g, "");
   return sanitized || crypto.randomUUID();
+}
+
+function normalizePhaseToken(token) {
+  if (!token || typeof token !== "string") return null;
+  return LEGACY_PHASE_MAP[token] || token;
 }
 
 function main() {
@@ -40,9 +52,11 @@ function main() {
   let phases = [];
 
   if (Array.isArray(metadata.phases)) {
-    phases = metadata.phases.filter((p) => typeof p === "string" && p);
+    phases = metadata.phases
+      .map(normalizePhaseToken)
+      .filter(Boolean);
   } else if (typeof metadata.phase === "string" && metadata.phase) {
-    phases = [metadata.phase];
+    phases = [normalizePhaseToken(metadata.phase)].filter(Boolean);
   }
 
   if (phases.length === 0) return;
@@ -70,9 +84,12 @@ function main() {
   }
 
   const existing = Array.isArray(state.phases_passed)
-    ? state.phases_passed
+    ? state.phases_passed.map(normalizePhaseToken).filter(Boolean)
     : [];
   const merged = [...new Set([...existing, ...phases])];
+  const latestPhase = phases[phases.length - 1];
+  state.workflow_version = 2;
+  state.current_phase_token = latestPhase;
   state.phases_passed = merged;
 
   try {
@@ -85,7 +102,7 @@ function main() {
   const out = {
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
-      additionalContext: `[devkit-workflow] Phase completed: ${phaseList}. phases_passed: [${merged.join(", ")}]`,
+      additionalContext: `[devkit-workflow] Phase completed: ${phaseList}. current_phase_token: ${latestPhase}. phases_passed: [${merged.join(", ")}]`,
     },
   };
   process.stdout.write(JSON.stringify(out));

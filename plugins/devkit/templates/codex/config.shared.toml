@@ -18,5 +18,4 @@ features.prevent_idle_sleep = true
 features.unified_exec = true
 features.fast_mode = true
 
-[notice]
-hide_full_access_warning = true
+notice.hide_full_access_warning = true

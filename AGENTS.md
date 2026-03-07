@@ -38,6 +38,16 @@
 - `feat(update-ccx): Windows で npm 欠落時の自己修復を追加`
 - `docs(agents): コミット規約を AGENTS.md に追記`
 
+## Release Rules
+
+- この repo は Claude Code Marketplace plugin を含む
+- `plugins/devkit/**` または `.claude-plugin/**` を変更した場合、push 前に `plugins/devkit/.claude-plugin/plugin.json` の version を上げる
+- pre-push gate は version が `origin/main` と同じなら push を block する
+- version の目安:
+  - `patch`: docs / bugfix only
+  - `minor`: workflow contract / user-visible behavior 変更
+  - `major`: breaking change
+
 <!-- devkit:workflow:start -->
 <!-- このセクションは shared/workflow.md の静的コピー。共有フローを変更したら両方更新すること。 -->
 ## Shared Workflow
@@ -52,6 +62,19 @@
 - runtime ごとの hook / automation はこの契約の一部だけを機械強制してよい
 - `team_shape`、`role_assignment`、`write_scope` は plan または task note に明示する運用義務とする
 - 上記 3 項目は、現時点では全 runtime 共通に機械検証される前提ではない
+
+## Workflow State Tokens
+
+runtime-specific hook / state が phase を記録する場合、canonical token は次を使う:
+
+- `intake_declared`
+- `requirements_confirmed`
+- `research_completed`
+- `plan_drafted`
+- `plan_review_completed`
+- `implementation_completed`
+- `implementation_review_completed`
+- `commit_review_completed`
 
 ## Review Gate Prerequisites
 
