@@ -28,6 +28,7 @@ $AgentSkills = Join-Path $UserHome ".agent\skills"
 $CodexRoot = Join-Path $UserHome ".codex"
 $CodexSkills = Join-Path $CodexRoot "skills"
 $CodexBin = Join-Path $CodexRoot "bin"
+$LocalBin = Join-Path $UserHome ".local\bin"
 $CodexDevKit = Join-Path $CodexRoot "devkit"
 $CodexDevKitTemplates = Join-Path $CodexDevKit "templates\codex"
 $CodexDevKitSourceRoot = Join-Path $CodexDevKit "source-root.txt"
@@ -51,7 +52,37 @@ function Is-ReparsePoint([string]$Path) {
 }
 
 function Convert-ToFullPath([string]$Path) {
-  return [IO.Path]::GetFullPath($Path).TrimEnd('\').ToLowerInvariant()
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+
+  try {
+    $expanded = [Environment]::ExpandEnvironmentVariables($Path)
+    return [IO.Path]::GetFullPath($expanded).TrimEnd('\').ToLowerInvariant()
+  } catch {
+    return $expanded.TrimEnd('\').ToLowerInvariant()
+  }
+}
+
+function Ensure-UserPathContains([string]$PathEntry) {
+  $target = Convert-ToFullPath $PathEntry
+  $currentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  $entries = @()
+  if (-not [string]::IsNullOrWhiteSpace($currentUserPath)) {
+    $entries = @($currentUserPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  }
+
+  $normalizedEntries = @($entries | ForEach-Object { Convert-ToFullPath $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  if ($normalizedEntries -contains $target) {
+    return $false
+  }
+
+  $updatedEntries = @($entries + $PathEntry)
+  [Environment]::SetEnvironmentVariable("Path", ($updatedEntries -join ';'), "User")
+  if (-not ((($env:PATH -split ';' | ForEach-Object { Convert-ToFullPath $_ }) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -contains $target)) {
+    $env:PATH = "$PathEntry;$env:PATH"
+  }
+  return $true
 }
 
 function Get-LinkTargetPath([string]$Path) {
@@ -146,6 +177,18 @@ function Copy-DevKitTextFile([string]$SourcePath, [string]$DestinationPath) {
   Write-Utf8NoBom -Path $DestinationPath -Content $content
 }
 
+function Install-UpdateCcxShim([string]$ShimDirectory, [string]$TargetCommandPath) {
+  Ensure-Dir $ShimDirectory
+  $shimPath = Join-Path $ShimDirectory "update-ccx.cmd"
+  $shimContent = @(
+    "@echo off",
+    "setlocal",
+    "call `"$TargetCommandPath`" %*",
+    "exit /b %ERRORLEVEL%"
+  ) -join "`r`n"
+  Write-Utf8NoBom -Path $shimPath -Content ($shimContent + "`r`n")
+}
+
 function Register-DailyTask([string]$UpdaterPath, [string]$At) {
   $atTime = [datetime]::ParseExact($At, "HH:mm", $null)
   $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$UpdaterPath`""
@@ -159,6 +202,7 @@ try {
   Ensure-Dir $AgentSkills
   Ensure-Dir $CodexSkills
   Ensure-Dir $CodexBin
+  Ensure-Dir $LocalBin
   Ensure-Dir $CodexLogs
   Ensure-Dir $CodexDevKitTemplates
 
@@ -191,6 +235,17 @@ try {
   }
   $updaterDst = Join-Path $CodexBin "devkit-skill-update.ps1"
   Copy-DevKitTextFile -SourcePath $updaterSrc -DestinationPath $updaterDst
+
+  $updateCcxPs1Src = Join-Path $PSScriptRoot "update-ccx.ps1"
+  $updateCcxCmdSrc = Join-Path $PSScriptRoot "update-ccx.cmd"
+  $updateCcxPs1Dst = Join-Path $CodexBin "update-ccx.ps1"
+  $updateCcxCmdDst = Join-Path $CodexBin "update-ccx.cmd"
+  Copy-DevKitTextFile -SourcePath $updateCcxPs1Src -DestinationPath $updateCcxPs1Dst
+  Copy-DevKitTextFile -SourcePath $updateCcxCmdSrc -DestinationPath $updateCcxCmdDst
+  Install-UpdateCcxShim -ShimDirectory $LocalBin -TargetCommandPath $updateCcxCmdDst
+  if (Ensure-UserPathContains -PathEntry $LocalBin) {
+    Write-Info "Added $LocalBin to the user PATH."
+  }
 
   $configHelperSrc = Join-Path $PSScriptRoot "devkit-codex-config.ps1"
   $configHelperDst = Join-Path $CodexBin "devkit-codex-config.ps1"
@@ -228,6 +283,9 @@ try {
   Write-Host ""
   Write-Host "Run dig from Codex:"
   Write-Host '  $dig <topic>'
+  Write-Host ""
+  Write-Host "Run update-ccx from PowerShell/cmd:"
+  Write-Host "  update-ccx --version"
   Write-Host ""
   Write-Host "Manual update command:"
   Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$updaterDst`""

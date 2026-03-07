@@ -1,2 +1,4 @@
+features.shell_snapshot = false
+
 [windows]
 sandbox = "unelevated"

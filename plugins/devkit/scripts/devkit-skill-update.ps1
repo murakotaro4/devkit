@@ -25,6 +25,7 @@ $UserHome = $env:USERPROFILE
 $AgentSkills = Join-Path $UserHome ".agent\skills"
 $CodexRoot = Join-Path $UserHome ".codex"
 $CodexBin = Join-Path $CodexRoot "bin"
+$LocalBin = Join-Path $UserHome ".local\bin"
 $CodexDevKit = Join-Path $CodexRoot "devkit"
 $CodexDevKitTemplates = Join-Path $CodexDevKit "templates\codex"
 $CodexDevKitSourceRoot = Join-Path $CodexDevKit "source-root.txt"
@@ -54,7 +55,49 @@ function Copy-DevKitTextFile([string]$SourcePath, [string]$DestinationPath) {
 }
 
 function Convert-ToFullPath([string]$Path) {
-  return [IO.Path]::GetFullPath($Path).TrimEnd('\').ToLowerInvariant()
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+
+  try {
+    $expanded = [Environment]::ExpandEnvironmentVariables($Path)
+    return [IO.Path]::GetFullPath($expanded).TrimEnd('\').ToLowerInvariant()
+  } catch {
+    return $expanded.TrimEnd('\').ToLowerInvariant()
+  }
+}
+
+function Ensure-UserPathContains([string]$PathEntry) {
+  $target = Convert-ToFullPath $PathEntry
+  $currentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  $entries = @()
+  if (-not [string]::IsNullOrWhiteSpace($currentUserPath)) {
+    $entries = @($currentUserPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  }
+
+  $normalizedEntries = @($entries | ForEach-Object { Convert-ToFullPath $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  if ($normalizedEntries -contains $target) {
+    return $false
+  }
+
+  $updatedEntries = @($entries + $PathEntry)
+  [Environment]::SetEnvironmentVariable("Path", ($updatedEntries -join ';'), "User")
+  if (-not ((($env:PATH -split ';' | ForEach-Object { Convert-ToFullPath $_ }) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -contains $target)) {
+    $env:PATH = "$PathEntry;$env:PATH"
+  }
+  return $true
+}
+
+function Install-UpdateCcxShim([string]$ShimDirectory, [string]$TargetCommandPath) {
+  Ensure-Dir $ShimDirectory
+  $shimPath = Join-Path $ShimDirectory "update-ccx.cmd"
+  $shimContent = @(
+    "@echo off",
+    "setlocal",
+    "call `"$TargetCommandPath`" %*",
+    "exit /b %ERRORLEVEL%"
+  ) -join "`r`n"
+  Write-Utf8NoBom -Path $shimPath -Content ($shimContent + "`r`n")
 }
 
 function Get-LinkTargetPath([string]$Path) {
@@ -160,6 +203,8 @@ function Sync-DevKitCodexAssets {
   $required = @(
     (Join-Path $sourceScripts "devkit-codex-config.ps1"),
     (Join-Path $sourceScripts "devkit-skill-update.ps1"),
+    (Join-Path $sourceScripts "update-ccx.ps1"),
+    (Join-Path $sourceScripts "update-ccx.cmd"),
     (Join-Path $sourceTemplates "config.shared.toml"),
     (Join-Path $sourceTemplates "config.windows.toml")
   )
@@ -171,6 +216,7 @@ function Sync-DevKitCodexAssets {
   }
 
   Ensure-Dir $CodexBin
+  Ensure-Dir $LocalBin
   Ensure-Dir $CodexDevKitTemplates
 
   Copy-DevKitTextFile `
@@ -179,6 +225,14 @@ function Sync-DevKitCodexAssets {
   Copy-DevKitTextFile `
     -SourcePath (Join-Path $sourceScripts "devkit-skill-update.ps1") `
     -DestinationPath (Join-Path $CodexBin "devkit-skill-update.ps1")
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $sourceScripts "update-ccx.ps1") `
+    -DestinationPath (Join-Path $CodexBin "update-ccx.ps1")
+  Copy-DevKitTextFile `
+    -SourcePath (Join-Path $sourceScripts "update-ccx.cmd") `
+    -DestinationPath (Join-Path $CodexBin "update-ccx.cmd")
+  Install-UpdateCcxShim -ShimDirectory $LocalBin -TargetCommandPath (Join-Path $CodexBin "update-ccx.cmd")
+  [void](Ensure-UserPathContains -PathEntry $LocalBin)
   Copy-DevKitTextFile `
     -SourcePath (Join-Path $sourceTemplates "config.shared.toml") `
     -DestinationPath (Join-Path $CodexDevKitTemplates "config.shared.toml")
