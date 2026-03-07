@@ -297,6 +297,44 @@ function Ensure-PathStartsWith([string]$PathEntry, [switch]$PersistUserPath) {
   [Environment]::SetEnvironmentVariable("Path", ((@($PathEntry) + $userEntries) -join ';'), "User")
 }
 
+function Refresh-ProcessPathFromRegistry {
+  $entries = New-Object System.Collections.Generic.List[string]
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+
+  foreach ($pathScope in @("Machine", "User")) {
+    $scopePath = [Environment]::GetEnvironmentVariable("Path", $pathScope)
+    if ([string]::IsNullOrWhiteSpace($scopePath)) {
+      continue
+    }
+
+    foreach ($entry in ($scopePath -split ';')) {
+      if ([string]::IsNullOrWhiteSpace($entry)) {
+        continue
+      }
+      $normalized = Normalize-PathValue $entry
+      if ([string]::IsNullOrWhiteSpace($normalized) -or -not $seen.Add($normalized)) {
+        continue
+      }
+      $entries.Add($entry)
+    }
+  }
+
+  foreach ($entry in ($env:PATH -split ';')) {
+    if ([string]::IsNullOrWhiteSpace($entry)) {
+      continue
+    }
+    $normalized = Normalize-PathValue $entry
+    if ([string]::IsNullOrWhiteSpace($normalized) -or -not $seen.Add($normalized)) {
+      continue
+    }
+    $entries.Add($entry)
+  }
+
+  if ($entries.Count -gt 0) {
+    $env:PATH = ($entries -join ';')
+  }
+}
+
 function Get-PreferredNpmCommand {
   $currentNpm = Get-CommandSource "npm"
   if (-not [string]::IsNullOrWhiteSpace($currentNpm)) {
@@ -728,6 +766,7 @@ function Ensure-Fnm {
     return
   }
 
+  Refresh-ProcessPathFromRegistry
   Refresh-FnmEnvironment
   if (Test-CommandAvailable "fnm") {
     $version = (& fnm --version 2>$null | Select-Object -First 1)
