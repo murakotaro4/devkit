@@ -6,7 +6,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit"]
 
 # /devkit-init - DevKit ワークフロー同期
 
-ターゲットリポジトリに DevKit の共有ワークフロールール（8フェーズ + レビュー）を同期する。
+ターゲットリポジトリに DevKit の共有ワークフロールール（agent team 前提の8フェーズ + レビューゲートの**運用契約**）を同期する。
 
 ## トピック
 $ARGUMENTS
@@ -17,6 +17,8 @@ DevKit の `shared/workflow.md`（SSOT）を以下の2経路で同期:
 
 1. **CLAUDE.md**: `@import` でランタイム読み込み（常に最新）
 2. **AGENTS.md**: マーカーセクション内に静的コピー（人間参照用）
+
+> runtime 固有の hook / automation は同期対象に含めず、`shared/workflow.md` の運用契約だけを同期する。
 
 ## 実行ルール（必須）
 
@@ -53,7 +55,7 @@ DevKit の `shared/workflow.md`（SSOT）を以下の2経路で同期:
 **バックアップ**: まず `.claude/devkit-init-backup/AGENTS.md.bak` に現在の AGENTS.md をコピーする。
 
 **既存重複セクション検出**:
-- `## コミット前レビュー（クロスモデル必須）` 等の見出しを検出
+- `## コミット前レビュー（クロスモデル必須）` や `## レビューゲート` 等の見出しを検出
 - 検出したセクションの内容をユーザーに表示し、除去の可否を AskUserQuestion で確認
 - 承認 → 旧セクションを除去
 - 拒否 → 旧セクションを `<!-- deprecated: devkit-init により workflow セクションに統合済み -->` でラップ

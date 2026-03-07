@@ -1,4 +1,4 @@
-﻿# devkit
+# devkit
 
 Claude Code Marketplace 向けプラグイン + 共通スキル配布の母体。
 OpenSkillsでスキル本体を配布し、OpenCode / Codex CLI / Claude Code で同じスキルを使い回す。
@@ -74,15 +74,15 @@ ssh-keygen -t ed25519 -C "your_email@example.com"
 ssh -T git@github.com
 ```
 
-### 推奨ツール（クロスレビュー用）
+### 推奨ツール（レビューゲート用）
 
-devkit のワークフローでは、異なるAIモデル間でコードレビュー（クロスレビュー）を行う。
-インストール推奨だが必須ではない。未インストール時はクロスレビューがスキップされ、ユーザーに警告の上で手動レビューへ切り替わる（他フェーズは通常通り動作）。
-詳細は [クロスレビューとフォールバック](#クロスレビューとフォールバック) セクション参照。
+devkit のワークフローでは、agent team review を前提としつつ、Codex Spark CLI を標準レビューゲートに使う。
+インストール推奨だが、未インストール時でも通常フェーズは進められる。review gate だけ代替 reviewer + ユーザー通知へ切り替える。
+詳細は [レビューゲートと昇格制](#レビューゲートと昇格制) セクション参照。
 
 | ツール | 用途 | インストール | 確認コマンド |
 |--------|------|-------------|-------------|
-| [Codex CLI](https://github.com/openai/codex) | Claude Code 使用時のクロスレビュアー | `npm install -g @openai/codex` | `codex --version` |
+| [Codex CLI](https://github.com/openai/codex) | Spark / fallback review gate | `npm install -g @openai/codex` | `codex --version` |
 | [OpenCode](https://github.com/opencode-ai/opencode) | 追加AI IDE（任意） | `npm install -g opencode-ai` | `opencode --version` |
 
 ### Windows 環境の準備
@@ -384,38 +384,64 @@ npx openskills@latest remove dig,dig-core,dig-claude,dig-codex,dig-opencode,gpt-
 - Codex: `~/.codex/prompts/devkit-*.md` と `~/.codex/skills/{dig,dig-core,dig-claude,dig-codex,dig-opencode,gpt-pro,deep-research,mermaid-show,amazon-search,improve-skill,codex-search,devkit-init}` の symlink を削除
 - AGENTS.md を同期していた場合は該当ブロックを削除
 
-## クロスレビューとフォールバック
+## レビューゲートと昇格制
 
-devkit のワークフローでは、コード品質を保つためにクロスモデルレビューを実施する。
-異なるAIモデルが互いのコードをレビューすることで、単一モデルの盲点を補う。
+devkit のワークフローでは、agent team review を前提としつつ、Codex Spark CLI を標準レビューゲートに使う。このセクションは全 runtime 共通の**運用契約**であり、runtime ごとの hook や automation は一部だけを機械強制してよい。
 
-### フォールバック戦略
+### 標準ゲート
 
 全 runtime 共通で次の順序を使う:
 
-| 優先度 | コマンド | 条件 |
-|--------|---------|------|
-| 1st | `codex -a never exec review --uncommitted -m gpt-5.3-codex-spark` | デフォルト |
-| 2nd | `codex -a never exec review --uncommitted -m gpt-5.3-codex -c 'model_reasoning_effort="medium"'` | spark 不可 / レートリミット時 |
-| 3rd | レビュースキップ + ユーザー通知 | codex CLI 未インストール or 全モデル不可時（ただし dig-codex の Phase 5 は適用外） |
+| 優先度 | コマンド / 手段 | 条件 |
+|--------|-----------------|------|
+| 1st | `codex -a never exec review --uncommitted -m gpt-5.3-codex-spark` | Codex CLI が利用可能な場合の標準ゲート |
+| 2nd | `codex -a never exec review --uncommitted -m gpt-5.3-codex -c 'model_reasoning_effort="medium"'` | spark 不可 / レートリミット / timeout / parse failure |
+| 3rd | 独立した別 agent reviewer + ユーザー通知 | Codex CLI が unavailable または未導入の場合（ただし dig-codex の Phase 5 は適用外） |
 
-### レビュースキップとは
+Codex CLI は**推奨**であり、通常フェーズの必須前提ではない。CLI が使えない場合は、implementer と別 agent reviewer で review gate を代替する。
 
-3rd フォールバック（レビュースキップ）に到達した場合:
+### 規模判定
 
-- レビューフェーズのみスキップされる（Phase 5: 計画レビュー、Phase 7: 実装レビュー）
-- **他の全フェーズ（調査・計画・実装・コミット等）は引き続き必須**
-- ユーザーに警告が表示され、続行可否の確認が行われる
-- 品質保証のため、可能な限りレビュー用CLIのインストールを推奨
+規模判定は `変更種別` を先に見て、その後に `ファイル数` と `変更行数` で引き上げる。最終ランクは最も高いものを採用する。
 
-`dig-codex` の Phase 5（計画レビュー）は fail-close で運用するため、スキップしない。停止時は以下 3 行を必須とする:
+- `small`
+  - 1 ファイル
+  - 変更行数 30 行以内
+  - 共有 workflow、共通 template、script、hook、skill contract、認証/権限/secret/migration/削除系を含まない
+- `medium`
+  - 2〜5 ファイル
+  - または 31〜200 行
+  - または共有 workflow、共通 template、setup/update script、hook、skill contract、認証/権限/secret/migration/削除系を含む
+- `large`
+  - 6 ファイル以上
+  - または 200 行超
+  - または複数サブシステムへ跨る
+
+### 昇格条件
+
+`medium` 以上では、標準 gate に加えて**追加の review 視点**を入れる。
+
+- `medium`
+  - 追加の独立 reviewer を 1 つ入れる
+  - 別モデル review は推奨だが必須ではない
+- `large`
+  - 追加の独立 reviewer を 1 つ以上入れる
+  - 別モデル review を強く推奨する
+
+規模に関係なく、以下では最低 `medium` として扱う:
+
+- `shared/workflow.md`、共通 template、setup / update script の変更
+- 権限、認証、secret、削除、migration を含む変更
+
+### dig-codex の例外
+
+`dig-codex` の Phase 5（計画レビュー）は fail-close で運用するため、代替レビューへフォールバックせず停止する。停止時は以下 3 行を必須とする:
 
 - `ERROR_CODE: DIG_CODEX_PLAN_REVIEW_UNAVAILABLE` または `ERROR_CODE: DIG_CODEX_PLAN_REVIEW_BLOCKED`
 - `RERUN_COMMAND: <one-line command>`
 - `DIAGNOSTIC_COMMAND: <one-line command>`
 
 ### CLI の確認方法
-
 レビュー用CLIが正しくインストール・PATH設定されているか確認:
 
 ```bash
@@ -525,4 +551,3 @@ ls -la $(npm config get prefix)/lib/node_modules/
 
 3. `.bashrc` / `.zshrc` に fnm / nvm の初期化コマンドが含まれているか確認。
    Claude Code の bash 等、初期化スクリプトを読み込まない環境では手動で PATH を設定する必要がある。
-
