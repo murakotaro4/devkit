@@ -12,6 +12,11 @@ $Script:ExpectedLegacyCodexPrefix = Join-Path $env:USERPROFILE ".npm-global"
 $Script:CodexMigrationPerformed = $false
 $Script:NpmRepairAttempted = $false
 $Script:NpmUnavailableReported = $false
+$Script:CliOnly = $false
+$Script:DevKitOnly = $false
+$Script:RuntimeSelection = "all"
+
+. (Join-Path $PSScriptRoot "devkit-runtime-sync.ps1")
 
 function Add-ResultError([string]$Message) {
   if (-not $Script:Errors.Contains($Message)) {
@@ -748,7 +753,7 @@ function Ensure-Fnm {
   }
 
   if (-not (Test-CommandAvailable "winget")) {
-    Add-ResultError "fnm: winget not available, install fnm manually and re-run update-ccx.cmd."
+    Add-ResultError "fnm: winget not available, install fnm manually and re-run update-devkit.cmd."
     return
   }
 
@@ -1062,13 +1067,19 @@ function Update-Codex([string]$Method) {
         Refresh-FnmEnvironment
         Write-Host "OK"
       } else {
-        Write-Host "FAILED"
-        Add-ResultError ("Codex CLI: npm update failed (exit code {0})" -f $result.ExitCode)
+        $outputText = ($result.Output -join "`n")
+        if ($outputText -match "EBUSY" -or $outputText -match "resource busy or locked") {
+          Write-Host "SKIPPED"
+          Add-ResultWarning "Codex CLI: skipped self-update because codex.exe is locked by the current session."
+        } else {
+          Write-Host "FAILED"
+          Add-ResultError ("Codex CLI: npm update failed (exit code {0})" -f $result.ExitCode)
+        }
       }
     }
     "external" {
       Write-Host "SKIPPED"
-      Add-ResultWarning "Codex CLI: resolved command is an external installation. update-ccx.ps1 does not modify standalone codex.exe installs."
+      Add-ResultWarning "Codex CLI: resolved command is an external installation. update-devkit does not modify standalone codex.exe installs."
     }
   }
 }
@@ -1109,7 +1120,7 @@ function Update-Opencode([string]$Method) {
     }
     "external" {
       Write-Host "SKIPPED"
-      Add-ResultWarning "opencode: resolved command is an external installation. update-ccx.ps1 only updates npm-based installs."
+      Add-ResultWarning "opencode: resolved command is an external installation. update-devkit only updates npm-based installs."
     }
   }
 }
@@ -1167,29 +1178,123 @@ function Section-Update {
     (Get-VersionFromCommand "opencode"))
 }
 
+function Section-DevKitSync {
+  Write-Host ""
+  Write-Host "=== [DevKit Sync] ==="
+
+  $logger = {
+    param($Message)
+    Write-Host ("INFO: {0}" -f $Message)
+  }
+
+  if ($Script:RuntimeSelection -in @("all", "codex")) {
+    try {
+      $codexResult = Sync-DevKitCodexRuntime -UserHome $env:USERPROFILE -Logger $logger -RefreshConfig
+      Write-Host ("OK: Codex runtime synced from {0}" -f $codexResult.SourceRoot)
+      if ($codexResult.ConfigResult.BootstrappedLocalOverlay) {
+        Add-ResultWarning "Codex config.local.toml was bootstrapped from the existing config."
+      }
+    } catch {
+      Write-Host "FAILED: Codex runtime sync"
+      Add-ResultError ("Codex runtime sync failed: {0}" -f $_.Exception.Message)
+    }
+  }
+
+  if ($Script:RuntimeSelection -in @("all", "opencode")) {
+    try {
+      $opencodeResult = Sync-DevKitOpenCodeRuntime -UserHome $env:USERPROFILE -Logger $logger
+      Write-Host ("OK: OpenCode runtime synced from {0}" -f $opencodeResult.SourceRoot)
+    } catch {
+      Write-Host "FAILED: OpenCode runtime sync"
+      Add-ResultError ("OpenCode runtime sync failed: {0}" -f $_.Exception.Message)
+    }
+  }
+}
+
+function Parse-CliArgs {
+  for ($i = 0; $i -lt $CliArgs.Count; $i++) {
+    $arg = $CliArgs[$i]
+    switch ($arg) {
+      "--version" {
+        if ($CliArgs.Count -ne 1) {
+          throw "INVALID_ARGS: --version cannot be combined with other arguments"
+        }
+        return "version"
+      }
+      "-v" {
+        if ($CliArgs.Count -ne 1) {
+          throw "INVALID_ARGS: -v cannot be combined with other arguments"
+        }
+        return "version"
+      }
+      "--cli-only" {
+        $Script:CliOnly = $true
+      }
+      "--devkit-only" {
+        $Script:DevKitOnly = $true
+      }
+      "--runtime" {
+        if ($i + 1 -ge $CliArgs.Count) {
+          throw "INVALID_ARGS: --runtime requires codex, opencode, or all"
+        }
+
+        $i++
+        $value = $CliArgs[$i].ToLowerInvariant()
+        if ($value -notin @("codex", "opencode", "all")) {
+          throw "INVALID_ARGS: --runtime requires codex, opencode, or all"
+        }
+        $Script:RuntimeSelection = $value
+      }
+      default {
+        throw "INVALID_ARGS: unknown argument '$arg'"
+      }
+    }
+  }
+
+  if ($Script:CliOnly -and $Script:DevKitOnly) {
+    throw "INVALID_ARGS: --cli-only and --devkit-only cannot be combined"
+  }
+
+  return "run"
+}
+
 function Show-Usage {
   Write-Host "Usage:"
-  Write-Host "  update-ccx.cmd           # install missing tools, then update"
-  Write-Host "  update-ccx.cmd --version # show current versions"
+  Write-Host "  update-devkit.cmd                    # preferred name: update tools and DevKit runtimes"
+  Write-Host "  update-ccx.cmd                       # compatibility alias"
+  Write-Host "  update-devkit.cmd --version          # show current versions"
+  Write-Host "  update-devkit.cmd --cli-only         # update Claude/Codex/OpenCode only"
+  Write-Host "  update-devkit.cmd --devkit-only      # sync DevKit-managed Codex/OpenCode assets only"
+  Write-Host "  update-devkit.cmd --runtime codex    # sync only Codex-managed assets"
+  Write-Host "  update-devkit.cmd --runtime opencode # sync only OpenCode-managed assets"
 }
 
 function Main {
-  if ($CliArgs.Count -gt 0) {
-    if ($CliArgs.Count -eq 1 -and ($CliArgs[0] -eq "--version" -or $CliArgs[0] -eq "-v")) {
-      Show-Versions
-      exit 0
-    }
-
+  try {
+    $mode = Parse-CliArgs
+  } catch {
+    Write-Host $_.Exception.Message
     Show-Usage
     exit 1
   }
 
-  Write-Host "=== Claude Code, Codex CLI & opencode ==="
+  if ($mode -eq "version") {
+    Show-Versions
+    exit 0
+  }
+
+  Write-Host "=== Claude Code, Codex CLI, opencode & DevKit ==="
   Write-Host "Environment: windows"
 
-  Section-Prerequisites
-  Section-Setup
-  Section-Update
+  if (-not $Script:DevKitOnly) {
+    Section-Prerequisites
+    Section-Setup
+    Section-Update
+  }
+
+  if (-not $Script:CliOnly) {
+    Section-DevKitSync
+  }
 
   if ($Script:Warnings.Count -gt 0) {
     Write-Host ""
