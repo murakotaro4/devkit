@@ -1,28 +1,20 @@
 #!/bin/bash
 #
-# update-ccx.sh - update-devkit の互換 alias。Claude Code / Codex CLI / opencode 更新 + DevKit runtime sync
+# update-ccx.sh - Claude Code, Codex CLI & opencode セットアップ＆アップデート
 #
 # Windows PowerShell / cmd users should use update-ccx.ps1 or update-ccx.cmd.
 #
 # 対応環境: macOS (Homebrew / npm) / WSL (native / npm) / Linux / Windows (Git Bash)
 #
 # Usage:
-#   update-devkit.sh           # 推奨: CLI 更新 + DevKit runtime sync
-#   update-ccx.sh              # 互換 alias
-#   update-devkit.sh --version # 現在のバージョンを表示
+#   update-ccx.sh           # セットアップ（未インストールならインストール）＋更新
+#   update-ccx.sh --version # 現在のバージョンを表示
 #
 
 set -o pipefail
 
 # エラー収集用配列
 declare -a ERRORS=()
-declare -a WARNINGS=()
-CLI_ONLY=false
-DEVKIT_ONLY=false
-RUNTIME_SELECTION="all"
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/devkit-runtime-sync.sh"
 
 # ============================================================
 # OS検出
@@ -231,68 +223,6 @@ show_versions() {
     echo "Claude Code: $(get_claude_version)"
     echo "Codex CLI:   $(get_codex_version)"
     echo "opencode:    $(get_opencode_version)"
-}
-
-show_usage() {
-    cat <<'EOF'
-Usage:
-  update-devkit.sh                    # preferred name: update tools and DevKit runtimes
-  update-ccx.sh                       # compatibility alias
-  update-devkit.sh --version          # show current versions
-  update-devkit.sh --cli-only         # update Claude/Codex/OpenCode only
-  update-devkit.sh --devkit-only      # sync DevKit-managed Codex/OpenCode assets only
-  update-devkit.sh --runtime codex    # sync only Codex-managed assets
-  update-devkit.sh --runtime opencode # sync only OpenCode-managed assets
-EOF
-}
-
-parse_args() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --version|-v)
-                if [[ $# -ne 1 ]]; then
-                    echo "INVALID_ARGS: --version cannot be combined with other arguments" >&2
-                    return 1
-                fi
-                echo "version"
-                return 0
-                ;;
-            --cli-only)
-                CLI_ONLY=true
-                ;;
-            --devkit-only)
-                DEVKIT_ONLY=true
-                ;;
-            --runtime)
-                shift
-                if [[ $# -eq 0 ]]; then
-                    echo "INVALID_ARGS: --runtime requires codex, opencode, or all" >&2
-                    return 1
-                fi
-                case "$1" in
-                    codex|opencode|all)
-                        RUNTIME_SELECTION="$1"
-                        ;;
-                    *)
-                        echo "INVALID_ARGS: --runtime requires codex, opencode, or all" >&2
-                        return 1
-                        ;;
-                esac
-                ;;
-            *)
-                echo "INVALID_ARGS: unknown argument '$1'" >&2
-                return 1
-                ;;
-        esac
-        shift
-    done
-
-    if [[ "$CLI_ONLY" == true && "$DEVKIT_ONLY" == true ]]; then
-        echo "INVALID_ARGS: --cli-only and --devkit-only cannot be combined" >&2
-        return 1
-    fi
-
-    echo "run"
 }
 
 # ============================================================
@@ -652,58 +582,22 @@ section_update() {
     echo "[After]  claude: $(get_claude_version) / codex: $(get_codex_version) / opencode: $(get_opencode_version)"
 }
 
-section_devkit_sync() {
-    echo ""
-    echo "=== [DevKit Sync] ==="
-
-    export PATH="$HOME/.local/bin:$PATH"
-
-    if [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "codex" ]]; then
-        if sync_devkit_codex_runtime "$HOME"; then
-            echo "✓ Codex runtime synced"
-        else
-            echo "✗ Codex runtime sync failed"
-            ERRORS+=("Codex runtime sync failed")
-        fi
-    fi
-
-    if [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "opencode" ]]; then
-        if sync_devkit_opencode_runtime "$HOME"; then
-            echo "✓ OpenCode runtime synced"
-        else
-            echo "✗ OpenCode runtime sync failed"
-            ERRORS+=("OpenCode runtime sync failed")
-        fi
-    fi
-}
-
 # ============================================================
 # メイン処理
 # ============================================================
 main() {
-    local mode
-    if ! mode="$(parse_args "$@")"; then
-        show_usage
-        exit 1
-    fi
-
-    if [[ "$mode" == "version" ]]; then
+    # --version オプション
+    if [[ "$1" == "--version" ]] || [[ "$1" == "-v" ]]; then
         show_versions
         exit 0
     fi
 
-    echo "=== Claude Code, Codex CLI, opencode & DevKit ==="
+    echo "=== Claude Code, Codex CLI & opencode ==="
     echo "Environment: $OS_TYPE"
 
-    if [[ "$DEVKIT_ONLY" != true ]]; then
-        section_prerequisites
-        section_setup
-        section_update
-    fi
-
-    if [[ "$CLI_ONLY" != true ]]; then
-        section_devkit_sync
-    fi
+    section_prerequisites
+    section_setup
+    section_update
 
     echo ""
 
