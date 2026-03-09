@@ -185,11 +185,11 @@ function Test-DevKitFileContentEqual([string]$LeftPath, [string]$RightPath) {
 
 function Invoke-DevKitGit([string]$WorkingDirectory, [string[]]$Arguments) {
   if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
-    & git @Arguments | Out-Null
+    & git @Arguments
   } else {
     Push-Location $WorkingDirectory
     try {
-      & git @Arguments | Out-Null
+      & git @Arguments
     } finally {
       Pop-Location
     }
