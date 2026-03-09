@@ -5,5 +5,9 @@ param(
 )
 
 $target = Join-Path $PSScriptRoot "update-ccx.ps1"
-& $target @CliArgs
+if ($null -ne $CliArgs -and $CliArgs.Count -gt 0) {
+  & $target @CliArgs
+} else {
+  & $target
+}
 exit $LASTEXITCODE

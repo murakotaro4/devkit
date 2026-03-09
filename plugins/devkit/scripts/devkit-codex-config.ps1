@@ -45,10 +45,13 @@ function Assert-ValidDevKitLocalOverlay([string]$OverlayPath, [string]$Content) 
     return
   }
 
+  $allowedTopLevelKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  [void]$allowedTopLevelKeys.Add("js_repl_node_path")
   $currentSection = $null
   $lineNumber = 0
   $seenSections = New-Object 'System.Collections.Generic.HashSet[string]'
   $seenKeys = @{}
+  $seenTopLevelKeys = New-Object 'System.Collections.Generic.HashSet[string]'
 
   foreach ($rawLine in ($Content -split "`r?`n")) {
     $lineNumber++
@@ -75,7 +78,13 @@ function Assert-ValidDevKitLocalOverlay([string]$OverlayPath, [string]$Content) 
       $key = $matches.key
 
       if ($null -eq $currentSection) {
-        throw "LOCAL_CONFIG_TOP_LEVEL_KEY_NOT_ALLOWED: ${OverlayPath}:$lineNumber => $key"
+        if (-not $allowedTopLevelKeys.Contains($key)) {
+          throw "LOCAL_CONFIG_TOP_LEVEL_KEY_NOT_ALLOWED: ${OverlayPath}:$lineNumber => $key"
+        }
+        if (-not $seenTopLevelKeys.Add($key)) {
+          throw "LOCAL_CONFIG_DUPLICATE_TOP_LEVEL_KEY: ${OverlayPath}:$lineNumber => $key"
+        }
+        continue
       }
 
       if ($key -ne "trust_level") {
