@@ -16,6 +16,7 @@ const claude = mustRead("plugins/devkit/skills/dig-claude/SKILL.md");
 const codex = mustRead("plugins/devkit/skills/dig-codex/SKILL.md");
 const opencode = mustRead("plugins/devkit/skills/dig-opencode/SKILL.md");
 const workflow = mustRead("plugins/devkit/shared/workflow.md");
+const agents = mustRead("AGENTS.md");
 const readme = mustRead("README.md");
 
 const problems = [];
@@ -82,6 +83,15 @@ if (!core.includes("STOP_OUTPUT_FIELDS: ERROR_CODE,RERUN_COMMAND,DIAGNOSTIC_COMM
 if (!workflow.includes("gpt-5.3-codex-spark")) {
   problems.push("workflow missing spark review command");
 }
+if (!workflow.includes("gpt-5.4")) {
+  problems.push("workflow missing gpt-5.4 fallback review model");
+}
+if (!agents.includes("gpt-5.4")) {
+  problems.push("AGENTS.md missing gpt-5.4 fallback review model");
+}
+if (!readme.includes("gpt-5.4")) {
+  problems.push("README missing gpt-5.4 fallback review model");
+}
 if (!workflow.includes("model_reasoning_effort=\"medium\"")) {
   problems.push("workflow missing medium effort fallback");
 }
@@ -90,6 +100,9 @@ if (!workflow.includes("codex -a never exec review")) {
 }
 if (!codex.includes("codex -a never exec review")) {
   problems.push("dig-codex missing approval-never review command");
+}
+if (!codex.includes("gpt-5.4")) {
+  problems.push("dig-codex missing gpt-5.4 fallback review model");
 }
 
 if (/\/devkit:dig\b/.test(readme)) {

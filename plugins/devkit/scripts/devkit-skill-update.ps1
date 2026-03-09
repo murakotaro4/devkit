@@ -255,6 +255,10 @@ try {
   $backupZip = New-BackupZip
   Log ("Backup created: " + $backupZip)
 
+  if (Sync-DevKitCodexAssets) {
+    Log "Refreshed Codex config helper/templates from the DevKit source checkout."
+  }
+
   if ($SimulateFailure) {
     throw "SIMULATED_FAILURE"
   }
@@ -269,10 +273,6 @@ try {
   Log "Post-update validation passed."
 
   try {
-    if (Sync-DevKitCodexAssets) {
-      Log "Refreshed Codex config helper/templates from the DevKit source checkout."
-    }
-
     $configHelperPath = Join-Path $CodexBin "devkit-codex-config.ps1"
     if (-not (Test-Path -LiteralPath $configHelperPath)) {
       throw "MISSING_CONFIG_HELPER: $configHelperPath"

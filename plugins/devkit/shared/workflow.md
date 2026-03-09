@@ -86,7 +86,7 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 | 優先度 | 手段 | 条件 |
 |--------|------|------|
 | 1st | `codex -a never exec review --uncommitted -m gpt-5.3-codex-spark` | Codex CLI が利用可能な場合の標準ゲート |
-| 2nd | `codex -a never exec review --uncommitted -m gpt-5.3-codex -c 'model_reasoning_effort="medium"'` | Spark unavailable / rate limit / timeout / parse failure |
+| 2nd | `codex -a never exec review --uncommitted -m gpt-5.4 -c 'model_reasoning_effort="medium"'` | Spark unavailable / rate limit / timeout / parse failure |
 | 3rd | 独立した別 agent reviewer + ユーザー通知 | Codex CLI が unavailable または未導入の場合 |
 
 ### 昇格条件

@@ -1030,7 +1030,7 @@ function Update-Claude([string]$Method) {
       }
 
       $npmCommand = $npmRuntime.NpmCommand
-      $result = Invoke-Tool -Command $npmCommand -Arguments @("update", "-g", "@anthropic-ai/claude-code")
+      $result = Invoke-Tool -Command $npmCommand -Arguments @("install", "-g", "@anthropic-ai/claude-code")
       if ($result.ExitCode -eq 0) {
         Write-Host "OK"
       } else {
@@ -1053,7 +1053,7 @@ function Update-Codex([string]$Method) {
       }
 
       $npmCommand = $npmRuntime.NpmCommand
-      $result = Invoke-Tool -Command $npmCommand -Arguments @("update", "-g", "@openai/codex")
+      $result = Invoke-Tool -Command $npmCommand -Arguments @("install", "-g", "@openai/codex")
       if ($result.ExitCode -eq 0) {
         $destinationPrefix = Get-NpmGlobalPrefix -NpmCommand $npmCommand
         if (-not [string]::IsNullOrWhiteSpace($destinationPrefix)) {
@@ -1085,7 +1085,7 @@ function Update-Opencode([string]$Method) {
       }
 
       $npmCommand = $npmRuntime.NpmCommand
-      $result = Invoke-Tool -Command $npmCommand -Arguments @("update", "-g", "opencode-ai") -CaptureOutput
+      $result = Invoke-Tool -Command $npmCommand -Arguments @("install", "-g", "opencode-ai") -CaptureOutput
       if ($result.ExitCode -eq 0) {
         Refresh-FnmEnvironment
         Write-Host "OK"
@@ -1104,7 +1104,7 @@ function Update-Opencode([string]$Method) {
         }
       } else {
         Write-Host "FAILED"
-        Add-ResultError ("opencode: npm update failed (exit code {0})" -f $result.ExitCode)
+        Add-ResultError ("opencode: npm install failed (exit code {0})" -f $result.ExitCode)
       }
     }
     "external" {

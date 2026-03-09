@@ -13,7 +13,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 - 質問: `request_user_input`
 - レビュー実行コマンド:
   - `REVIEW_PRIMARY_CMD: codex -a never exec review --uncommitted -m gpt-5.3-codex-spark`
-  - `REVIEW_FALLBACK_CMD: codex -a never exec review --uncommitted -m gpt-5.3-codex -c 'model_reasoning_effort="medium"'`
+  - `REVIEW_FALLBACK_CMD: codex -a never exec review --uncommitted -m gpt-5.4 -c 'model_reasoning_effort="medium"'`
 - タイムアウト/リトライ:
   - `REVIEW_TIMEOUT_SECONDS: 180`
   - `REVIEW_BACKOFF_SECONDS: 5`

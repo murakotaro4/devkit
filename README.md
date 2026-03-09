@@ -244,6 +244,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marke
 補足:
 - `~/.local/bin` が user PATH に無ければ setup 時に追加する
 - 新しい PowerShell / cmd では `update-ccx --version` を cwd に依存せず実行できる
+- Windows の `update-ccx` は `source-root.txt` が指す checkout の `scripts/update-ccx.ps1` を優先実行し、見つからない場合だけ `~/.codex/bin/update-ccx.ps1` にフォールバックする
 
 リンク競合ポリシー:
 - 既存の実ディレクトリが `~/.codex/skills/<skill>` にある場合は `BLOCKED_EXISTING_DIR` で停止（自動上書きしない）
@@ -364,6 +365,8 @@ update-ccx --version
 update-ccx
 ```
 
+既存ユーザーがこの launcher 挙動へ追随するには、`devkit-skill-update.ps1` または `devkit-setup.ps1` を 1 回再実行して `~/.codex/bin/update-ccx.cmd` を更新する必要がある。
+
 まだ setup 前で PATH を通していない場合は、フルパス実行でよい:
 
 ```powershell
@@ -387,6 +390,8 @@ REM Windows (PowerShell / cmd)
 update-ccx
 update-ccx --version
 ```
+
+Windows の bare `update-ccx` は `~/.codex/devkit/source-root.txt` に記録された DevKit checkout の `scripts\update-ccx.ps1` を優先し、`source-root.txt` が欠落・空・壊れたパス・script 欠落のいずれかなら `~/.codex/bin\update-ccx.ps1` に戻る。
 
 #### Windows の npm 自己修復
 
@@ -431,9 +436,9 @@ PowerShell / cmd 版は、`%USERPROFILE%\.npmrc` に legacy な `prefix=C:\Users
 | Claude Code (native) | `claude update --help` の存在 | `claude update` |
 | Claude Code (homebrew-cask) | `brew list --cask claude` | `brew upgrade --cask claude` |
 | Claude Code (npm) | node_modules パス | `npm update -g @anthropic-ai/claude-code` |
-| Codex CLI (npm) | `Get-Command codex` / `where.exe codex` / Windows npm global prefix | `npm update -g @openai/codex` |
+| Codex CLI (npm) | `Get-Command codex` / `where.exe codex` / Windows npm global prefix | `npm install -g @openai/codex` |
 | Codex CLI (brew) | `brew list codex` | `brew upgrade codex` |
-| opencode (npm) | `npm list -g opencode-ai` | `npm update -g opencode-ai` |
+| opencode (npm) | `npm list -g opencode-ai` | `npm install -g opencode-ai` |
 | opencode (brew) | `brew list opencode` | `brew upgrade opencode` |
 
 #### 出力例
@@ -480,7 +485,7 @@ devkit のワークフローでは、agent team review を前提としつつ、C
 | 優先度 | コマンド / 手段 | 条件 |
 |--------|-----------------|------|
 | 1st | `codex -a never exec review --uncommitted -m gpt-5.3-codex-spark` | Codex CLI が利用可能な場合の標準ゲート |
-| 2nd | `codex -a never exec review --uncommitted -m gpt-5.3-codex -c 'model_reasoning_effort="medium"'` | spark 不可 / レートリミット / timeout / parse failure |
+| 2nd | `codex -a never exec review --uncommitted -m gpt-5.4 -c 'model_reasoning_effort="medium"'` | spark 不可 / レートリミット / timeout / parse failure |
 | 3rd | 独立した別 agent reviewer + ユーザー通知 | Codex CLI が unavailable または未導入の場合（ただし dig-codex の Phase 5 は適用外） |
 
 Codex CLI は**推奨**であり、通常フェーズの必須前提ではない。CLI が使えない場合は、implementer と別 agent reviewer で review gate を代替する。

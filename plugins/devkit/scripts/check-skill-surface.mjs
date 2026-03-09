@@ -60,6 +60,7 @@ if (phase === "B") {
 }
 
 let readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+const agents = fs.readFileSync(path.join(root, "AGENTS.md"), "utf8");
 const workflow = fs.readFileSync(path.join(root, "plugins/devkit/shared/workflow.md"), "utf8");
 const dig = fs.readFileSync(path.join(root, "plugins/devkit/skills/dig/SKILL.md"), "utf8");
 readme = readme.replace(/##\s+Migration Notice[\s\S]*?(?=\n##\s+|$)/m, "");
@@ -75,8 +76,14 @@ for (const token of ["DIG_CODEX_PLAN_REVIEW_UNAVAILABLE", "DIG_CODEX_PLAN_REVIEW
   if (!workflow.includes(token)) problems.push(`workflow missing dig-codex stop code: ${token}`);
 }
 if (!workflow.includes("gpt-5.3-codex-spark")) problems.push("workflow missing spark review model");
+if (!workflow.includes("gpt-5.4")) problems.push("workflow missing gpt-5.4 fallback review model");
+if (!agents.includes("gpt-5.4")) problems.push("AGENTS.md missing gpt-5.4 fallback review model");
+if (!readme.includes("gpt-5.4")) problems.push("README missing gpt-5.4 fallback review model");
 if (!workflow.includes("model_reasoning_effort=\"medium\"")) problems.push("workflow missing medium effort fallback");
 if (!workflow.includes("codex -a never exec review")) problems.push("workflow missing approval-never review command");
+
+const digCodex = fs.readFileSync(path.join(root, "plugins/devkit/skills/dig-codex/SKILL.md"), "utf8");
+if (!digCodex.includes("gpt-5.4")) problems.push("dig-codex missing gpt-5.4 fallback review model");
 
 const plugin = readJson("plugins/devkit/.claude-plugin/plugin.json");
 if (typeof plugin.version !== "string") problems.push("plugin.json version missing");

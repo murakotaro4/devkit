@@ -35,6 +35,9 @@ update-ccx
 update-ccx --version
 ```
 
+Windows の bare `update-ccx` は `~/.codex/devkit/source-root.txt` に記録された DevKit checkout の `scripts\update-ccx.ps1` を優先し、解決できない場合だけ `~/.codex/bin\update-ccx.ps1` を使う。
+既存ユーザーがこの launcher 挙動へ追随するには、`devkit-skill-update.ps1` または `devkit-setup.ps1` を 1 回再実行して `~/.codex/bin/update-ccx.cmd` を更新する必要がある。
+
 setup 前、または shim が未配置の場合:
 
 ```powershell
@@ -101,8 +104,8 @@ prefix=C:\Users\<username>\.npm-global
 |--------|----------|--------------|
 | Claude Code (native) | `claude update --help` と配置パス | `claude update` |
 | Claude Code (npm) | npm / fnm 系パス | `npm update -g @anthropic-ai/claude-code` |
-| Codex CLI (npm) | `Get-Command codex` の優先結果 + `where.exe codex` | `npm update -g @openai/codex` |
-| opencode (npm) | npm / fnm 系パス | `npm update -g opencode-ai` |
+| Codex CLI (npm) | `Get-Command codex` の優先結果 + `where.exe codex` | `npm install -g @openai/codex` |
+| opencode (npm) | npm / fnm 系パス | `npm install -g opencode-ai` |
 
 ### トラブルシューティング
 
@@ -132,5 +135,6 @@ prefix=C:\Users\<username>\.npm-global
 補足:
 
 - 実体は `~/.codex/bin/update-ccx.ps1` / `update-ccx.cmd`
+- bare `update-ccx` は `source-root.txt` の checkout を優先し、解決できない場合だけ上記実体へフォールバックする
 - `~/.local/bin/update-ccx.cmd` shim から呼び出す
 - `~/.local/bin` が user PATH に無ければ setup/update 時に追加する
