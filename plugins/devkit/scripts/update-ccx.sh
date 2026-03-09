@@ -241,8 +241,8 @@ Usage:
   update-devkit.sh --version          # show current versions
   update-devkit.sh --cli-only         # update Claude/Codex/OpenCode only
   update-devkit.sh --devkit-only      # sync DevKit-managed Codex/OpenCode assets only
-  update-devkit.sh --runtime codex    # sync only Codex-managed assets
-  update-devkit.sh --runtime opencode # sync only OpenCode-managed assets
+  update-devkit.sh --runtime codex    # update only Codex CLI + Codex-managed assets
+  update-devkit.sh --runtime opencode # update only OpenCode CLI + OpenCode-managed assets
 EOF
 }
 
@@ -650,10 +650,24 @@ section_update() {
     # 更新前バージョン表示
     echo "[Before] claude: $(get_claude_version) ($claude_install) / codex: $(get_codex_version) ($codex_install) / opencode: $(get_opencode_version) ($opencode_install)"
 
+    local update_claude_cli=false
+    local update_codex_cli=false
+    local update_opencode_cli=false
+
+    if [[ "$RUNTIME_SELECTION" == "all" ]]; then
+        update_claude_cli=true
+        update_codex_cli=true
+        update_opencode_cli=true
+    elif [[ "$RUNTIME_SELECTION" == "codex" ]]; then
+        update_codex_cli=true
+    elif [[ "$RUNTIME_SELECTION" == "opencode" ]]; then
+        update_opencode_cli=true
+    fi
+
     # 各ツールの更新
-    [[ "$claude_install" != "skip" ]] && update_claude "$claude_install"
-    [[ "$codex_install" != "skip" ]] && update_codex "$codex_install"
-    [[ "$opencode_install" != "skip" ]] && update_opencode "$opencode_install"
+    [[ "$claude_install" != "skip" && "$update_claude_cli" == true ]] && update_claude "$claude_install"
+    [[ "$codex_install" != "skip" && "$update_codex_cli" == true ]] && update_codex "$codex_install"
+    [[ "$opencode_install" != "skip" && "$update_opencode_cli" == true ]] && update_opencode "$opencode_install"
 
     # 更新後バージョン表示
     echo "[After]  claude: $(get_claude_version) / codex: $(get_codex_version) / opencode: $(get_opencode_version)"

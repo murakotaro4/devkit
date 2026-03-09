@@ -1162,13 +1162,17 @@ function Section-Update {
     (Get-VersionFromCommand "codex"), $codexMethod, `
     (Get-VersionFromCommand "opencode"), $opencodeMethod)
 
-  if ($claudeMethod -ne "skip") {
+  $updateClaude = $Script:RuntimeSelection -eq "all"
+  $updateCodex = $Script:RuntimeSelection -in @("all", "codex")
+  $updateOpencode = $Script:RuntimeSelection -in @("all", "opencode")
+
+  if ($claudeMethod -ne "skip" -and $updateClaude) {
     Update-Claude -Method $claudeMethod
   }
-  if ($codexMethod -ne "skip") {
+  if ($codexMethod -ne "skip" -and $updateCodex) {
     Update-Codex -Method $codexMethod
   }
-  if ($opencodeMethod -ne "skip") {
+  if ($opencodeMethod -ne "skip" -and $updateOpencode) {
     Update-Opencode -Method $opencodeMethod
   }
 
@@ -1265,8 +1269,8 @@ function Show-Usage {
   Write-Host "  update-devkit.cmd --version          # show current versions"
   Write-Host "  update-devkit.cmd --cli-only         # update Claude/Codex/OpenCode only"
   Write-Host "  update-devkit.cmd --devkit-only      # sync DevKit-managed Codex/OpenCode assets only"
-  Write-Host "  update-devkit.cmd --runtime codex    # sync only Codex-managed assets"
-  Write-Host "  update-devkit.cmd --runtime opencode # sync only OpenCode-managed assets"
+  Write-Host "  update-devkit.cmd --runtime codex    # update only Codex CLI + Codex-managed assets"
+  Write-Host "  update-devkit.cmd --runtime opencode # update only OpenCode CLI + OpenCode-managed assets"
 }
 
 function Main {

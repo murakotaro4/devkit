@@ -269,7 +269,7 @@ function Assert-DevKitLegacySkillsRootMigratable([string]$LinkTarget) {
     }
 
     if (-not $known.Contains($entry.Name)) {
-      throw "BLOCKED_LEGACY_SKILLS_ROOT: $LinkTarget contains non-DevKit entry '$($entry.Name)'"
+      throw "BLOCKED_LEGACY_SKILLS_ROOT: $LinkTarget contains non-DevKit entry '$($entry.Name)'. Remediation: move custom skills out of ~/.agent/skills before migrating OpenCode."
     }
   }
 }

@@ -52,12 +52,17 @@ update-ccx
 
 ### それ以外のシェル
 
-更新はインストール済みの `update-devkit` を使う。`update-ccx` でも同じ挙動を呼べる。
+初回だけは checkout または Marketplace 配下の script を直接実行し、その後はインストール済みの `update-devkit` を使う。`update-ccx` でも同じ挙動を呼べる。
 
 ```bash
+bash ./plugins/devkit/scripts/update-devkit.sh --devkit-only
+
+# 以降
 update-devkit
 update-devkit --version
 ```
+
+この初回実行で `~/.local/bin/update-devkit` と `update-ccx` が配置される。
 
 ### Windows の npm 自己修復
 
@@ -107,18 +112,26 @@ prefix=C:\Users\<username>\.npm-global
 | Codex CLI (npm) | `Get-Command codex` の優先結果 + `where.exe codex` | `npm install -g @openai/codex` |
 | opencode (npm) | npm / fnm 系パス | `npm install -g opencode-ai` |
 
+`--runtime codex|opencode` を使うと、その runtime の CLI と user-level assets だけを更新する。
+
 ### トラブルシューティング
 
 #### `update-devkit` / `update-ccx` が見つからない
 
 - PATH を確認する
 - PowerShell / cmd は Marketplace の `devkit-setup.ps1` を再実行して launcher を再配置する
+- shell は初回 bootstrap を script 直接実行で 1 回済ませる
 
 #### Windows で Codex 移行が止まる
 
 - `%USERPROFILE%\.npmrc` に想定外の `prefix=` がないか確認する
 - 移行対象は `C:\Users\<username>\.npm-global` だけ
 - 失敗時は `~/.npmrc.update-ccx.bak.<timestamp>` から戻せる
+
+#### `BLOCKED_LEGACY_SKILLS_ROOT` で止まる
+
+- `~/.agent/skills` に DevKit 以外の custom skill が混在している
+- custom skill を退避してから `update-devkit --runtime opencode --devkit-only` を再実行する
 
 #### Windows で npm が見つからない
 

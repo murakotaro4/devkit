@@ -210,6 +210,20 @@ update-ccx
 - Codex 側の helper / template / config も bootstrap / update 時に再同期される。
 - OpenCode / Codex を起動中なら、更新後に再起動すると反映が確実。
 
+### macOS / Linux / WSL / Git Bash bootstrap
+
+初回だけは checkout または Marketplace 配下の script を直接実行する。
+
+```bash
+# repo checkout から直接
+bash ./plugins/devkit/scripts/update-devkit.sh --devkit-only
+
+# または Marketplace 配置から直接
+bash "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/update-devkit.sh" --devkit-only
+```
+
+この初回実行で `~/.local/bin/update-devkit` と `update-ccx` の launcher が配置される。以降は bare command を使う。
+
 ## 使い方（スラッシュ）
 
 - Claude Code: `/dig` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:mermaid-show` `/devkit:amazon-search` `/devkit:improve-skill` `/devkit:codex-search` `/devkit:devkit-init`
@@ -242,6 +256,7 @@ update-ccx --version
 - Codex の `~/.codex/devkit/source` から DevKit 管理 user-level assets を再同期
 - OpenCode の `~/.config/opencode/devkit/source` から DevKit 管理 user-level assets を再同期
 - project `AGENTS.md` / `CLAUDE.md` の workflow sync は行わない
+- `--runtime codex|opencode` を付けた場合は、その runtime の CLI と user-level assets だけを更新する
 
 ハーネスだけ手動で回したい場合:
 
@@ -439,6 +454,11 @@ where.exe claude
   ls -la ~/.codex/devkit/source
   ```
 - `update-devkit` を再実行して user-level assets を再同期する
+
+### `BLOCKED_LEGACY_SKILLS_ROOT` で止まる
+
+- 旧 OpenSkills 方式で `~/.config/opencode/skills -> ~/.agent/skills` を使っていて、`~/.agent/skills` に DevKit 以外の custom skill が混在している
+- custom skill を `~/.agent/skills` から退避してから `update-devkit --runtime opencode --devkit-only` を再実行する
 
 ### `update-devkit` / `update-ccx`: command not found
 

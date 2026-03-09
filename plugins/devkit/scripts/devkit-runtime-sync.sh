@@ -112,7 +112,7 @@ assert_legacy_skills_root_migratable() {
     name="$(basename "$entry")"
     [[ "$name" == .* ]] && continue
     if ! devkit_skill_manifest | grep -Fxq "$name"; then
-      printf 'BLOCKED_LEGACY_SKILLS_ROOT: %s contains non-DevKit entry %s\n' "$link_target" "$name" >&2
+      printf 'BLOCKED_LEGACY_SKILLS_ROOT: %s contains non-DevKit entry %s. Remediation: move custom skills out of ~/.agent/skills before migrating OpenCode.\n' "$link_target" "$name" >&2
       return 1
     fi
   done < <(find "$link_target" -mindepth 1 -maxdepth 1 2>/dev/null)
