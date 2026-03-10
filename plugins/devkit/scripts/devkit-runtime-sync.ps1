@@ -464,3 +464,28 @@ function Sync-DevKitOpenCodeRuntime([string]$UserHome, [scriptblock]$Logger) {
     SourceRoot = $repoRoot
   }
 }
+
+function Ensure-DevKitHooks {
+  param(
+    [Parameter(Mandatory)][string]$GitRoot
+  )
+
+  $hooksDir = Join-Path $GitRoot ".githooks"
+  if (-not (Test-Path $hooksDir -PathType Container)) {
+    return
+  }
+
+  $currentPath = git -C $GitRoot config --local --get core.hooksPath 2>$null
+  if ($LASTEXITCODE -eq 0 -and $currentPath) {
+    if ($currentPath -eq ".githooks") {
+      return  # 既に設定済み
+    }
+    throw "BLOCKED_EXISTING_HOOKS_PATH: $currentPath (expected .githooks or unset)"
+  }
+
+  git -C $GitRoot config core.hooksPath .githooks
+  if ($LASTEXITCODE -ne 0) {
+    throw "FAILED_HOOKS_PATH_CONFIG: git config core.hooksPath failed in $GitRoot (exit $LASTEXITCODE)"
+  }
+  Write-Host "INFO: Configured core.hooksPath = .githooks in $GitRoot"
+}

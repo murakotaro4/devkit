@@ -278,3 +278,33 @@ sync_devkit_opencode_runtime() {
 
   printf '%s\n' "$opencode_source_root" >"$opencode_source_root_file"
 }
+
+ensure_devkit_hooks() {
+  local git_root="$1"
+  local hooks_dir="$git_root/.githooks"
+
+  if [[ ! -d "$hooks_dir" ]]; then
+    devkit_log "No .githooks directory found in $git_root, skipping hook setup"
+    return 0
+  fi
+
+  # 既存の core.hooksPath を確認（BLOCKED パターン準拠）
+  local current_hooks_path
+  current_hooks_path="$(git -C "$git_root" config --local --get core.hooksPath 2>/dev/null)" || true
+
+  if [[ -n "$current_hooks_path" ]]; then
+    if [[ "$current_hooks_path" == ".githooks" ]]; then
+      # 既に DevKit 管理パス — 更新不要
+      return 0
+    else
+      printf 'BLOCKED_EXISTING_HOOKS_PATH: %s (expected .githooks or unset)\n' "$current_hooks_path" >&2
+      return 1
+    fi
+  fi
+
+  if ! git -C "$git_root" config core.hooksPath .githooks; then
+    printf 'FAILED_HOOKS_PATH_CONFIG: git config core.hooksPath failed in %s\n' "$git_root" >&2
+    return 1
+  fi
+  devkit_log "Configured core.hooksPath = .githooks in $git_root"
+}

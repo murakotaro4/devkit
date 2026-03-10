@@ -1213,6 +1213,18 @@ function Section-DevKitSync {
       Add-ResultError ("OpenCode runtime sync failed: {0}" -f $_.Exception.Message)
     }
   }
+
+  # marketplace repo の hook を設定
+  $marketplaceRoot = Join-Path $env:USERPROFILE ".claude\plugins\marketplaces\murakotaro4"
+  if (Test-Path (Join-Path $marketplaceRoot ".git") -PathType Container) {
+    try {
+      Ensure-DevKitHooks -GitRoot $marketplaceRoot
+      Write-Host "✓ Marketplace hooks configured"
+    } catch {
+      Write-Host "FAILED: Marketplace hooks setup"
+      Add-ResultError ("Marketplace hooks setup failed: {0}" -f $_.Exception.Message)
+    }
+  }
 }
 
 function Parse-CliArgs {

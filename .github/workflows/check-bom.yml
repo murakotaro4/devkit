@@ -1,0 +1,35 @@
+name: Check BOM
+on:
+  push:
+    paths:
+      - '**/*.json'
+      - '**/*.md'
+      - '**/*.yaml'
+      - '**/*.yml'
+  pull_request:
+    paths:
+      - '**/*.json'
+      - '**/*.md'
+      - '**/*.yaml'
+      - '**/*.yml'
+  workflow_dispatch:
+
+jobs:
+  check-bom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect UTF-8 BOM
+        run: |
+          found=0
+          while IFS= read -r f; do
+            if head -c 3 "$f" | od -An -tx1 -N3 | tr -d ' \n' | grep -q 'efbbbf'; then
+              printf 'ERROR: %s contains UTF-8 BOM\n' "$f" >&2
+              found=1
+            fi
+          done < <(git ls-files '*.json' '*.md' '*.yaml' '*.yml')
+          if [ "$found" -eq 1 ]; then
+            printf '\nFix: sed -i '\''1s/^\xEF\xBB\xBF//'\'' <file>\n' >&2
+            exit 1
+          fi
+          echo "No BOM found."

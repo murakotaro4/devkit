@@ -696,6 +696,19 @@ section_devkit_sync() {
             ERRORS+=("OpenCode runtime sync failed")
         fi
     fi
+
+    # marketplace repo の hook を設定
+    # shim 経由実行時 SCRIPT_DIR は runtime clone を指すため、
+    # marketplace repo は既知の固定パスで参照する
+    local marketplace_root="$HOME/.claude/plugins/marketplaces/murakotaro4"
+    if [[ -d "$marketplace_root/.git" ]]; then
+        if ensure_devkit_hooks "$marketplace_root"; then
+            echo "✓ Marketplace hooks configured"
+        else
+            echo "✗ Marketplace hooks setup failed"
+            ERRORS+=("Marketplace hooks setup failed (see BLOCKED_EXISTING_HOOKS_PATH above)")
+        fi
+    fi
 }
 
 # ============================================================
