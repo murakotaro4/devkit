@@ -15,7 +15,7 @@ $ARGUMENTS
 ## 入力ソース
 
 ### dig からの連携時（主要ユースケース）
-- dig の Step 4 から呼び出される
+- dig の Step 3 または Step 4 から呼び出される（adapter 依存）
 - $ARGUMENTS に plan file パスが渡される
 - plan file を Read で読み込み、分解の入力とする
 
@@ -101,6 +101,14 @@ TaskUpdate で依存関係を設定する:
 - サブタスク間の依存を `addBlockedBy` で設定
 - 独立したサブタスクは blockedBy を設定しない（並列実行可能）
 - 既存の Phase 6 本体タスクがあれば、Phase 6 本体に `addBlockedBy` で全サブタスクを紐付け
+
+#### 親タスク紐付け
+
+plan file 内に `parent_task_id: <id>` 行がある場合、その taskId を Phase 6 本体として扱い:
+- 全サブタスクを `addBlockedBy` で紐付ける
+- Phase 6 完了条件は既存ルール通り（全サブタスク completed 後に本体を completed）
+
+`parent_task_id` 行がない場合（独立実行時のみ）: TaskList に既存 Phase 6 本体があれば紐付け。dig-claude 経由の場合は `parent_task_id` が必ず存在する前提（dig-core 契約）。dig-codex は decomposition を呼ばず独自のテキストベース分解を使用するため、本規約の対象外。
 
 #### 5c. plan file への追記
 

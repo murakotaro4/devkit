@@ -46,6 +46,7 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - `standard_team` と `expanded_team` では `Planner` と `Reviewer` を分離する
 - 複数 implementer がいる場合は `write_scope` を分けて plan に明記する
 - 別モデル review は常時必須ではない。中規模以上または高リスク変更で昇格手段として使う
+- runtime 制約で `expanded_team` の構造要件（Implementer(2+)）を満たせない場合（例: 並列実行不可で Implementer が1人に制限される場合）、ユーザー承認のうえ `standard_team` で実行してよい。承認なしでの暗黙降格は禁止
 
 ## Sizing Policy
 
