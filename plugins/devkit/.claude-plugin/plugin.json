@@ -1,6 +1,5 @@
 {
   "name": "devkit",
   "description": "Personal global skills for Claude Code - dig runtime adapters, research and utility skills",
-  "version": "1.5.0"
+  "version": "1.6.0"
 }
-

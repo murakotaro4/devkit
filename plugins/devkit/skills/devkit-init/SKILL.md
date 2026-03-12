@@ -28,7 +28,7 @@ DevKit の `shared/workflow.md`（SSOT）を以下の2経路で同期:
 
 1. **DevKit パス探索**（優先順）:
    - `.claude/devkit-init.json` に記録済みパスがあればそれを使用
-   - `.agent/skills/*/.openskills.json` の `source` フィールドから DevKit ルートを逆算
+   - `~/.agents/skills/*` の symlink target または `~/cursor/devkit` から DevKit ルートを逆算
    - 兄弟ディレクトリ探索: `../devkit/plugins/devkit/shared/workflow.md` の存在確認
    - いずれも失敗 → AskUserQuestion でユーザーにパスを質問
 

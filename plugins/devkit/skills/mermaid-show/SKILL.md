@@ -28,13 +28,19 @@ Mermaid図を `npx mmdc` でPNGにレンダリングし、可能なら `kitten i
 原則として同梱スクリプトを呼び出すだけにする。
 
 ```bash
-SCRIPT1="$HOME/.agent/skills/mermaid-show/scripts/mermaid-show.sh"
-SCRIPT2="$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/mermaid-show/scripts/mermaid-show.sh"
+SCRIPT1="$HOME/.agents/skills/mermaid-show/scripts/mermaid-show.sh"
+SCRIPT2="$HOME/.config/opencode/skills/mermaid-show/scripts/mermaid-show.sh"
+SCRIPT3="${DEVKIT_SOURCE_ROOT:-$HOME/cursor/devkit}/plugins/devkit/skills/mermaid-show/scripts/mermaid-show.sh"
+SCRIPT4="$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/mermaid-show/scripts/mermaid-show.sh"
 
 if [ -x "$SCRIPT1" ]; then
   bash "$SCRIPT1" $ARGUMENTS
 elif [ -x "$SCRIPT2" ]; then
   bash "$SCRIPT2" $ARGUMENTS
+elif [ -x "$SCRIPT3" ]; then
+  bash "$SCRIPT3" $ARGUMENTS
+elif [ -x "$SCRIPT4" ]; then
+  bash "$SCRIPT4" $ARGUMENTS
 else
   echo "error: mermaid-show.sh が見つかりません。OpenSkillsで devkit を install するか、Claude Codeプラグインの配置を確認してください。" >&2
   exit 1

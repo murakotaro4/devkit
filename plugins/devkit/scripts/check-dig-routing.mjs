@@ -24,6 +24,9 @@ const problems = [];
 for (const token of ["dig-core", "dig-claude", "dig-codex", "dig-opencode"]) {
   if (!dig.includes(token)) problems.push(`dig orchestrator missing reference: ${token}`);
 }
+for (const token of ["../dig-core/SKILL.md", "../dig-claude/SKILL.md", "../dig-codex/SKILL.md", "../dig-opencode/SKILL.md"]) {
+  if (!dig.includes(token)) problems.push(`dig orchestrator missing internal file path: ${token}`);
+}
 if (!dig.includes("runtime=<claude|codex|opencode>")) {
   problems.push("dig orchestrator missing runtime contract");
 }

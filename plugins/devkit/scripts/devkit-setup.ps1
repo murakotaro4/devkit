@@ -75,8 +75,8 @@ try {
     Write-Info "Applied local Codex overlay: $($codexResult.ConfigResult.LocalOverlayPath)"
   }
   Write-Info "Codex config refreshed."
-  Write-Info ("Codex source root: " + $codexResult.SourceRoot)
-  Write-Info ("OpenCode source root: " + $opencodeResult.SourceRoot)
+  Write-Info ("DevKit source: " + $codexResult.SourceRoot)
+  Write-Info ("OpenCode sync source: " + $opencodeResult.SourceRoot)
 
   if ($RegisterDailyTask) {
     $updaterPath = Join-Path $CodexBin "devkit-skill-update.ps1"

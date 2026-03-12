@@ -8,6 +8,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 # /dig - Runtime Orchestrator
 
 `/dig` は入口のみを担当する。実行ロジックは `dig-core` と runtime adapter に委譲する。
+Codex / OpenCode に同期する公開スキルは `dig` のみとし、内部契約は同梱ファイルを相対パスで参照する。
 
 ## 入力契約
 
@@ -25,11 +26,11 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 ## 実行手順
 
 1. runtime を解決する。
-2. `dig-core` の共通契約を読み込む。
-3. runtime ごとに adapter を呼ぶ。
-   - `claude` -> `dig-claude`
-   - `codex` -> `dig-codex`
-   - `opencode` -> `dig-opencode`
+2. `../dig-core/SKILL.md` を読み、`dig-core` の共通契約を適用する。
+3. runtime ごとに対応する adapter ファイルを読む。
+   - `claude` -> `../dig-claude/SKILL.md` (`dig-claude`)
+   - `codex` -> `../dig-codex/SKILL.md` (`dig-codex`)
+   - `opencode` -> `../dig-opencode/SKILL.md` (`dig-opencode`)
 4. adapter が返した停止コードまたは完了状態をそのままユーザーへ返す。
 
 ## 停止時の出力契約
@@ -43,3 +44,4 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 
 - 入口名 `/dig` と `$dig` は維持する。
 - 実行フローそのものは `dig-core` に集約し、ここで重複定義しない。
+- `dig-core` と各 adapter は内部実装であり、Codex / OpenCode のトップレベル skill surface に同期しない。

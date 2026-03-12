@@ -55,13 +55,19 @@ agent-browser --cdp 9222 open "https://www.amazon.co.jp/"
 原則として同梱スクリプトを呼び出すだけにする。
 
 ```bash
-SCRIPT1="$HOME/.agent/skills/amazon-search/scripts/amazon-search.sh"
-SCRIPT2="$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/amazon-search/scripts/amazon-search.sh"
+SCRIPT1="$HOME/.agents/skills/amazon-search/scripts/amazon-search.sh"
+SCRIPT2="$HOME/.config/opencode/skills/amazon-search/scripts/amazon-search.sh"
+SCRIPT3="${DEVKIT_SOURCE_ROOT:-$HOME/cursor/devkit}/plugins/devkit/skills/amazon-search/scripts/amazon-search.sh"
+SCRIPT4="$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/amazon-search/scripts/amazon-search.sh"
 
 if [ -x "$SCRIPT1" ]; then
   bash "$SCRIPT1" $ARGUMENTS
 elif [ -x "$SCRIPT2" ]; then
   bash "$SCRIPT2" $ARGUMENTS
+elif [ -x "$SCRIPT3" ]; then
+  bash "$SCRIPT3" $ARGUMENTS
+elif [ -x "$SCRIPT4" ]; then
+  bash "$SCRIPT4" $ARGUMENTS
 else
   echo "error: amazon-search.sh が見つかりません。OpenSkillsで devkit を install するか、Claude Codeプラグインの配置を確認してください。" >&2
   exit 1
