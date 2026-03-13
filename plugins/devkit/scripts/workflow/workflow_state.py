@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 
 LEGACY_PHASE_MAP = {
@@ -33,6 +35,10 @@ def claude_dir() -> Path:
     return Path(os.environ.get("HOME", "")) / ".claude"
 
 
+def tasks_dir_for(session_id: str) -> Path:
+    return claude_dir() / "tasks" / sanitize_session_id(session_id)
+
+
 def state_file_for(session_id: str) -> Path:
     return claude_dir() / f"devkit-workflow-{sanitize_session_id(session_id)}.json"
 
@@ -52,6 +58,99 @@ def read_json(path: Path) -> dict[str, object] | None:
 
 def write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def append_phase(state: dict[str, Any], token: str) -> None:
+    normalized = normalize_phase_token(token)
+    if not normalized:
+        return
+
+    raw = state.get("phases_passed")
+    phases = [item for item in raw if isinstance(item, str)] if isinstance(raw, list) else []
+    if normalized not in phases:
+        phases.append(normalized)
+    state["current_phase_token"] = normalized
+    state["phases_passed"] = phases
+
+
+def default_dig_state() -> dict[str, Any]:
+    return {
+        "active": False,
+        "topic": "",
+        "session_started_at": 0.0,
+        "phase5_approved": False,
+        "phase6_tasks_registered": False,
+        "parent_task_id": "",
+        "subtask_ids": [],
+        "subtask_subjects": [],
+    }
+
+
+def ensure_dig_state(state: dict[str, Any]) -> dict[str, Any]:
+    raw = state.get("dig")
+    dig = dict(raw) if isinstance(raw, dict) else {}
+    merged = default_dig_state()
+    merged.update({key: value for key, value in dig.items() if key in merged})
+    if not isinstance(merged.get("subtask_ids"), list):
+        merged["subtask_ids"] = []
+    if not isinstance(merged.get("subtask_subjects"), list):
+        merged["subtask_subjects"] = []
+    state["dig"] = merged
+    return merged
+
+
+def load_task_entries(session_id: str) -> list[dict[str, Any]]:
+    task_dir = tasks_dir_for(session_id)
+    if not task_dir.exists():
+        return []
+
+    entries: list[dict[str, Any]] = []
+    for child in sorted(task_dir.glob("*.json")):
+        payload = read_json(child)
+        if isinstance(payload, dict):
+            try:
+                payload["_mtime"] = child.stat().st_mtime
+            except OSError:
+                payload["_mtime"] = 0.0
+            entries.append(payload)
+    return entries
+
+
+def sync_dig_tasks_from_store(state: dict[str, Any], session_id: str) -> dict[str, Any]:
+    dig = ensure_dig_state(state)
+    entries = load_task_entries(session_id)
+    session_started_at = dig.get("session_started_at")
+    started_after = float(session_started_at) if isinstance(session_started_at, (int, float)) else 0.0
+
+    parent = ""
+    parent_id = ""
+    subtask_ids: list[str] = []
+    subtask_subjects: list[str] = []
+    for entry in entries:
+        entry_mtime = entry.get("_mtime")
+        if started_after and not isinstance(entry_mtime, (int, float)):
+            continue
+        if started_after and float(entry_mtime) < started_after:
+            continue
+        subject = entry.get("subject")
+        if not isinstance(subject, str):
+            continue
+        if subject.startswith("[Phase 6] "):
+            parent = subject
+            parent_id = str(entry.get("id", ""))
+        elif re.match(r"^\[Task \d+\]\s+", subject):
+            subtask_subjects.append(subject)
+            subtask_ids.append(str(entry.get("id", "")))
+
+    dig["parent_task_id"] = parent_id
+    dig["subtask_ids"] = [item for item in subtask_ids if item]
+    dig["subtask_subjects"] = subtask_subjects
+    dig["phase6_tasks_registered"] = bool(parent and subtask_subjects)
+    return dig
+
+
+def now_timestamp() -> float:
+    return time.time()
 
 
 def normalize_state(state: dict[str, object] | None) -> dict[str, object]:
@@ -79,6 +178,7 @@ def normalize_state(state: dict[str, object] | None) -> dict[str, object]:
     base["workflow_version"] = 2
     base["current_phase_token"] = current
     base["phases_passed"] = deduped
+    ensure_dig_state(base)
     return base
 
 

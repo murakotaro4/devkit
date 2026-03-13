@@ -112,22 +112,22 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 
 | # | フェーズ | 完了条件 |
 |---|---------|----------|
-| 1 | Intake & Team Declaration | サイズ判定、`team_shape`、役割案が文書化済み |
-| 2 | Requirements Interview | 成功条件、制約、非対象、承認が確定 |
-| 3 | Research | コード調査、周辺異常、技術リスクが整理済み |
-| 4 | Plan Draft | decision-complete な plan、役割、review 方針が完成 |
-| 5 | Plan Review Gate | reviewer 観点と review gate が完了 |
-| 6 | Implementation | 差分作成と統合が完了 |
-| 7 | Implementation Review & Verification | 実装レビュー、検証、必要な昇格 review が完了 |
-| 8 | Commit & Push | staging、コミット前確認、commit、push が完了 |
+| 1 | 依頼確認と体制決め | サイズ判定、`team_shape`、役割案が文書化済み |
+| 2 | 要件ヒアリング | 成功条件、制約、非対象、承認が確定 |
+| 3 | 調査 | コード調査、周辺異常、技術リスクが整理済み |
+| 4 | 計画作成 | decision-complete な plan、役割、review 方針が完成 |
+| 5 | 計画レビュー | reviewer 観点と review gate が完了 |
+| 6 | 実装 | 差分作成と統合が完了 |
+| 7 | 実装レビューと検証 | 実装レビュー、検証、必要な昇格 review が完了 |
+| 8 | コミットとプッシュ | staging、コミット前確認、commit、push が完了 |
 
-### Phase 1: Intake & Team Declaration
+### Phase 1: 依頼確認と体制決め
 
 - `Coordinator` が sizing policy で `small` / `medium` / `large` を決める
 - その結果に基づいて `micro_team` / `standard_team` / `expanded_team` を決める
 - `team_shape` と `role_assignment` を最初に plan または task note に書く
 
-### Phase 2: Requirements Interview
+### Phase 2: 要件ヒアリング
 
 - runtime に応じた質問手段を使う
   - Claude: AskUserQuestion
@@ -135,38 +135,38 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
   - OpenCode: question（不可時はメッセージ質問）
 - `Coordinator` または担当 interviewer が目的、成功条件、制約、非対象を固定する
 
-### Phase 3: Research
+### Phase 3: 調査
 
 - `Coordinator`、`Planner`、または専任 `Researcher` がコードベース調査を行う
 - 周辺で見つけた異常や追加修正候補は `Coordinator` が本スコープへ入れるか判断する
 
-### Phase 4: Plan Draft
+### Phase 4: 計画作成
 
 - `Planner` は decision-complete な plan を作る
 - plan には少なくとも `team_shape`、`role_assignment`、テスト方針を含める
 - implementer が複数なら `write_scope` を plan に含める
 - `medium` 以上なら review の昇格方法も書く
 
-### Phase 5: Plan Review Gate
+### Phase 5: 計画レビュー
 
 - `micro_team` では `Planner=Reviewer` を許可する
 - `standard_team` と `expanded_team` では `Reviewer` を `Planner` と分離する
 - Codex CLI が使える場合は Spark を標準 gate にする
 - Codex CLI が使えない場合は独立した別 agent reviewer で代替する
 
-### Phase 6: Implementation
+### Phase 6: 実装
 
 - `Implementer` は自分の担当差分を作る
 - implementer が複数なら `write_scope` に従って責務を分ける
 - `Coordinator` が最終統合責任を持つ
 
-### Phase 7: Implementation Review & Verification
+### Phase 7: 実装レビューと検証
 
 - `Reviewer` は implementer と別 agent であること
 - `small` でも独立 reviewer は省略しない
 - `medium` 以上では追加の review 視点を入れる
 
-### Phase 8: Commit & Push
+### Phase 8: コミットとプッシュ
 
 1. `git add` でステージング
 2. コミット前確認を実施

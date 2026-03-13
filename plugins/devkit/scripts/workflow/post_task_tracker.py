@@ -9,7 +9,20 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from workflow_state import ensure_claude_dir, normalize_phase_token, read_json, sanitize_session_id, state_file_for, write_json
+from workflow_state import (
+    append_phase,
+    ensure_claude_dir,
+    ensure_dig_state,
+    normalize_phase_token,
+    read_json,
+    sanitize_session_id,
+    state_file_for,
+    sync_dig_tasks_from_store,
+    write_json,
+)
+
+
+PLAN_REVIEW_MARKERS = ("/tmp/dig_plan_review_", "REVIEW_COUNTS critical=0 high=0")
 
 
 def main() -> int:
@@ -27,7 +40,11 @@ def main() -> int:
         return 0
 
     tool_input = parsed.get("tool_input") if isinstance(parsed, dict) else {}
-    if not isinstance(tool_input, dict) or tool_input.get("status") != "completed":
+    if not isinstance(tool_input, dict):
+        return 0
+
+    tool_status = tool_input.get("status")
+    if tool_status not in {None, "completed"}:
         return 0
 
     metadata = tool_input.get("metadata", {})
@@ -43,13 +60,11 @@ def main() -> int:
             if normalized:
                 phases.append(normalized)
 
-    if not phases:
-        return 0
-
     ensure_claude_dir()
     session_id = sanitize_session_id(str(parsed.get("session_id", "")))
     state_path = state_file_for(session_id)
     state = read_json(state_path) or {}
+    dig = sync_dig_tasks_from_store(state, session_id)
     raw_existing = state.get("phases_passed")
     existing: list[str] = []
     if isinstance(raw_existing, list):
@@ -59,15 +74,29 @@ def main() -> int:
                 existing.append(normalized)
 
     merged = existing[:]
+    latest_phase = state.get("current_phase_token") if isinstance(state.get("current_phase_token"), str) else ""
     for phase in phases:
         if phase not in merged:
             merged.append(phase)
+        latest_phase = phase
 
-    latest_phase = phases[-1]
     state["workflow_version"] = 2
     state["current_phase_token"] = latest_phase
     state["phases_passed"] = merged
+
+    tool = str(parsed.get("tool_name", "") or parsed.get("toolName", "") or "")
+    command = str(tool_input.get("command", ""))
+    tool_response = str(parsed.get("tool_response", "") or tool_input.get("tool_response", "") or "")
+    if tool == "Bash" and dig.get("active"):
+        if all(marker in f"{command}\n{tool_response}" for marker in PLAN_REVIEW_MARKERS):
+            dig["phase5_approved"] = True
+            append_phase(state, "plan_review_completed")
+
+    ensure_dig_state(state)
     write_json(state_path, state)
+
+    if not phases and not (tool == "Bash" and dig.get("active")):
+        return 0
 
     payload = {
         "hookSpecificOutput": {

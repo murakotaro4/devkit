@@ -24,6 +24,7 @@ def main() -> int:
     workflow = must_read("plugins/devkit/shared/workflow.md")
     agents = must_read("AGENTS.md")
     readme = must_read("README.md")
+    hooks = must_read("plugins/devkit/.claude-plugin/hooks.json")
 
     problems: list[str] = []
 
@@ -79,6 +80,18 @@ def main() -> int:
         problems.append("dig-core missing REVIEW_RESULT_MARKER")
     if "STOP_OUTPUT_FIELDS: ERROR_CODE,RERUN_COMMAND,DIAGNOSTIC_COMMAND" not in core:
         problems.append("dig-core missing stop output marker")
+    for token in ["Phase 1", "Phase 5", "Phase 6", "Phase 8"]:
+        if token not in claude:
+            problems.append(f"dig-claude missing 8-phase token: {token}")
+    for token in ["[Phase 6]", "[Task 1]", "Phase 5 通過後", "agent-parallel を常に第一候補"]:
+        if token not in claude:
+            problems.append(f"dig-claude missing task lifecycle token: {token}")
+    for token in ["Phase 1", "Phase 5", "Phase 6", "[Task 1]"]:
+        if token not in core:
+            problems.append(f"dig-core missing 8-phase/task token: {token}")
+    for token in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", '"matcher": "Agent"', '"matcher": "Edit"', '"matcher": "Bash"']:
+        if token not in hooks:
+            problems.append(f"hooks.json missing dig hook contract token: {token}")
 
     if "gpt-5.3-codex-spark" not in workflow:
         problems.append("workflow missing spark review command")
