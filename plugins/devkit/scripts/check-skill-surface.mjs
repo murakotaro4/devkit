@@ -76,6 +76,28 @@ function runRuntimeSmokeChecks() {
     fs.rmSync(worktreeHome, { recursive: true, force: true });
   }
 
+  const falsePositiveHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-false-positive-"));
+  try {
+    execFileSync(
+      "bash",
+      [
+        "-lc",
+        [
+          "set -euo pipefail",
+          `export HOME=${bashQuote(falsePositiveHome)}`,
+          'git init "$HOME" >/dev/null 2>&1',
+          'mkdir -p "$HOME/.codex/bin"',
+          'export SCRIPT_DIR="$HOME/.codex/bin"',
+          `source ${bashQuote(runtimeSyncSh)}`,
+          '! devkit_script_checkout_root',
+        ].join("\n"),
+      ],
+      { cwd: root, stdio: "pipe", env: process.env },
+    );
+  } finally {
+    fs.rmSync(falsePositiveHome, { recursive: true, force: true });
+  }
+
   const explicitRootHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-explicit-root-"));
   try {
     execFileSync(

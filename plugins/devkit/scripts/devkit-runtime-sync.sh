@@ -92,8 +92,11 @@ devkit_script_checkout_root() {
     local git_root
     git_root="$(git -C "$hint_root" rev-parse --show-toplevel 2>/dev/null || true)"
     if [[ -n "$git_root" ]]; then
-      devkit_resolve_path "$git_root"
-      return 0
+      repo_root="$(devkit_repo_root_from_source_hint "$git_root" || true)"
+      if [[ -n "$repo_root" ]]; then
+        printf '%s\n' "$repo_root"
+        return 0
+      fi
     fi
   fi
 
