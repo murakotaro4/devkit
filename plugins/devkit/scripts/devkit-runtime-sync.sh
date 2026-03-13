@@ -7,7 +7,6 @@ devkit_skill_manifest() {
     dig \
     gpt-pro \
     deep-research \
-    mermaid-show \
     amazon-search \
     improve-skill \
     codex-search \
@@ -16,6 +15,7 @@ devkit_skill_manifest() {
 
 devkit_retired_skill_entries() {
   printf '%s\n' \
+    mermaid-show \
     dig-core \
     dig-claude \
     dig-codex \

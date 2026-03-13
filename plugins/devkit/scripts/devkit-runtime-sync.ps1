@@ -11,7 +11,6 @@ function Get-DevKitSkillManifest {
     "dig",
     "gpt-pro",
     "deep-research",
-    "mermaid-show",
     "amazon-search",
     "improve-skill",
     "codex-search",
@@ -21,6 +20,7 @@ function Get-DevKitSkillManifest {
 
 function Get-DevKitRetiredSkillEntries {
   return @(
+    "mermaid-show",
     "dig-core",
     "dig-claude",
     "dig-codex",

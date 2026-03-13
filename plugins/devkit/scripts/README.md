@@ -10,6 +10,7 @@
   - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast`
   - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full`
 - `prek` と Claude hook も同じ Python ハーネスを呼び出す。
+- `node` / `npm` / `fnm` は外部 CLI 更新用にのみ残し、repo 内の check / hook は使わない。
 
 ## update-devkit / update-ccx
 

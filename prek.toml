@@ -7,7 +7,7 @@ repo = "local"
 [[repos.hooks]]
 id = "dig-routing"
 name = "Check dig routing"
-entry = "node plugins/devkit/scripts/check-dig-routing.mjs"
+entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_dig_routing.py"
 language = "system"
 pass_filenames = false
 stages = ["pre-commit", "pre-push"]
@@ -15,7 +15,7 @@ stages = ["pre-commit", "pre-push"]
 [[repos.hooks]]
 id = "skill-surface-phase-b"
 name = "Check skill surface (phase B)"
-entry = "node plugins/devkit/scripts/check-skill-surface.mjs --phase=B"
+entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_skill_surface.py --phase=B"
 language = "system"
 pass_filenames = false
 stages = ["pre-commit", "pre-push"]
@@ -23,7 +23,7 @@ stages = ["pre-commit", "pre-push"]
 [[repos.hooks]]
 id = "dig-migration-repo"
 name = "Check dig migration (repo mode)"
-entry = "node plugins/devkit/scripts/check-dig-migration.mjs --mode=repo"
+entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_dig_migration.py --mode=repo"
 language = "system"
 pass_filenames = false
 stages = ["pre-commit", "pre-push"]
@@ -31,7 +31,7 @@ stages = ["pre-commit", "pre-push"]
 [[repos.hooks]]
 id = "plugin-version-bump"
 name = "Check plugin version bump"
-entry = "node plugins/devkit/scripts/check-plugin-version-bump.mjs"
+entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_plugin_version_bump.py"
 language = "system"
 pass_filenames = false
 stages = ["pre-push"]

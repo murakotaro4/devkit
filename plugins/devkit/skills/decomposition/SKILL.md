@@ -149,9 +149,9 @@ workflow.md 準拠: **全サブタスク完了を TaskList で確認してから
 - 各サブタスク完了時: `TaskUpdate(taskId, status="completed")`
 - Phase 6 本体完了: 全サブタスクが completed であることを TaskList で確認後に実行
 
-## post-task-tracker.js との互換性
+## post_task_tracker.py との互換性
 
-サブタスクの metadata に `{phase: "implementation_completed"}` を含めることで、post-task-tracker.js が自動的に phases_passed を更新する。
+サブタスクの metadata に `{phase: "implementation_completed"}` を含めることで、post_task_tracker.py が自動的に phases_passed を更新する。
 
 ## アンチパターン（禁止事項）
 

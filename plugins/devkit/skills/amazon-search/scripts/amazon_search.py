@@ -22,6 +22,164 @@ from typing import Any
 
 
 ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
+EXTRACT_SEARCH_JS = r"""
+(() => {
+  const normalize = (s) => (s ? s.replace(/\s+/g, " ").trim() : "");
+
+  const isAsin = (s) => /^[A-Z0-9]{10}$/.test(s || "");
+
+  const pickFirstText = (root, selectors) => {
+    for (const sel of selectors) {
+      const el = root.querySelector(sel);
+      const t = normalize(el?.textContent || "");
+      if (t) return t;
+    }
+    return null;
+  };
+
+  const nodes = [
+    ...document.querySelectorAll(
+      "div[data-component-type='s-search-result'][data-asin]"
+    ),
+  ];
+
+  const items = [];
+  let rank = 0;
+  for (const node of nodes) {
+    const asinRaw = normalize(node.getAttribute("data-asin") || "").toUpperCase();
+    if (!isAsin(asinRaw)) continue;
+    rank += 1;
+
+    const title = normalize(
+      node.querySelector("h2 a span")?.textContent ||
+        node.querySelector("h2")?.textContent ||
+        ""
+    );
+
+    let priceTxt = null;
+    for (const el of node.querySelectorAll(".a-price .a-offscreen")) {
+      const t = normalize(el.textContent || "");
+      if (t && /[0-9]/.test(t)) {
+        priceTxt = t;
+        break;
+      }
+    }
+
+    const ratingTxt = pickFirstText(node, ["span.a-icon-alt"]);
+
+    const rcEl =
+      node.querySelector("a[href*='customerReviews'] span") ||
+      node.querySelector("a[href*='#customerReviews'] span") ||
+      node.querySelector("span.s-underline-text");
+    const rcTxt = normalize(rcEl?.textContent || "") || null;
+
+    items.push({
+      asin: asinRaw,
+      title: title || null,
+      url: `${location.origin}/dp/${asinRaw}`,
+      priceTxt,
+      ratingTxt,
+      rcTxt,
+      rank,
+    });
+  }
+
+  return items;
+})();
+"""
+
+EXTRACT_DP_JS = r"""
+(() => {
+  const normalize = (s) => (s ? s.replace(/\s+/g, " ").trim() : "");
+
+  const isCaptcha = () => {
+    if (location.pathname.includes("validateCaptcha")) return true;
+    if (document.querySelector("form[action*='validateCaptcha']")) return true;
+    if (/Robot Check/i.test(document.title || "")) return true;
+    return false;
+  };
+
+  const asinMatch = (location.pathname.match(/\/dp\/([A-Z0-9]{10})/i) || [])[1];
+  const asin = asinMatch ? asinMatch.toUpperCase() : null;
+  const canonicalUrl = asin
+    ? `${location.origin}/dp/${asin}`
+    : `${location.origin}${location.pathname}`;
+
+  if (isCaptcha()) {
+    return {
+      asin,
+      url: canonicalUrl,
+      error: "captcha",
+      title: normalize(document.title || "") || null,
+    };
+  }
+
+  const title = normalize(document.querySelector("#productTitle")?.textContent || "");
+  const priceTxt = normalize(
+    document.querySelector(".a-price .a-offscreen")?.textContent || ""
+  );
+  const ratingTxt = normalize(
+    document.querySelector("#acrPopover")?.getAttribute("title") ||
+      document.querySelector("span.a-icon-alt")?.textContent ||
+      ""
+  );
+  const reviewCountTxt = normalize(
+    document.querySelector("#acrCustomerReviewText")?.textContent || ""
+  );
+
+  const bullets = [
+    ...document.querySelectorAll("#feature-bullets ul li span"),
+  ]
+    .map((el) => normalize(el.textContent || ""))
+    .filter((t) => t);
+
+  const tech = {};
+  const details = {};
+
+  const addTableTo = (table, out) => {
+    for (const row of table.querySelectorAll("tr")) {
+      const th = normalize(row.querySelector("th")?.textContent || "");
+      const td = normalize(row.querySelector("td")?.textContent || "");
+      if (th && td) out[th] = td;
+    }
+  };
+
+  for (const sel of [
+    "#productDetails_techSpec_section_1",
+    "#productDetails_techSpec_section_2",
+  ]) {
+    const table = document.querySelector(sel);
+    if (table) addTableTo(table, tech);
+  }
+
+  const detailBullets = document.querySelector("#detailBullets_feature_div");
+  if (detailBullets) {
+    for (const li of detailBullets.querySelectorAll("li")) {
+      const txt = normalize(li.textContent || "");
+      const idx = txt.indexOf(":");
+      if (idx <= 0) continue;
+      const k = normalize(txt.slice(0, idx));
+      const v = normalize(txt.slice(idx + 1));
+      if (k && v) details[k] = v;
+    }
+  }
+
+  const detailTable = document.querySelector("#productDetails_detailBullets_sections1");
+  if (detailTable) addTableTo(detailTable, details);
+
+  return {
+    asin,
+    url: canonicalUrl,
+    title: title || null,
+    priceTxt: priceTxt || null,
+    ratingTxt: ratingTxt || null,
+    reviewCountTxt: reviewCountTxt || null,
+    bullets,
+    tech,
+    details,
+  };
+})();
+"""
 
 
 def now_ts() -> str:
@@ -137,7 +295,7 @@ def build_search_url(domain_origin: str, query: str, page: int) -> str:
 
 def cmd_search(args: argparse.Namespace) -> int:
     domain_origin = f"https://{args.domain}"
-    js = read_text(Path(args.script_dir) / "extract_search.js")
+    js = EXTRACT_SEARCH_JS
 
     queries: list[str] = args.query
     pages: int = args.pages
@@ -221,7 +379,7 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 def cmd_dp(args: argparse.Namespace) -> int:
     domain_origin = f"https://{args.domain}"
-    js = read_text(Path(args.script_dir) / "extract_dp.js")
+    js = EXTRACT_DP_JS
 
     cdp: int = args.cdp
     wait_ms: int = args.wait_ms
@@ -341,18 +499,11 @@ def cmd_dp(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str]) -> int:
-    script_dir = Path(__file__).resolve().parent
-
     parser = argparse.ArgumentParser(prog="amazon_search.py")
     parser.set_defaults(func=None)
     parser.add_argument("--cdp", type=int, default=9222, help="CDP port (default: 9222)")
     parser.add_argument("--domain", default="www.amazon.co.jp", help="Target domain (default: www.amazon.co.jp)")
     parser.add_argument("--wait-ms", type=int, default=1200, help="Wait after open (ms)")
-    parser.add_argument(
-        "--script-dir",
-        default=str(script_dir),
-        help="Directory that contains extract_*.js (for dev/debug)",
-    )
 
     sub = parser.add_subparsers(dest="cmd", required=True)
 

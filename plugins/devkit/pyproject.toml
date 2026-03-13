@@ -1,0 +1,9 @@
+[project]
+name = "devkit"
+version = "0.1.0"
+description = "Python harness for DevKit verification and workflow hooks"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.uv]
+package = false

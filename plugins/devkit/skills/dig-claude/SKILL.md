@@ -142,7 +142,7 @@ TaskCreate:
   activeForm: "dig セッション実行中"
 ```
 
-> **Phase 6 互換**: subject を `[Phase 6]` 形式、metadata.phase を `implementation_completed` にすることで、decomposition の既存規約（Phase 6.N 命名、addBlockedBy 紐付け、post-task-tracker.js の完了フック）と完全互換。
+> **Phase 6 互換**: subject を `[Phase 6]` 形式、metadata.phase を `implementation_completed` にすることで、decomposition の既存規約（Phase 6.N 命名、addBlockedBy 紐付け、post_task_tracker.py の完了フック）と完全互換。
 
 親タスクの ID を保持し、プランファイルに `parent_task_id: <id>` として記載。
 
