@@ -211,7 +211,61 @@ function Get-DevKitDefaultSourceRoot([string]$UserHome) {
     return $env:DEVKIT_SOURCE_ROOT.Trim()
   }
 
+  $persisted = Get-DevKitPersistedSourceRoot -UserHome $UserHome
+  if (-not [string]::IsNullOrWhiteSpace($persisted)) {
+    return $persisted
+  }
+
   return (Join-Path $UserHome "cursor\devkit")
+}
+
+function Get-DevKitSourceRootStateFiles([string]$UserHome) {
+  return @(
+    (Join-Path (Join-Path $UserHome ".codex\devkit") "source-root.txt"),
+    (Join-Path (Join-Path $UserHome ".config\opencode\devkit") "source-root.txt")
+  )
+}
+
+function Get-DevKitPersistedSourceRoot([string]$UserHome) {
+  foreach ($stateFile in (Get-DevKitSourceRootStateFiles -UserHome $UserHome)) {
+    if (-not (Test-Path -LiteralPath $stateFile)) {
+      continue
+    }
+
+    $candidate = (Get-Content -LiteralPath $stateFile -TotalCount 1 -ErrorAction SilentlyContinue | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+      continue
+    }
+
+    $repoRoot = Resolve-DevKitRepoRootFromHint $candidate.Trim()
+    if (-not [string]::IsNullOrWhiteSpace($repoRoot)) {
+      return $repoRoot
+    }
+  }
+
+  return $null
+}
+
+function Set-DevKitPersistedSourceRoot([string]$StateFile, [string]$RepoRoot) {
+  Ensure-DevKitDir (Split-Path -Parent $StateFile)
+  Write-DevKitUtf8NoBom -Path $StateFile -Content ($RepoRoot.Trim() + "`n")
+}
+
+function Get-DevKitScriptCheckoutRoot {
+  if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    return $null
+  }
+
+  $candidate = Resolve-DevKitRepoRootFromHint (Join-Path $PSScriptRoot "..\..\..")
+  if ([string]::IsNullOrWhiteSpace($candidate)) {
+    return $null
+  }
+
+  if (-not (Test-Path -LiteralPath (Join-Path $candidate ".git"))) {
+    return $null
+  }
+
+  return $candidate
 }
 
 function Resolve-DevKitRepoRootFromHint([string]$Hint) {
@@ -238,7 +292,14 @@ function Resolve-DevKitRepoRootFromHint([string]$Hint) {
 
 function Get-DevKitRepoRoot([string]$UserHome, [scriptblock]$Logger) {
   $preferredRoot = Get-DevKitDefaultSourceRoot -UserHome $UserHome
-  $repoRoot = Resolve-DevKitRepoRootFromHint $preferredRoot
+  if (-not [string]::IsNullOrWhiteSpace($env:DEVKIT_SOURCE_ROOT)) {
+    $repoRoot = Resolve-DevKitRepoRootFromHint $preferredRoot
+  } else {
+    $repoRoot = Get-DevKitScriptCheckoutRoot
+    if ([string]::IsNullOrWhiteSpace($repoRoot)) {
+      $repoRoot = Resolve-DevKitRepoRootFromHint $preferredRoot
+    }
+  }
 
   if ([string]::IsNullOrWhiteSpace($repoRoot)) {
     if (Test-Path -LiteralPath $preferredRoot) {
@@ -260,25 +321,8 @@ function Get-DevKitRepoRoot([string]$UserHome, [scriptblock]$Logger) {
         if (Test-Path -LiteralPath $preferredRoot) {
           Remove-Item -LiteralPath $preferredRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
-        Invoke-DevKitLogger $Logger ("Clone failed for " + $preferredRoot + ". Falling back to an existing snapshot if available.")
+        throw "DEVKIT_REPO_CLONE_FAILED: $preferredRoot"
       }
-    }
-  }
-
-  if ([string]::IsNullOrWhiteSpace($repoRoot) -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
-    $fallbackRoot = Resolve-DevKitRepoRootFromHint (Join-Path $PSScriptRoot "..\..\..")
-    if (-not [string]::IsNullOrWhiteSpace($fallbackRoot)) {
-      Invoke-DevKitLogger $Logger ("Using the existing DevKit source snapshot: " + $fallbackRoot)
-      $repoRoot = $fallbackRoot
-    }
-  }
-
-  $pluginFallback = Join-Path $UserHome ".claude\plugins\marketplaces\murakotaro4"
-  if ([string]::IsNullOrWhiteSpace($repoRoot) -and (Test-Path -LiteralPath (Join-Path $pluginFallback "plugins\devkit"))) {
-    $fallbackRoot = Resolve-DevKitRepoRootFromHint $pluginFallback
-    if (-not [string]::IsNullOrWhiteSpace($fallbackRoot)) {
-      Invoke-DevKitLogger $Logger ("Using the Marketplace DevKit snapshot: " + $fallbackRoot)
-      $repoRoot = $fallbackRoot
     }
   }
 
@@ -482,6 +526,49 @@ function Remove-DevKitLegacyCodexManagedEntries(
   }
 }
 
+function Remove-DevKitLegacyOpenCodeManagedEntries(
+  [string]$OpenCodeSkillsRoot,
+  [string]$PluginSkillsRoot,
+  [string]$LegacySourceSkillsRoot,
+  [string]$MarketplaceSkillsRoot
+) {
+  if (-not (Test-Path -LiteralPath $OpenCodeSkillsRoot)) {
+    return
+  }
+
+  $managed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  foreach ($skill in @((Get-DevKitSkillManifest) + (Get-DevKitRetiredSkillEntries))) {
+    [void]$managed.Add($skill)
+  }
+
+  $roots = @(
+    Convert-DevKitToFullPath $PluginSkillsRoot,
+    Convert-DevKitToFullPath $LegacySourceSkillsRoot,
+    Convert-DevKitToFullPath $MarketplaceSkillsRoot
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+  foreach ($entry in (Get-ChildItem -LiteralPath $OpenCodeSkillsRoot -Force -ErrorAction SilentlyContinue)) {
+    if (-not $managed.Contains($entry.Name)) {
+      continue
+    }
+    if (-not (Test-DevKitReparsePoint $entry.FullName)) {
+      continue
+    }
+
+    $actual = Get-DevKitLinkTargetPath $entry.FullName
+    if ([string]::IsNullOrWhiteSpace($actual)) {
+      continue
+    }
+
+    foreach ($root in $roots) {
+      if ($actual.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $entry.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        break
+      }
+    }
+  }
+}
+
 function Sync-DevKitCodexRuntime([string]$UserHome, [scriptblock]$Logger, [switch]$RefreshConfig) {
   $codexRoot = Join-Path $UserHome ".codex"
   $codexSkills = Join-Path (Join-Path $UserHome ".agents") "skills"
@@ -540,6 +627,8 @@ function Sync-DevKitCodexRuntime([string]$UserHome, [scriptblock]$Logger, [switc
       -AllowDifferentExistingContent
   }
 
+  Set-DevKitPersistedSourceRoot -StateFile (Join-Path $codexDevKit "source-root.txt") -RepoRoot $repoRoot
+
   Install-DevKitCommandShim -ShimPath (Join-Path $localBin "update-ccx.cmd") -TargetCommandPath (Join-Path $codexBin "update-ccx.cmd")
   Install-DevKitCommandShim -ShimPath (Join-Path $localBin "update-devkit.cmd") -TargetCommandPath (Join-Path $codexBin "update-devkit.cmd")
   Install-DevKitShellShim -ShimPath (Join-Path $localBin "update-ccx") -TargetScriptPath (Join-Path $codexBin "update-ccx.sh")
@@ -575,6 +664,11 @@ function Sync-DevKitOpenCodeRuntime([string]$UserHome, [scriptblock]$Logger) {
     -ExpectedLegacyTarget (Join-Path $UserHome ".agent\skills") `
     -AssertLegacySkillRoot
   Ensure-DevKitDirectoryContainer -Path $opencodeCommands
+  Remove-DevKitLegacyOpenCodeManagedEntries `
+    -OpenCodeSkillsRoot $opencodeSkills `
+    -PluginSkillsRoot (Join-Path $pluginRoot "skills") `
+    -LegacySourceSkillsRoot (Join-Path $opencodeRoot "devkit\source\plugins\devkit\skills") `
+    -MarketplaceSkillsRoot (Join-Path $UserHome ".claude\plugins\marketplaces\murakotaro4\plugins\devkit\skills")
   Remove-DevKitStaleManagedSkillLinks -SkillsRoot $opencodeSkills -PluginSkillsRoot (Join-Path $pluginRoot "skills")
 
   foreach ($skill in (Get-DevKitSkillManifest)) {
@@ -588,6 +682,8 @@ function Sync-DevKitOpenCodeRuntime([string]$UserHome, [scriptblock]$Logger) {
   Ensure-DevKitManagedFile `
     -SourcePath (Join-Path $pluginRoot "templates\opencode\commands\dig.md") `
     -DestinationPath (Join-Path $opencodeCommands "dig.md")
+
+  Set-DevKitPersistedSourceRoot -StateFile (Join-Path $opencodeDevKit "source-root.txt") -RepoRoot $repoRoot
 
   return [pscustomobject]@{
     Runtime = "opencode"

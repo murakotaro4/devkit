@@ -33,9 +33,74 @@ devkit_repo_url() {
 devkit_default_source_root() {
   if [[ -n "${DEVKIT_SOURCE_ROOT:-}" ]]; then
     printf '%s\n' "$DEVKIT_SOURCE_ROOT"
-  else
-    printf '%s\n' "$HOME/cursor/devkit"
+    return
   fi
+
+  local persisted_root
+  persisted_root="$(devkit_read_persisted_source_root "$HOME" || true)"
+  if [[ -n "$persisted_root" ]]; then
+    printf '%s\n' "$persisted_root"
+    return
+  fi
+
+  printf '%s\n' "$HOME/cursor/devkit"
+}
+
+devkit_source_root_state_files() {
+  local user_home="${1:-$HOME}"
+  printf '%s\n' \
+    "$user_home/.codex/devkit/source-root.txt" \
+    "$user_home/.config/opencode/devkit/source-root.txt"
+}
+
+devkit_read_persisted_source_root() {
+  local user_home="${1:-$HOME}"
+  local state_file
+
+  while IFS= read -r state_file; do
+    [[ -f "$state_file" ]] || continue
+
+    local candidate
+    candidate="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//')"
+    [[ -n "$candidate" ]] || continue
+
+    local repo_root
+    repo_root="$(devkit_repo_root_from_source_hint "$candidate" || true)"
+    if [[ -n "$repo_root" ]]; then
+      printf '%s\n' "$repo_root"
+      return 0
+    fi
+  done < <(devkit_source_root_state_files "$user_home")
+
+  return 1
+}
+
+devkit_persist_source_root() {
+  local state_file="$1"
+  local repo_root="$2"
+  ensure_devkit_dir "$(dirname "$state_file")"
+  printf '%s\n' "$repo_root" >"$state_file"
+}
+
+devkit_script_checkout_root() {
+  [[ -n "${SCRIPT_DIR:-}" ]] || return 1
+
+  local hint_root repo_root
+  hint_root="$(cd "$SCRIPT_DIR/../../.." && pwd -P)"
+
+  if command -v git >/dev/null 2>&1; then
+    local git_root
+    git_root="$(git -C "$hint_root" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [[ -n "$git_root" ]]; then
+      devkit_resolve_path "$git_root"
+      return 0
+    fi
+  fi
+
+  repo_root="$(devkit_repo_root_from_source_hint "$hint_root" || true)"
+  [[ -n "$repo_root" ]] || return 1
+  [[ -e "$repo_root/.git" ]] || return 1
+  printf '%s\n' "$repo_root"
 }
 
 devkit_resolve_path() {
@@ -112,10 +177,19 @@ devkit_repo_root_from_source_hint() {
 }
 
 ensure_devkit_repo_root() {
-  local preferred_root repo_url repo_root fallback_root
+  local preferred_root repo_url repo_root script_root
   preferred_root="$(devkit_default_source_root)"
   repo_url="$(devkit_repo_url)"
-  repo_root="$(devkit_repo_root_from_source_hint "$preferred_root" || true)"
+  if [[ -n "${DEVKIT_SOURCE_ROOT:-}" ]]; then
+    repo_root="$(devkit_repo_root_from_source_hint "$preferred_root" || true)"
+  else
+    script_root="$(devkit_script_checkout_root || true)"
+    if [[ -n "$script_root" ]]; then
+      repo_root="$script_root"
+    else
+      repo_root="$(devkit_repo_root_from_source_hint "$preferred_root" || true)"
+    fi
+  fi
 
   if [[ -z "$repo_root" ]]; then
     if [[ -e "$preferred_root" ]] && [[ -n "$(find "$preferred_root" -mindepth 1 -maxdepth 1 2>/dev/null | head -1)" ]]; then
@@ -130,24 +204,9 @@ ensure_devkit_repo_root() {
         repo_root="$(devkit_repo_root_from_source_hint "$preferred_root" || true)"
       else
         rm -rf "$preferred_root"
-        devkit_log "Clone failed for $preferred_root. Falling back to an existing snapshot if available."
+        printf 'DEVKIT_REPO_CLONE_FAILED: %s\n' "$preferred_root" >&2
+        return 1
       fi
-    fi
-  fi
-
-  if [[ -z "$repo_root" && -n "${SCRIPT_DIR:-}" ]]; then
-    fallback_root="$(devkit_repo_root_from_source_hint "$(cd "$SCRIPT_DIR/../../.." && pwd -P)" || true)"
-    if [[ -n "$fallback_root" ]]; then
-      devkit_log "Using the existing DevKit source snapshot: $fallback_root"
-      repo_root="$fallback_root"
-    fi
-  fi
-
-  if [[ -z "$repo_root" && -d "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit" ]]; then
-    fallback_root="$(devkit_repo_root_from_source_hint "$HOME/.claude/plugins/marketplaces/murakotaro4" || true)"
-    if [[ -n "$fallback_root" ]]; then
-      devkit_log "Using the Marketplace DevKit snapshot: $fallback_root"
-      repo_root="$fallback_root"
     fi
   fi
 
@@ -308,6 +367,29 @@ prune_legacy_codex_managed_entries() {
   done < <(find "$legacy_root" -mindepth 1 -maxdepth 1 -type l 2>/dev/null)
 }
 
+prune_legacy_opencode_managed_entries() {
+  local opencode_root="$1"
+  local plugin_skills_root="$2"
+  local legacy_source_skills_root="$3"
+  local marketplace_skills_root="$4"
+  [[ -d "$opencode_root" ]] || return 0
+
+  while IFS= read -r entry; do
+    local name actual_target
+    name="$(basename "$entry")"
+    if ! (devkit_skill_manifest; devkit_retired_skill_entries) | grep -Fxq "$name"; then
+      continue
+    fi
+
+    actual_target="$(devkit_resolve_link_target "$entry")"
+    case "$actual_target" in
+      "$plugin_skills_root"/*|"$legacy_source_skills_root"/*|"$marketplace_skills_root"/*)
+        rm -rf "$entry"
+        ;;
+    esac
+  done < <(find "$opencode_root" -mindepth 1 -maxdepth 1 -type l 2>/dev/null)
+}
+
 install_devkit_shell_shim() {
   local shim_path="$1"
   local target_script="$2"
@@ -325,10 +407,13 @@ sync_devkit_codex_runtime() {
   local codex_root="$user_home/.codex"
   local codex_skills="$user_home/.agents/skills"
   local legacy_codex_skills="$codex_root/skills"
+  local codex_bin="$codex_root/bin"
   local local_bin="$user_home/.local/bin"
 
   local repo_root
   repo_root="$(ensure_devkit_repo_root)"
+  ensure_devkit_dir "$codex_root"
+  ensure_devkit_dir "$codex_bin"
   ensure_directory_container "$codex_skills"
 
   local plugin_root="$repo_root/plugins/devkit"
@@ -345,8 +430,21 @@ sync_devkit_codex_runtime() {
       "$codex_skills/$skill"
   done < <(devkit_skill_manifest)
 
-  install_devkit_shell_shim "$local_bin/update-devkit" "$plugin_root/scripts/update-devkit.sh"
-  install_devkit_shell_shim "$local_bin/update-ccx" "$plugin_root/scripts/update-ccx.sh"
+  local script_name
+  for script_name in \
+    devkit-runtime-sync.sh \
+    update-ccx.sh \
+    update-devkit.sh
+  do
+    ensure_managed_file \
+      "$plugin_root/scripts/$script_name" \
+      "$codex_bin/$script_name" \
+      true
+  done
+
+  devkit_persist_source_root "$codex_root/devkit/source-root.txt" "$repo_root"
+  install_devkit_shell_shim "$local_bin/update-devkit" "$codex_bin/update-devkit.sh"
+  install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
 }
 
 sync_devkit_opencode_runtime() {
@@ -361,6 +459,11 @@ sync_devkit_opencode_runtime() {
   ensure_directory_container "$opencode_commands"
 
   local plugin_root="$repo_root/plugins/devkit"
+  prune_legacy_opencode_managed_entries \
+    "$opencode_skills" \
+    "$plugin_root/skills" \
+    "$opencode_root/devkit/source/plugins/devkit/skills" \
+    "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"
   prune_devkit_managed_skill_links "$opencode_skills" "$plugin_root/skills"
   local skill
   while IFS= read -r skill; do
@@ -374,6 +477,8 @@ sync_devkit_opencode_runtime() {
     "$plugin_root/templates/opencode/commands/dig.md" \
     "$opencode_commands/dig.md" \
     false
+
+  devkit_persist_source_root "$opencode_root/devkit/source-root.txt" "$repo_root"
 }
 
 ensure_devkit_hooks() {

@@ -29,7 +29,7 @@ function runRuntimeSmokeChecks() {
   const runtimeSyncSh = path.join(root, "plugins/devkit/scripts/devkit-runtime-sync.sh");
   const scriptDir = path.dirname(runtimeSyncSh);
 
-  const fallbackHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-fallback-"));
+  const checkoutHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-checkout-"));
   try {
     execFileSync(
       "bash",
@@ -37,8 +37,7 @@ function runRuntimeSmokeChecks() {
         "-lc",
         [
           "set -euo pipefail",
-          `export HOME=${bashQuote(fallbackHome)}`,
-          "export DEVKIT_REPO_URL='/definitely/missing/devkit.git'",
+          `export HOME=${bashQuote(checkoutHome)}`,
           `SCRIPT_DIR=${bashQuote(scriptDir)}`,
           `source ${bashQuote(runtimeSyncSh)}`,
           "ROOT=$(ensure_devkit_repo_root)",
@@ -49,7 +48,57 @@ function runRuntimeSmokeChecks() {
       { cwd: root, stdio: "pipe", env: process.env },
     );
   } finally {
-    fs.rmSync(fallbackHome, { recursive: true, force: true });
+    fs.rmSync(checkoutHome, { recursive: true, force: true });
+  }
+
+  const worktreeHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-worktree-"));
+  try {
+    execFileSync(
+      "bash",
+      [
+        "-lc",
+        [
+          "set -euo pipefail",
+          `export HOME=${bashQuote(worktreeHome)}`,
+          'WORKTREE_ROOT="$HOME/worktree-devkit"',
+          'mkdir -p "$WORKTREE_ROOT/plugins"',
+          `ln -s ${bashQuote(path.join(root, "plugins/devkit"))} "$WORKTREE_ROOT/plugins/devkit"`,
+          'printf "gitdir: /tmp/devkit-fake-worktree\\n" > "$WORKTREE_ROOT/.git"',
+          'export SCRIPT_DIR="$WORKTREE_ROOT/plugins/devkit/scripts"',
+          `source ${bashQuote(runtimeSyncSh)}`,
+          'ROOT="$(devkit_script_checkout_root)"',
+          'test "$ROOT" = "$WORKTREE_ROOT"',
+        ].join("\n"),
+      ],
+      { cwd: root, stdio: "pipe", env: process.env },
+    );
+  } finally {
+    fs.rmSync(worktreeHome, { recursive: true, force: true });
+  }
+
+  const explicitRootHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-explicit-root-"));
+  try {
+    execFileSync(
+      "bash",
+      [
+        "-lc",
+        [
+          "set -euo pipefail",
+          `export HOME=${bashQuote(explicitRootHome)}`,
+          'ALT_ROOT="$HOME/alt-devkit"',
+          'mkdir -p "$ALT_ROOT/plugins"',
+          `ln -s ${bashQuote(path.join(root, "plugins/devkit"))} "$ALT_ROOT/plugins/devkit"`,
+          'export DEVKIT_SOURCE_ROOT="$ALT_ROOT"',
+          `SCRIPT_DIR=${bashQuote(scriptDir)}`,
+          `source ${bashQuote(runtimeSyncSh)}`,
+          'ROOT=$(ensure_devkit_repo_root)',
+          'test "$ROOT" = "$ALT_ROOT"',
+        ].join("\n"),
+      ],
+      { cwd: root, stdio: "pipe", env: process.env },
+    );
+  } finally {
+    fs.rmSync(explicitRootHome, { recursive: true, force: true });
   }
 
   const cleanupHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-cleanup-"));
@@ -73,12 +122,74 @@ function runRuntimeSmokeChecks() {
           'test ! -e "$HOME/.codex/skills/dig"',
           'test ! -e "$HOME/.codex/skills/dig-core"',
           'test -d "$HOME/.codex/skills/custom-keep"',
+          `test "$(head -n 1 "$HOME/.codex/devkit/source-root.txt")" = ${bashQuote(root)}`,
+          'grep -F "$HOME/.codex/bin/update-devkit.sh" "$HOME/.local/bin/update-devkit"',
         ].join("\n"),
       ],
       { cwd: root, stdio: "pipe", env: process.env },
     );
   } finally {
     fs.rmSync(cleanupHome, { recursive: true, force: true });
+  }
+
+  const opencodeCleanupHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-opencode-cleanup-"));
+  try {
+    execFileSync(
+      "bash",
+      [
+        "-lc",
+        [
+          "set -euo pipefail",
+          `export HOME=${bashQuote(opencodeCleanupHome)}`,
+          `export DEVKIT_SOURCE_ROOT=${bashQuote(root)}`,
+          `SCRIPT_DIR=${bashQuote(scriptDir)}`,
+          'mkdir -p "$HOME/.config/opencode/skills" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills" "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"',
+          'mkdir -p "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig-core"',
+          'mkdir -p "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/dig-opencode"',
+          `ln -s ${bashQuote(path.join(opencodeCleanupHome, ".config/opencode/devkit/source/plugins/devkit/skills/dig"))} "$HOME/.config/opencode/skills/dig"`,
+          `ln -s ${bashQuote(path.join(opencodeCleanupHome, ".config/opencode/devkit/source/plugins/devkit/skills/dig-core"))} "$HOME/.config/opencode/skills/dig-core"`,
+          `ln -s ${bashQuote(path.join(opencodeCleanupHome, ".claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/dig-opencode"))} "$HOME/.config/opencode/skills/dig-opencode"`,
+          'mkdir -p "$HOME/.config/opencode/skills/custom-keep"',
+          `source ${bashQuote(runtimeSyncSh)}`,
+          'sync_devkit_opencode_runtime "$HOME"',
+          `test "$(readlink "$HOME/.config/opencode/skills/dig")" = ${bashQuote(path.join(root, "plugins/devkit/skills/dig"))}`,
+          'test ! -e "$HOME/.config/opencode/skills/dig-core"',
+          'test ! -e "$HOME/.config/opencode/skills/dig-opencode"',
+          'test -d "$HOME/.config/opencode/skills/custom-keep"',
+          `test "$(head -n 1 "$HOME/.config/opencode/devkit/source-root.txt")" = ${bashQuote(root)}`,
+        ].join("\n"),
+      ],
+      { cwd: root, stdio: "pipe", env: process.env },
+    );
+  } finally {
+    fs.rmSync(opencodeCleanupHome, { recursive: true, force: true });
+  }
+
+  const cloneFailureHome = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-clone-fail-"));
+  const detachedScriptDir = fs.mkdtempSync(path.join(os.tmpdir(), "devkit-detached-script-"));
+  try {
+    const detachedRuntimeSync = path.join(detachedScriptDir, "devkit-runtime-sync.sh");
+    fs.copyFileSync(runtimeSyncSh, detachedRuntimeSync);
+    execFileSync(
+      "bash",
+      [
+        "-lc",
+        [
+          "set -euo pipefail",
+          `export HOME=${bashQuote(cloneFailureHome)}`,
+          "export DEVKIT_REPO_URL='/definitely/missing/devkit.git'",
+          `SCRIPT_DIR=${bashQuote(detachedScriptDir)}`,
+          `source ${bashQuote(detachedRuntimeSync)}`,
+          '! ensure_devkit_repo_root',
+          'test ! -e "$HOME/cursor/devkit"',
+          'test ! -e "$HOME/.codex/devkit/source-root.txt"',
+        ].join("\n"),
+      ],
+      { cwd: root, stdio: "pipe", env: process.env },
+    );
+  } finally {
+    fs.rmSync(cloneFailureHome, { recursive: true, force: true });
+    fs.rmSync(detachedScriptDir, { recursive: true, force: true });
   }
 }
 
@@ -175,8 +286,14 @@ for (const manifest of [
   }
 }
 
-if (!runtimeSyncSh.includes("cursor/devkit") && !runtimeSyncPs1.includes("cursor\\devkit")) {
-  problems.push("runtime sync scripts missing canonical ~/cursor/devkit source root");
+if (!runtimeSyncSh.includes("source-root.txt") || !runtimeSyncPs1.includes("source-root.txt")) {
+  problems.push("runtime sync scripts missing persisted source root support");
+}
+if (!runtimeSyncSh.includes("DEVKIT_SOURCE_ROOT") || !runtimeSyncPs1.includes("DEVKIT_SOURCE_ROOT")) {
+  problems.push("runtime sync scripts missing DEVKIT_SOURCE_ROOT override");
+}
+if (!runtimeSyncSh.includes("prune_legacy_opencode_managed_entries") || !runtimeSyncPs1.includes("Remove-DevKitLegacyOpenCodeManagedEntries")) {
+  problems.push("runtime sync scripts missing OpenCode legacy cleanup");
 }
 
 try {
