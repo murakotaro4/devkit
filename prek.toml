@@ -5,6 +5,14 @@ default_install_hook_types = ["pre-commit", "pre-push"]
 repo = "local"
 
 [[repos.hooks]]
+id = "utf8-bom"
+name = "Reject UTF-8 BOM in staged docs"
+entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_utf8_bom.py"
+language = "system"
+pass_filenames = false
+stages = ["pre-commit"]
+
+[[repos.hooks]]
 id = "dig-routing"
 name = "Check dig routing"
 entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_dig_routing.py"

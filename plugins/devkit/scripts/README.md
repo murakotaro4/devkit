@@ -9,7 +9,9 @@
   - `uv sync --project plugins/devkit`
   - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast`
   - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full`
+- devkit repo の Git hook 標準は `prek.toml`。
 - `prek` と Claude hook も同じ Python ハーネスを呼び出す。
+- `check_utf8_bom.py` は `pre-commit` では staged docs/config、`verify-fast` / `verify-full` では repo 全体の UTF-8 BOM を弾く。
 - `node` / `npm` / `fnm` は外部 CLI 更新用にのみ残し、repo 内の check / hook は使わない。
 
 ## update-devkit / update-ccx

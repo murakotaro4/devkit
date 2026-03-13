@@ -1,18 +1,13 @@
 #!/bin/bash
-# Reject staged files containing UTF-8 BOM (EF BB BF)
-# Checks the index (staged content), not the working tree
 set -euo pipefail
 
-found_bom=0
-while IFS= read -d '' -r f; do
-  # Subshell disables pipefail to avoid SIGPIPE false negative
-  if ( set +o pipefail; git show ":$f" 2>/dev/null | head -c 3 | od -An -tx1 -N3 | tr -d ' \n' | grep -q 'efbbbf' ); then
-    printf 'ERROR: %s contains UTF-8 BOM (in staged content)\n' "$f" >&2
-    found_bom=1
-  fi
-done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' '*.md' '*.yaml' '*.yml')
+cat >&2 <<'EOF'
+ERROR: devkit repo hooks are now managed by prek, not core.hooksPath=.githooks.
 
-if [ "$found_bom" -eq 1 ]; then
-  printf '\nFix: sed -i '\''1s/^\xEF\xBB\xBF//'\'' <file> && git add <file>\n' >&2
-  exit 1
-fi
+Run:
+  cargo install prek
+  git config --unset core.hooksPath
+  prek install --hook-type pre-commit --hook-type pre-push
+EOF
+
+exit 1
