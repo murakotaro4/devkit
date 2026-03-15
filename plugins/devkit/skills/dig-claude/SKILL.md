@@ -136,7 +136,7 @@ rm -f /tmp/dig_plan_review_$$.md
 
 - `critical=0` かつ `high=0` なら通過
 - それ以外は修正して再レビュー
-- 3 回超過または `REVIEW_COUNTS` パース不能なら停止
+- 3 回目の失敗（`plan_review_attempts >= 3`）または `REVIEW_COUNTS` パース不能なら停止
 
 ### Phase 6: 実装
 

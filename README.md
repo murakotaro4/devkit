@@ -446,6 +446,10 @@ Codex CLI は**推奨**であり、通常フェーズの必須前提ではない
 - `RERUN_COMMAND: <one-line command>`
 - `DIAGNOSTIC_COMMAND: <one-line command>`
 
+### dig-claude の block 昇格
+
+`dig-claude` の Phase 5（計画レビュー）は REVIEW_GATE_PLAN が必須。`critical=0 high=0` になるまで修正→再レビューを繰り返し、3 回目の失敗（`plan_review_attempts >= 3`）で `DIG_CLAUDE_REVIEW_BLOCKED` で commit/push を block して停止する。
+
 ### CLI の確認方法
 
 レビュー用CLIが正しくインストール・PATH設定されているか確認:

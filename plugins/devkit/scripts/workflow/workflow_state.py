@@ -83,6 +83,8 @@ def default_dig_state() -> dict[str, Any]:
         "parent_task_id": "",
         "subtask_ids": [],
         "subtask_subjects": [],
+        "plan_review_attempts": 0,
+        "review_blocked": False,
     }
 
 

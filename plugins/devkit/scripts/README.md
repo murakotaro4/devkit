@@ -14,6 +14,12 @@
 - `check_utf8_bom.py` は `pre-commit` では staged docs/config、`verify-fast` / `verify-full` では repo 全体の UTF-8 BOM を弾く。
 - `node` / `npm` / `fnm` は外部 CLI 更新用にのみ残し、repo 内の check / hook は使わない。
 
+### hook / gate の block 昇格
+
+- `pre-push` gate は `origin/main` と同じ plugin version のままなら push を block する。
+- `dig-claude` の計画レビュー（REVIEW_GATE_PLAN）は3 回目の失敗（`plan_review_attempts >= 3`）で `DIG_CLAUDE_REVIEW_BLOCKED` で commit/push を block する。block 解除には計画の根本修正が必要。
+- `dig-codex` の Phase 5 は fail-close。レビュー不能時は `DIG_CODEX_PLAN_REVIEW_UNAVAILABLE`、`critical>0` または `high>0` の場合は `DIG_CODEX_PLAN_REVIEW_BLOCKED` で停止する。
+
 ## update-devkit / update-ccx
 
 `update-devkit` が主名称。`update-ccx` は互換 alias。

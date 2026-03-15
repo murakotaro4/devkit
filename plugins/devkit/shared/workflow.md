@@ -153,18 +153,21 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - `standard_team` と `expanded_team` では `Reviewer` を `Planner` と分離する
 - Codex CLI が使える場合は Spark を標準 gate にする
 - Codex CLI が使えない場合は独立した別 agent reviewer で代替する
+- REVIEW_GATE_PLAN は必須。`critical=0 high=0` になるまで修正→再レビューを繰り返す。3 回目の失敗で停止（`DIG_CLAUDE_REVIEW_BLOCKED`）
 
 ### Phase 6: 実装
 
 - `Implementer` は自分の担当差分を作る
 - implementer が複数なら `write_scope` に従って責務を分ける
 - `Coordinator` が最終統合責任を持つ
+- 計画には Phase 6 タスク materialization を含めること: 親タスク `[Phase 6] <topic>` + サブタスク `[Task N] <summary>` + 依存関係
 
 ### Phase 7: 実装レビューと検証
 
 - `Reviewer` は implementer と別 agent であること
 - `small` でも独立 reviewer は省略しない
 - `medium` 以上では追加の review 視点を入れる
+- 計画には各タスクの REVIEW_GATE_SUBTASK 判定（必須 or スキップ可 + 理由）と REVIEW_GATE_INTEGRATION 判定を明記すること
 
 ### Phase 8: コミットとプッシュ
 

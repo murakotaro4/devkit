@@ -143,17 +143,17 @@ def main() -> int:
     has_review = "plan_review_completed" in phases_passed and "implementation_review_completed" in phases_passed
     if is_git_commit and not has_review:
         emit_decision(
-            "ask",
+            "block",
             "git commit detected without review phase marker",
-            "[devkit-workflow] ⚠️ git commit が検出されましたが、レビューゲートの完了マーカーがありません。\nagent team ワークフローの Phase 5 または Phase 7 を完了してからコミットしてください。",
+            "[devkit-workflow] ⛔ Phase 5 と Phase 7 のレビューが完了していません。plan_review_completed と implementation_review_completed が必要です",
         )
         return 0
 
     if is_git_push and "commit_review_completed" not in phases_passed:
         emit_decision(
-            "ask",
+            "block",
             "git push detected without commit review marker",
-            "[devkit-workflow] ⚠️ git push が検出されましたが、コミット前確認（Phase 8 Step 2）の完了マーカーがありません。",
+            "[devkit-workflow] ⛔ Phase 8 のコミットレビューが完了していません。commit_review_completed が必要です",
         )
         return 0
 
