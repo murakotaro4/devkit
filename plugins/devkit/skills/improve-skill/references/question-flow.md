@@ -1,15 +1,12 @@
 # Improve Skill Question Flow
 
-`improve-skill` は実行ごとに `AskUserQuestionTool` で分岐を確定する。
+`improve-skill` のデフォルト動作は `auto-retro`（セッション振り返り自動修正）。
+`--refresh` または `--create` を明示した場合のみ、以下の質問フローに入る。
 
-## Step 1: モード確定（必須）
+## Step 1: モード確定（--refresh / --create 時のみ）
 
-最初の質問で次の2択を提示する。
-
-- `refresh`: 既存スキルへ現在セッション内容を反映した改善
-- `create`: 現在セッション内容から新規スキル案を作成
-
-未回答・曖昧回答の場合は再質問して停止する。
+`--refresh` または `--create` で呼び出された場合、対応するモードで進める。
+引数なし（デフォルト）の場合はこのフローに入らず、auto-retro が実行される。
 
 ## Step 2: 共通深掘り（必須）
 
