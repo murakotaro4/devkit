@@ -78,6 +78,8 @@ def default_dig_state() -> dict[str, Any]:
         "active": False,
         "topic": "",
         "session_started_at": 0.0,
+        "requirements_confirmed": False,
+        "ask_user_count": 0,
         "phase5_approved": False,
         "phase6_tasks_registered": False,
         "parent_task_id": "",

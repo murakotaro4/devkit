@@ -134,6 +134,9 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
   - Codex Plan Mode: request_user_input
   - OpenCode: question（不可時はメッセージ質問）
 - `Coordinator` または担当 interviewer が目的、成功条件、制約、非対象を固定する
+- Phase 2 は最低 1 ラウンドの質問を必須とする
+- 1 ラウンドにつき原則 4 問、選択肢付きで質問する
+- 完了時に `requirements_confirmed` トークンを記録する
 
 ### Phase 3: 調査
 

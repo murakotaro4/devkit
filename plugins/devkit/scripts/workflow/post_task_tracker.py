@@ -86,6 +86,9 @@ def main() -> int:
     state["current_phase_token"] = latest_phase
     state["phases_passed"] = merged
 
+    if dig.get("active") and "requirements_confirmed" in merged and not dig.get("requirements_confirmed"):
+        dig["requirements_confirmed"] = True
+
     tool = str(parsed.get("tool_name", "") or parsed.get("toolName", "") or "")
     command = str(tool_input.get("command", ""))
     tool_response = str(parsed.get("tool_response", "") or tool_input.get("tool_response", "") or "")

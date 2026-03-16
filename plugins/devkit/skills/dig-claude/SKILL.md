@@ -101,12 +101,14 @@ dig_sanitize() {
 
 ### Phase 2: 要件ヒアリング
 
-AskUserQuestionTool で深掘りする。
+**Phase 2 をスキップしてはならない**。最低 4 問を 1 ラウンドとして必ず実行する。
 
-- 原則 4 問、複数選択優先
-- 選択肢には description を付ける
+- 最低 1 ラウンド必須。4 問を AskUserQuestionTool で同時に質問する
+- 4 問のカバー範囲: (a) 成功基準, (b) 制約・限界, (c) 対象外, (d) 優先度・トレードオフ
+- 選択肢には description を付ける。`multiSelect: true` を活用してユーザーの回答負荷を下げる
 - 最大 2 ラウンドまで再質問可
-- AskUserQuestion が失敗したら停止する
+- AskUserQuestion が失敗したら `DIG_CLAUDE_QUESTION_FAILED` で停止する
+- Phase 2 完了後に `requirements_confirmed` トークンが記録される（PostToolUse hook による自動設定）
 
 質問は「非自明」「選択肢付き」「次の判断に効く」ものに限定する。
 
@@ -137,9 +139,16 @@ plan には最低限以下を入れる。
 
 分解済み plan を Codex でレビューする。
 
+レビュー実行コマンド:
+- REVIEW_PRIMARY_CMD: `codex exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium"`
+- REVIEW_FALLBACK_CMD: `codex exec -m gpt-5.4 -c model_reasoning_effort="medium"`
+- REVIEW_TIMEOUT_SECONDS: 180
+- REVIEW_BACKOFF_SECONDS: 5
+- REVIEW_RETRY_POLICY: no_same_model_retry_one_fallback_hop
+
 ```bash
 dig_sanitize <plan_file_path> /tmp/dig_plan_review_$$.md
-codex exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium" \
+REVIEW_PRIMARY_CMD \
   "以下のプランファイルをレビューしてください: /tmp/dig_plan_review_$$.md。
    観点: 実現可能性、既存構造との整合性、抜け漏れ、リスク、依存関係。
    最終行に REVIEW_RESULT_MARKER=REVIEW_COUNTS と REVIEW_COUNTS critical=<int> high=<int> を必ず出力してください"
@@ -148,7 +157,9 @@ rm -f /tmp/dig_plan_review_$$.md
 
 - `critical=0` かつ `high=0` なら通過
 - それ以外は修正して再レビュー
-- 3 回目の失敗（`plan_review_attempts >= 3`）または `REVIEW_COUNTS` パース不能なら停止
+- PRIMARY がタイムアウト/rate limit/エラーなら 5 秒待機後 REVIEW_FALLBACK_CMD で 1 回リトライ
+- 両方失敗なら `DIG_CLAUDE_PLAN_REVIEW_UNAVAILABLE` で停止
+- 3 回目の失敗（`plan_review_attempts >= 3`）または `REVIEW_COUNTS` パース不能なら `DIG_CLAUDE_REVIEW_BLOCKED` で停止
 
 ### Phase 6: 実装
 
@@ -215,6 +226,8 @@ rm -f /tmp/dig_subtask_review_$$.diff
 ```
 
 - 変更 5 行未満またはドキュメントのみはスキップ可
+- PRIMARY がタイムアウト/rate limit/エラーなら 5 秒待機後 REVIEW_FALLBACK_CMD で 1 回リトライ
+- 両方失敗なら `DIG_CLAUDE_SUBTASK_REVIEW_UNAVAILABLE` で停止
 - レビュー通過後にだけ `TaskUpdate(status="completed")` する
 
 #### REVIEW_GATE_INTEGRATION
@@ -231,6 +244,8 @@ rm -f /tmp/dig_integration_review_$$.diff
 ```
 
 - 0 件または 1 件のサブタスクならスキップ可
+- PRIMARY がタイムアウト/rate limit/エラーなら 5 秒待機後 REVIEW_FALLBACK_CMD で 1 回リトライ
+- 両方失敗なら `DIG_CLAUDE_INTEGRATION_REVIEW_UNAVAILABLE` で停止
 - agent-parallel では worktree 差分を結合した diff を対象にする
 
 ### Phase 8: コミットとプッシュ
@@ -267,6 +282,9 @@ dig-core 契約の「セッション振り返り」に従う。
 | `DIG_CLAUDE_SUBTASK_REVIEW_BLOCKED` | サブタスクレビューが critical/high 未解消 |
 | `DIG_CLAUDE_INTEGRATION_REVIEW_BLOCKED` | 統合レビューが critical/high 未解消 |
 | `DIG_CLAUDE_CODEX_UNAVAILABLE` | `codex exec` が使えない |
+| `DIG_CLAUDE_PLAN_REVIEW_UNAVAILABLE` | PRIMARY / FALLBACK 両方が利用不能 |
+| `DIG_CLAUDE_SUBTASK_REVIEW_UNAVAILABLE` | サブタスクレビューで PRIMARY / FALLBACK 両方が利用不能 |
+| `DIG_CLAUDE_INTEGRATION_REVIEW_UNAVAILABLE` | 統合レビューで PRIMARY / FALLBACK 両方が利用不能 |
 
 停止時は必ず以下を出す。
 

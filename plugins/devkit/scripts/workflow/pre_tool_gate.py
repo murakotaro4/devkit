@@ -74,6 +74,11 @@ def tool_name(parsed: dict[str, object]) -> str:
     return ""
 
 
+def _is_plan_file(tool_input: dict[str, object]) -> bool:
+    file_path = str(tool_input.get("file_path", ""))
+    return "/.claude/plans/" in file_path and file_path.endswith(".md")
+
+
 def is_dig_implementation_tool(name: str, tool_input: dict[str, object]) -> bool:
     if name in {"Edit", "Write", "MultiEdit", "Agent"}:
         return True
@@ -129,6 +134,18 @@ def main() -> int:
 
     dig = sync_dig_tasks_from_store(state, session_id)
     write_json(state_path, state)
+
+    if dig.get("active") and name in {"Write", "Edit", "MultiEdit"} and not dig.get("requirements_confirmed"):
+        if _is_plan_file(tool_input):
+            emit_decision(
+                "ask",
+                "Plan file write before Phase 2 requirements confirmed",
+                "[devkit-dig] ⚠️ Phase 2 の要件ヒアリングが完了していません。"
+                "AskUserQuestion で最低 1 ラウンドの質問を行ってから "
+                "Phase 4 に進んでください。"
+                "Phase 2 を完了済みの場合はユーザー承認で続行できます。",
+            )
+            return 0
 
     if dig.get("active") and name == "ExitPlanMode" and not dig.get("phase5_approved"):
         emit_decision(

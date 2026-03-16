@@ -68,6 +68,11 @@ def main() -> int:
         "PreToolUse": "pre_tool_gate.py",
         "PostToolUse": "post_task_tracker.py",
     }
+    # Also verify AskUserQuestion PostToolUse binding
+    post_hooks = hooks_root.get("PostToolUse", [])
+    post_serialized = json.dumps(post_hooks, ensure_ascii=False) if isinstance(post_hooks, list) else ""
+    if "post_ask_user.py" not in post_serialized:
+        raise RuntimeError("hooks.json missing PostToolUse -> post_ask_user.py binding for AskUserQuestion")
     for event_name, script_name in expected.items():
         event_hooks = hooks_root.get(event_name)
         if not isinstance(event_hooks, list) or not event_hooks:
@@ -173,6 +178,54 @@ def main() -> int:
         stale_payload = json.loads(stale_blocked.stdout or "{}")
         if stale_payload.get("hookSpecificOutput", {}).get("permissionDecision") != "block":
             raise RuntimeError(f"stale tasks should not satisfy Phase 6 registration: {stale_blocked.stdout}")
+
+        # --- Phase 2 gate tests ---
+        phase2_session = "dig-phase2-gate-test"
+        run_hook("user_prompt_submit.py", {"session_id": phase2_session, "prompt": "/dig phase2 test"}, env)
+
+        # Write to plan file without requirements_confirmed → ask
+        plan_write_blocked = run_hook(
+            "pre_tool_gate.py",
+            {
+                "session_id": phase2_session,
+                "tool_name": "Write",
+                "tool_input": {"file_path": "/home/user/.claude/plans/test-plan.md", "content": "# Plan"},
+            },
+            env,
+        )
+        plan_write_payload = json.loads(plan_write_blocked.stdout or "{}")
+        plan_write_decision = plan_write_payload.get("hookSpecificOutput", {}).get("permissionDecision")
+        if plan_write_decision != "ask":
+            raise RuntimeError(f"Phase 2 gate: plan Write without requirements_confirmed should ask, got: {plan_write_decision}")
+
+        # Simulate AskUserQuestion completion → requirements_confirmed = True
+        ask_user = run_hook(
+            "post_ask_user.py",
+            {"session_id": phase2_session, "tool_name": "AskUserQuestion", "tool_input": {}},
+            env,
+        )
+        if ask_user.returncode != 0:
+            raise RuntimeError(f"post_ask_user failed: {ask_user.stderr}")
+
+        phase2_state = load_state(home, phase2_session)
+        phase2_dig = phase2_state.get("dig", {})
+        if not isinstance(phase2_dig, dict) or not phase2_dig.get("requirements_confirmed"):
+            raise RuntimeError("post_ask_user did not set requirements_confirmed")
+
+        # Write to plan file with requirements_confirmed → pass
+        plan_write_allowed = run_hook(
+            "pre_tool_gate.py",
+            {
+                "session_id": phase2_session,
+                "tool_name": "Write",
+                "tool_input": {"file_path": "/home/user/.claude/plans/test-plan.md", "content": "# Plan"},
+            },
+            env,
+        )
+        plan_write_allowed_payload = json.loads(plan_write_allowed.stdout or "{}")
+        plan_write_allowed_decision = plan_write_allowed_payload.get("hookSpecificOutput", {}).get("permissionDecision")
+        if plan_write_allowed_decision != "pass":
+            raise RuntimeError(f"Phase 2 gate: plan Write with requirements_confirmed should pass, got: {plan_write_allowed_decision}")
 
         stop = run_hook("stop_dig_session.py", {"session_id": session_id}, env)
         if stop.returncode != 0:

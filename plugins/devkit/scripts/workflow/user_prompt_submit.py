@@ -53,6 +53,8 @@ def main() -> int:
             "active": True,
             "topic": prompt.strip(),
             "session_started_at": now_timestamp(),
+            "requirements_confirmed": False,
+            "ask_user_count": 0,
             "phase5_approved": False,
             "phase6_tasks_registered": False,
             "parent_task_id": "",
