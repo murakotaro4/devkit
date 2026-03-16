@@ -130,6 +130,17 @@ def main() -> int:
     dig = sync_dig_tasks_from_store(state, session_id)
     write_json(state_path, state)
 
+    if dig.get("active") and name == "ExitPlanMode" and not dig.get("phase5_approved"):
+        emit_decision(
+            "ask",
+            "ExitPlanMode called before Phase 5 plan review",
+            "[devkit-dig] ⚠️ Phase 5 の計画レビューが完了していません。"
+            "ExitPlanMode を呼ぶ前に codex exec で計画レビューを実行し、"
+            "REVIEW_COUNTS critical=0 high=0 を確認してください。"
+            "codex exec が利用不能な場合はユーザー承認で続行できます。",
+        )
+        return 0
+
     if dig.get("active") and dig.get("phase5_approved") and not dig.get("phase6_tasks_registered") and is_dig_implementation_tool(name, tool_input):
         emit_decision(
             "block",
