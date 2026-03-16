@@ -80,8 +80,8 @@ def default_dig_state() -> dict[str, Any]:
         "session_started_at": 0.0,
         "requirements_confirmed": False,
         "ask_user_count": 0,
-        "phase5_approved": False,
-        "phase6_tasks_registered": False,
+        "phase4_approved": False,
+        "phase5_tasks_registered": False,
         "task_ids": [],
         "task_subjects": [],
         "plan_review_attempts": 0,
@@ -92,6 +92,16 @@ def default_dig_state() -> dict[str, Any]:
 def ensure_dig_state(state: dict[str, Any]) -> dict[str, Any]:
     raw = state.get("dig")
     dig = dict(raw) if isinstance(raw, dict) else {}
+    # 旧キーから新キーへのマイグレーション（v3→v4 互換）
+    # merged.update の前に dig 側で変換しないとフィルタで除外される
+    if "phase5_approved" in dig and "phase4_approved" not in dig:
+        dig["phase4_approved"] = dig.pop("phase5_approved")
+    elif "phase5_approved" in dig:
+        dig.pop("phase5_approved")
+    if "phase6_tasks_registered" in dig and "phase5_tasks_registered" not in dig:
+        dig["phase5_tasks_registered"] = dig.pop("phase6_tasks_registered")
+    elif "phase6_tasks_registered" in dig:
+        dig.pop("phase6_tasks_registered")
     merged = default_dig_state()
     merged.update({key: value for key, value in dig.items() if key in merged})
     if not isinstance(merged.get("task_ids"), list):
@@ -142,7 +152,7 @@ def sync_dig_tasks_from_store(state: dict[str, Any], session_id: str) -> dict[st
 
     dig["task_ids"] = [item for item in task_ids if item]
     dig["task_subjects"] = task_subjects
-    dig["phase6_tasks_registered"] = bool(task_subjects)
+    dig["phase5_tasks_registered"] = bool(task_subjects)
     return dig
 
 

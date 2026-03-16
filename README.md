@@ -401,7 +401,7 @@ devkit のワークフローでは、agent team review を前提としつつ、C
 |--------|-----------------|------|
 | 1st | `codex -a never exec review --uncommitted -m gpt-5.3-codex-spark` | Codex CLI が利用可能な場合の標準ゲート |
 | 2nd | `codex -a never exec review --uncommitted -m gpt-5.4 -c 'model_reasoning_effort="medium"'` | spark 不可 / レートリミット / timeout / parse failure |
-| 3rd | 独立した別 agent reviewer + ユーザー通知 | Codex CLI が unavailable または未導入の場合（ただし dig-codex の Phase 5 は適用外） |
+| 3rd | 独立した別 agent reviewer + ユーザー通知 | Codex CLI が unavailable または未導入の場合（ただし dig-codex の Phase 4 は適用外） |
 
 Codex CLI は**推奨**であり、通常フェーズの必須前提ではない。CLI が使えない場合は、implementer と別 agent reviewer で review gate を代替する。
 
@@ -440,7 +440,7 @@ Codex CLI は**推奨**であり、通常フェーズの必須前提ではない
 
 ### dig-codex の例外
 
-`dig-codex` の Phase 5（計画レビュー）は fail-close で運用するため、代替レビューへフォールバックせず停止する。停止時は以下 3 行を必須とする:
+`dig-codex` の Phase 4（計画レビュー）は fail-close で運用するため、代替レビューへフォールバックせず停止する。停止時は以下 3 行を必須とする:
 
 - `ERROR_CODE: DIG_CODEX_PLAN_REVIEW_UNAVAILABLE` または `ERROR_CODE: DIG_CODEX_PLAN_REVIEW_BLOCKED`
 - `RERUN_COMMAND: <one-line command>`
@@ -448,7 +448,7 @@ Codex CLI は**推奨**であり、通常フェーズの必須前提ではない
 
 ### dig-claude の block 昇格
 
-`dig-claude` の Phase 5（計画レビュー）は REVIEW_GATE_PLAN が必須。`critical=0 high=0` になるまで修正→再レビューを繰り返し、3 回目の失敗（`plan_review_attempts >= 3`）で `DIG_CLAUDE_REVIEW_BLOCKED` で commit/push を block して停止する。
+`dig-claude` の Phase 4（計画レビュー）は REVIEW_GATE_PLAN が必須。`critical=0 high=0` になるまで修正→再レビューを繰り返し、3 回目の失敗（`plan_review_attempts >= 3`）で `DIG_CLAUDE_REVIEW_BLOCKED` で commit/push を block して停止する。
 
 ### CLI の確認方法
 
@@ -472,7 +472,7 @@ where.exe codex
 where.exe claude
 ```
 
-どちらも見つからない場合、CLI review gate は実行できない。通常フェーズでは独立した別 agent reviewer + ユーザー通知へ切り替え、`dig-codex` の Phase 5 は停止する。
+どちらも見つからない場合、CLI review gate は実行できない。通常フェーズでは独立した別 agent reviewer + ユーザー通知へ切り替え、`dig-codex` の Phase 4 は停止する。
 
 ## トラブルシュート
 

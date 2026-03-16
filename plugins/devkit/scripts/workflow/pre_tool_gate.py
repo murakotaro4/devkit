@@ -126,7 +126,7 @@ def main() -> int:
             emit_decision(
                 "ask",
                 f"git {action} detected without workflow state",
-                f"[devkit-workflow] ⚠️ git {action} が検出されました。ワークフロー状態が確認できません。レビューゲート（Phase 5/7）を完了していますか？",
+                f"[devkit-workflow] ⚠️ git {action} が検出されました。ワークフロー状態が確認できません。レビューゲート（Phase 4/6）を完了していますか？",
             )
             return 0
         emit_decision("pass", "no workflow state")
@@ -139,40 +139,40 @@ def main() -> int:
         if _is_plan_file(tool_input):
             emit_decision(
                 "ask",
-                "Plan file write before Phase 2 requirements confirmed",
-                "[devkit-dig] ⚠️ Phase 2 の要件ヒアリングが完了していません。"
+                "Plan file write before Phase 1 requirements confirmed",
+                "[devkit-dig] ⚠️ Phase 1 の要件ヒアリングが完了していません。"
                 "AskUserQuestion で最低 1 ラウンドの質問を行ってから "
-                "Phase 4 に進んでください。"
-                "Phase 2 を完了済みの場合はユーザー承認で続行できます。",
+                "Phase 3 に進んでください。"
+                "Phase 1 を完了済みの場合はユーザー承認で続行できます。",
             )
             return 0
 
-    if dig.get("active") and name == "ExitPlanMode" and not dig.get("phase5_approved"):
+    if dig.get("active") and name == "ExitPlanMode" and not dig.get("phase4_approved"):
         emit_decision(
             "ask",
-            "ExitPlanMode called before Phase 5 plan review",
-            "[devkit-dig] ⚠️ Phase 5 の計画レビューが完了していません。"
+            "ExitPlanMode called before Phase 4 plan review",
+            "[devkit-dig] ⚠️ Phase 4 の計画レビューが完了していません。"
             "ExitPlanMode を呼ぶ前に codex exec で計画レビューを実行し、"
             "REVIEW_COUNTS critical=0 high=0 を確認してください。"
             "codex exec が利用不能な場合はユーザー承認で続行できます。",
         )
         return 0
 
-    if dig.get("active") and dig.get("phase5_approved") and not dig.get("phase6_tasks_registered") and is_dig_implementation_tool(name, tool_input):
+    if dig.get("active") and dig.get("phase4_approved") and not dig.get("phase5_tasks_registered") and is_dig_implementation_tool(name, tool_input):
         emit_decision(
             "block",
-            "dig implementation started before Phase 6 task registration",
-            "[devkit-dig] ⛔ Phase 5 は通過していますが、Phase 6 の Tasks が未登録です。"
+            "dig implementation started before Phase 5 task registration",
+            "[devkit-dig] ⛔ Phase 4 は通過していますが、Phase 5 の Tasks が未登録です。"
             "先に [Task 1] 以降のタスクを TaskCreate で登録してから実装に入ってください。",
         )
         return 0
 
-    if dig.get("active") and not dig.get("phase5_approved") and not dig.get("phase6_tasks_registered"):
+    if dig.get("active") and not dig.get("phase4_approved") and not dig.get("phase5_tasks_registered"):
         if is_dig_implementation_tool(name, tool_input) and not (name in {"Write", "Edit", "MultiEdit"} and _is_plan_file(tool_input)):
             emit_decision(
                 "ask",
-                "Implementation tool before Phase 5/6 completion",
-                "[devkit-dig] ⚠️ Phase 5 計画レビューと Phase 6 TaskCreate が未完了です。"
+                "Implementation tool before Phase 4/5 completion",
+                "[devkit-dig] ⚠️ Phase 4 計画レビューと Phase 5 TaskCreate が未完了です。"
                 "調査目的の場合はユーザー承認で続行できます。",
             )
             return 0
@@ -183,7 +183,7 @@ def main() -> int:
         emit_decision(
             "block",
             "git commit detected without review phase marker",
-            "[devkit-workflow] ⛔ Phase 5 と Phase 7 のレビューが完了していません。plan_review_completed と implementation_review_completed が必要です",
+            "[devkit-workflow] ⛔ Phase 4 と Phase 6 のレビューが完了していません。plan_review_completed と implementation_review_completed が必要です",
         )
         return 0
 
@@ -191,7 +191,7 @@ def main() -> int:
         emit_decision(
             "block",
             "git push detected without commit review marker",
-            "[devkit-workflow] ⛔ Phase 8 のコミットレビューが完了していません。commit_review_completed が必要です",
+            "[devkit-workflow] ⛔ Phase 7 のコミットレビューが完了していません。commit_review_completed が必要です",
         )
         return 0
 

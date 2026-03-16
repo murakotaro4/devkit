@@ -13,7 +13,6 @@
 
 runtime-specific hook / state が phase を記録する場合、canonical token は次を使う:
 
-- `intake_declared`
 - `requirements_confirmed`
 - `research_completed`
 - `plan_drafted`
@@ -27,7 +26,7 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - Codex CLI は標準 review gate として**推奨**する
 - Codex CLI が使えない runtime / 環境でも、通常フェーズは進めてよい
 - Codex CLI が使えない場合は、独立した別 agent reviewer で代替する
-- `dig-codex` の Phase 5 だけは例外で fail-close を維持する
+- `dig-codex` の Phase 4 だけは例外で fail-close を維持する
 
 ## Team Shape
 
@@ -106,51 +105,46 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - `shared/workflow.md`、共通 template、setup / update script の変更
 - 権限、認証、secret、削除、migration を含む変更
 
-`dig-codex` の Phase 5 は fail-close。レビュー不能時は `DIG_CODEX_PLAN_REVIEW_UNAVAILABLE`、レビュー結果が `critical>0` または `high>0` の場合は `DIG_CODEX_PLAN_REVIEW_BLOCKED` で停止する。
+`dig-codex` の Phase 4 は fail-close。レビュー不能時は `DIG_CODEX_PLAN_REVIEW_UNAVAILABLE`、レビュー結果が `critical>0` または `high>0` の場合は `DIG_CODEX_PLAN_REVIEW_BLOCKED` で停止する。
 
-## 8フェーズ必須フロー
+## 7フェーズ必須フロー
 
 | # | フェーズ | 完了条件 |
 |---|---------|----------|
-| 1 | 依頼確認と体制決め | サイズ判定、`team_shape`、役割案が文書化済み |
-| 2 | 要件ヒアリング | 成功条件、制約、非対象、承認が確定 |
-| 3 | 調査 | コード調査、周辺異常、技術リスクが整理済み |
-| 4 | 計画作成 | decision-complete な plan、役割、review 方針が完成 |
-| 5 | 計画レビュー | reviewer 観点と review gate が完了 |
-| 6 | 実装 | 差分作成と統合が完了 |
-| 7 | 実装レビューと検証 | 実装レビュー、検証、必要な昇格 review が完了 |
-| 8 | コミットとプッシュ | staging、コミット前確認、commit、push が完了 |
+| 1 | 要件ヒアリング | 成功条件、制約、非対象、承認が確定 |
+| 2 | 調査 | コード調査、周辺異常、技術リスクが整理済み |
+| 3 | 計画作成 | decision-complete な plan、役割、review 方針が完成。サイズ判定・`team_shape`・役割が確定 |
+| 4 | 計画レビュー | reviewer 観点と review gate が完了 |
+| 5 | 実装 | 差分作成と統合が完了 |
+| 6 | 実装レビューと検証 | 実装レビュー、検証、必要な昇格 review が完了 |
+| 7 | コミットとプッシュ | staging、コミット前確認、commit、push が完了 |
 
-### Phase 1: 依頼確認と体制決め
-
-- `Coordinator` が sizing policy で `small` / `medium` / `large` を決める
-- その結果に基づいて `micro_team` / `standard_team` / `expanded_team` を決める
-- `team_shape` と `role_assignment` を最初に plan または task note に書く
-
-### Phase 2: 要件ヒアリング
+### Phase 1: 要件ヒアリング
 
 - runtime に応じた質問手段を使う
   - Claude: AskUserQuestion
   - Codex Plan Mode: request_user_input
   - OpenCode: question（不可時はメッセージ質問）
 - `Coordinator` または担当 interviewer が目的、成功条件、制約、非対象を固定する
-- Phase 2 は最低 1 ラウンドの質問を必須とする
+- Phase 1 は最低 1 ラウンドの質問を必須とする
 - 1 ラウンドにつき原則 4 問、選択肢付きで質問する
 - 完了時に `requirements_confirmed` トークンを記録する
 
-### Phase 3: 調査
+### Phase 2: 調査
 
 - `Coordinator`、`Planner`、または専任 `Researcher` がコードベース調査を行う
 - 周辺で見つけた異常や追加修正候補は `Coordinator` が本スコープへ入れるか判断する
 
-### Phase 4: 計画作成
+### Phase 3: 計画作成
 
 - `Planner` は decision-complete な plan を作る
 - plan には少なくとも `team_shape`、`role_assignment`、テスト方針を含める
 - implementer が複数なら `write_scope` を plan に含める
 - `medium` 以上なら review の昇格方法も書く
+- 計画の末尾で `Coordinator` が sizing policy に基づき `small` / `medium` / `large` を確定する
+- その結果に基づいて `micro_team` / `standard_team` / `expanded_team` を決め、`team_shape` と `role_assignment` を plan に確定記載する
 
-### Phase 5: 計画レビュー
+### Phase 4: 計画レビュー
 
 - `micro_team` では `Planner=Reviewer` を許可する
 - `standard_team` と `expanded_team` では `Reviewer` を `Planner` と分離する
@@ -158,21 +152,21 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - Codex CLI が使えない場合は独立した別 agent reviewer で代替する
 - REVIEW_GATE_PLAN は必須。`critical=0 high=0` になるまで修正→再レビューを繰り返す。3 回目の失敗で停止（`DIG_CLAUDE_REVIEW_BLOCKED`）
 
-### Phase 6: 実装
+### Phase 5: 実装
 
 - `Implementer` は自分の担当差分を作る
 - implementer が複数なら `write_scope` に従って責務を分ける
 - `Coordinator` が最終統合責任を持つ
-- 計画には Phase 6 タスク materialization を含めること: `[Task 1] <summary>`, `[Task 2] <summary>` ... + 依存関係
+- 計画には Phase 5 タスク materialization を含めること: `[Task 1] <summary>`, `[Task 2] <summary>` ... + 依存関係
 
-### Phase 7: 実装レビューと検証
+### Phase 6: 実装レビューと検証
 
 - `Reviewer` は implementer と別 agent であること
 - `small` でも独立 reviewer は省略しない
 - `medium` 以上では追加の review 視点を入れる
 - 計画には各タスクの REVIEW_GATE_SUBTASK 判定（必須 or スキップ可 + 理由）と REVIEW_GATE_INTEGRATION 判定を明記すること
 
-### Phase 8: コミットとプッシュ
+### Phase 7: コミットとプッシュ
 
 1. `git add` でステージング
 2. コミット前確認を実施
@@ -184,9 +178,9 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 
 | フェーズ | 加速用スキル |
 |---------|-------------|
-| Phase 2 | /dig |
-| Phase 3 | /codex-search, /deep-research |
-| Phase 4-5 | /dig（計画+レビュー部分） |
+| Phase 1 | /dig |
+| Phase 2 | /codex-search, /deep-research |
+| Phase 3-4 | /dig（計画+レビュー部分） |
 
 ## 禁止事項
 

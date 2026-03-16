@@ -13,11 +13,11 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 
 ### dig からの連携時
 
-- dig の Phase 4 から呼び出される
+- dig の Phase 3 から呼び出される
 - `$ARGUMENTS` に plan file path が渡される
 - dig 連携時は **plan-only** で動く
-- Phase 4-5 では TaskCreate しない
-- 実タスク化は dig-claude の Phase 6 で行う
+- Phase 3-4 では TaskCreate しない
+- 実タスク化は dig-claude の Phase 5 で行う
 
 ### 独立実行時
 
@@ -105,7 +105,7 @@ plan file がある場合は、以下のように追記する。
 
 dig 連携時、このスキルは **TaskCreate をしない**。出力は plan ファイル上の分解結果が正本である。
 
-dig-claude 側は、Phase 5 review 通過後にその plan の summary を読み、Phase 6 開始時に以下の規約で task materialization する。
+dig-claude 側は、Phase 4 review 通過後にその plan の summary を読み、Phase 5 開始時に以下の規約で task materialization する。
 
 - タスク: `[Task 1] <summary>`, `[Task 2] <summary>` ...
 
@@ -125,6 +125,6 @@ dig-claude 側は、Phase 5 review 通過後にその plan の summary を読み
 
 - 探索ファーストで分解する
 - dig 連携時は plan-only で使う
-- Phase 1-5 では TaskCreate しない
+- Phase 1-4 では TaskCreate しない
 - plan 上のサブタスク名は prefix なしの summary で書く
-- `[Task 1]`, `[Task 2]` ... の prefix 付与は Phase 6 materialization の責務とする
+- `[Task 1]`, `[Task 2]` ... の prefix 付与は Phase 5 materialization の責務とする

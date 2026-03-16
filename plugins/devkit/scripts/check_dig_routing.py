@@ -80,15 +80,15 @@ def main() -> int:
         problems.append("dig-core missing REVIEW_RESULT_MARKER")
     if "STOP_OUTPUT_FIELDS: ERROR_CODE,RERUN_COMMAND,DIAGNOSTIC_COMMAND" not in core:
         problems.append("dig-core missing stop output marker")
-    for token in ["Phase 1", "Phase 5", "Phase 6", "Phase 8"]:
+    for token in ["Phase 1", "Phase 4", "Phase 5", "Phase 7"]:
         if token not in claude:
-            problems.append(f"dig-claude missing 8-phase token: {token}")
-    for token in ["[Task 1]", "Phase 5 通過後", "agent-parallel を常に第一候補"]:
+            problems.append(f"dig-claude missing 7-phase token: {token}")
+    for token in ["[Task 1]", "Phase 4 通過後", "agent-parallel を常に第一候補"]:
         if token not in claude:
             problems.append(f"dig-claude missing task lifecycle token: {token}")
-    for token in ["Phase 1", "Phase 5", "Phase 6", "[Task 1]"]:
+    for token in ["Phase 1", "Phase 4", "Phase 5", "[Task 1]"]:
         if token not in core:
-            problems.append(f"dig-core missing 8-phase/task token: {token}")
+            problems.append(f"dig-core missing 7-phase/task token: {token}")
     for token in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", '"matcher": "Agent"', '"matcher": "Edit"', '"matcher": "Bash"']:
         if token not in hooks:
             problems.append(f"hooks.json missing dig hook contract token: {token}")

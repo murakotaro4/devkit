@@ -94,9 +94,9 @@ def main() -> int:
     tool_response = str(parsed.get("tool_response", "") or tool_input.get("tool_response", "") or "")
     if tool == "Bash" and dig.get("active"):
         combined = f"{command}\n{tool_response}"
-        if REVIEW_RESULT_MARKER in combined and not dig.get("phase5_approved"):
-            # Phase 5 plan review のみ対象。phase5_approved 後の REVIEW_COUNTS は
-            # Phase 7 (SUBTASK/INTEGRATION) のレビュー結果なので無視する。
+        if REVIEW_RESULT_MARKER in combined and not dig.get("phase4_approved"):
+            # Phase 4 plan review のみ対象。phase4_approved 後の REVIEW_COUNTS は
+            # Phase 6 (SUBTASK/INTEGRATION) のレビュー結果なので無視する。
             match = REVIEW_COUNTS_PATTERN.search(combined)
             if match:
                 dig["plan_review_attempts"] = dig.get("plan_review_attempts", 0) + 1
@@ -109,7 +109,7 @@ def main() -> int:
                         file=sys.stderr,
                     )
                 elif critical == 0 and high == 0 and not dig.get("review_blocked"):
-                    dig["phase5_approved"] = True
+                    dig["phase4_approved"] = True
                     append_phase(state, "plan_review_completed")
             else:
                 # REVIEW_RESULT_MARKER は存在するが REVIEW_COUNTS のパースに失敗

@@ -36,8 +36,8 @@ def main() -> int:
 
     dig = ensure_dig_state(state)
     warning = ""
-    if dig.get("active") and dig.get("phase5_approved") and not dig.get("phase6_tasks_registered"):
-        warning = "[devkit-dig] ⚠️ /dig セッションが終了しましたが、Phase 6 Tasks は未登録のままです。"
+    if dig.get("active") and dig.get("phase4_approved") and not dig.get("phase5_tasks_registered"):
+        warning = "[devkit-dig] ⚠️ /dig セッションが終了しましたが、Phase 5 Tasks は未登録のままです。"
 
     dig.update(
         {
@@ -46,8 +46,8 @@ def main() -> int:
             "session_started_at": 0.0,
             "requirements_confirmed": False,
             "ask_user_count": 0,
-            "phase5_approved": False,
-            "phase6_tasks_registered": False,
+            "phase4_approved": False,
+            "phase5_tasks_registered": False,
             "task_ids": [],
             "task_subjects": [],
             "plan_review_attempts": 0,

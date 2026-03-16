@@ -120,7 +120,7 @@ def main() -> int:
         blocked_payload = json.loads(blocked.stdout or "{}")
         decision = blocked_payload.get("hookSpecificOutput", {}).get("permissionDecision")
         if decision != "block":
-            raise RuntimeError(f"pre_tool_gate should block before Phase 6 tasks: {blocked.stdout}")
+            raise RuntimeError(f"pre_tool_gate should block before Phase 5 tasks: {blocked.stdout}")
 
         blocked_bash = run_hook(
             "pre_tool_gate.py",
@@ -145,7 +145,7 @@ def main() -> int:
         allowed_payload = json.loads(allowed.stdout or "{}")
         decision = allowed_payload.get("hookSpecificOutput", {}).get("permissionDecision")
         if decision != "pass":
-            raise RuntimeError(f"pre_tool_gate should pass after Phase 6 tasks: {allowed.stdout}")
+            raise RuntimeError(f"pre_tool_gate should pass after Phase 5 tasks: {allowed.stdout}")
 
         stale_session_id = "dig-stale-task-test"
         touch_old_task(home, stale_session_id, "2", "[Task 1] stale task")
@@ -175,7 +175,7 @@ def main() -> int:
         )
         stale_payload = json.loads(stale_blocked.stdout or "{}")
         if stale_payload.get("hookSpecificOutput", {}).get("permissionDecision") != "block":
-            raise RuntimeError(f"stale tasks should not satisfy Phase 6 registration: {stale_blocked.stdout}")
+            raise RuntimeError(f"stale tasks should not satisfy Phase 5 registration: {stale_blocked.stdout}")
 
         # --- Phase 2 gate tests ---
         phase2_session = "dig-phase2-gate-test"

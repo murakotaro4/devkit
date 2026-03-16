@@ -55,8 +55,8 @@ def main() -> int:
             "session_started_at": now_timestamp(),
             "requirements_confirmed": False,
             "ask_user_count": 0,
-            "phase5_approved": False,
-            "phase6_tasks_registered": False,
+            "phase4_approved": False,
+            "phase5_tasks_registered": False,
             "task_ids": [],
             "task_subjects": [],
             "plan_review_attempts": 0,
@@ -65,8 +65,8 @@ def main() -> int:
     )
     write_json(state_path, state)
     emit(
-        "[devkit-dig] /dig session detected. Enforce the 8-phase flow. "
-        "Do not create Tasks before Phase 5 passes. At Phase 6 start, register [Task 1], [Task 2]... before implementation. No [Phase 6] parent task needed."
+        "[devkit-dig] /dig session detected. Enforce the 7-phase flow. "
+        "Do not create Tasks before Phase 4 passes. At Phase 5 start, register [Task 1], [Task 2]... before implementation."
     )
     return 0
 
