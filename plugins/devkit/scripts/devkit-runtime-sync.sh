@@ -126,6 +126,23 @@ PY
   printf '%s/%s\n' "$dir" "$(basename "$path")"
 }
 
+devkit_resolve_path_lenient() {
+  local path="$1"
+  devkit_resolve_path "$path" 2>/dev/null && return 0
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$path"
+    return
+  fi
+  local dir base
+  dir="$(dirname "$path")"
+  base="$(basename "$path")"
+  if [[ -d "$dir" ]]; then
+    printf '%s/%s\n' "$(cd "$dir" && pwd -P)" "$base"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
 devkit_resolve_link_target() {
   local path="$1"
   local target
@@ -133,7 +150,7 @@ devkit_resolve_link_target() {
   if [[ "$target" != /* ]]; then
     target="$(cd "$(dirname "$path")" && cd "$(dirname "$target")" && pwd -P)/$(basename "$target")"
   fi
-  devkit_resolve_path "$target"
+  devkit_resolve_path_lenient "$target"
 }
 
 ensure_devkit_dir() {
@@ -243,7 +260,7 @@ ensure_directory_container() {
     actual_target="$(devkit_resolve_link_target "$path")"
     local expected_target=""
     if [[ -n "$expected_legacy_target" ]]; then
-      expected_target="$(devkit_resolve_path "$expected_legacy_target")"
+      expected_target="$(devkit_resolve_path_lenient "$expected_legacy_target")"
     fi
 
     if [[ -z "$expected_target" || "$actual_target" != "$expected_target" ]]; then
@@ -271,7 +288,7 @@ ensure_directory_container() {
 ensure_linked_dir() {
   local source_path="$1"
   local destination_path="$2"
-  local expected_legacy_target="${3:-}"
+  shift 2
 
   if [[ ! -d "$source_path" ]]; then
     printf 'MISSING_SKILL_SOURCE_DIR: %s\n' "$source_path" >&2
@@ -283,12 +300,19 @@ ensure_linked_dir() {
     actual_target="$(devkit_resolve_link_target "$destination_path")"
     local expected_target
     expected_target="$(devkit_resolve_path "$source_path")"
-    local legacy_target=""
-    if [[ -n "$expected_legacy_target" && -e "$expected_legacy_target" ]]; then
-      legacy_target="$(devkit_resolve_path "$expected_legacy_target")"
-    fi
 
-    if [[ "$actual_target" != "$expected_target" && ( -z "$legacy_target" || "$actual_target" != "$legacy_target" ) ]]; then
+    local is_legacy=false
+    local _lt
+    for _lt in "$@"; do
+      [[ -z "$_lt" ]] && continue
+      local resolved_lt
+      resolved_lt="$(devkit_resolve_path_lenient "$_lt")"
+      if [[ "$actual_target" == "$resolved_lt" ]]; then
+        is_legacy=true; break
+      fi
+    done
+
+    if [[ "$actual_target" != "$expected_target" && "$is_legacy" != "true" ]]; then
       printf 'BLOCKED_EXISTING_LINK: %s => %s\n' "$destination_path" "$actual_target" >&2
       return 1
     fi
@@ -328,7 +352,7 @@ ensure_managed_file() {
 
 prune_devkit_managed_skill_links() {
   local skills_root="$1"
-  local plugin_skills_root="$2"
+  shift
 
   [[ -d "$skills_root" ]] || return 0
 
@@ -337,13 +361,14 @@ prune_devkit_managed_skill_links() {
     name="$(basename "$entry")"
     actual_target="$(devkit_resolve_link_target "$entry")"
 
-    case "$actual_target" in
-      "$plugin_skills_root"/*)
-        if ! devkit_skill_manifest | grep -Fxq "$name"; then
-          rm -rf "$entry"
-        fi
-        ;;
-    esac
+    local is_managed=false
+    local _i
+    for _i in "$@"; do
+      case "$actual_target" in "$_i"/*) is_managed=true; break ;; esac
+    done
+    if "$is_managed" && ! devkit_skill_manifest | grep -Fxq "$name"; then
+      rm -rf "$entry"
+    fi
   done < <(find "$skills_root" -mindepth 1 -maxdepth 1 -type l 2>/dev/null)
 }
 
@@ -414,7 +439,7 @@ sync_devkit_codex_runtime() {
   local local_bin="$user_home/.local/bin"
 
   local repo_root
-  repo_root="$(ensure_devkit_repo_root)"
+  repo_root="$(ensure_devkit_repo_root_cached)"
   ensure_devkit_dir "$codex_root"
   ensure_devkit_dir "$codex_bin"
   ensure_directory_container "$codex_skills"
@@ -425,12 +450,17 @@ sync_devkit_codex_runtime() {
     "$plugin_root/skills" \
     "$codex_root/devkit/source/plugins/devkit/skills" \
     "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"
-  prune_devkit_managed_skill_links "$codex_skills" "$plugin_root/skills"
+  prune_devkit_managed_skill_links "$codex_skills" \
+    "$plugin_root/skills" \
+    "$codex_root/devkit/source/plugins/devkit/skills" \
+    "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"
   local skill
   while IFS= read -r skill; do
     ensure_linked_dir \
       "$plugin_root/skills/$skill" \
-      "$codex_skills/$skill"
+      "$codex_skills/$skill" \
+      "$codex_root/devkit/source/plugins/devkit/skills/$skill" \
+      "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/$skill"
   done < <(devkit_skill_manifest)
 
   local script_name
@@ -457,7 +487,7 @@ sync_devkit_opencode_runtime() {
   local opencode_commands="$opencode_root/commands"
 
   local repo_root
-  repo_root="$(ensure_devkit_repo_root)"
+  repo_root="$(ensure_devkit_repo_root_cached)"
   ensure_directory_container "$opencode_skills" "$user_home/.agent/skills" true
   ensure_directory_container "$opencode_commands"
 
@@ -467,13 +497,18 @@ sync_devkit_opencode_runtime() {
     "$plugin_root/skills" \
     "$opencode_root/devkit/source/plugins/devkit/skills" \
     "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"
-  prune_devkit_managed_skill_links "$opencode_skills" "$plugin_root/skills"
+  prune_devkit_managed_skill_links "$opencode_skills" \
+    "$plugin_root/skills" \
+    "$opencode_root/devkit/source/plugins/devkit/skills" \
+    "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"
   local skill
   while IFS= read -r skill; do
     ensure_linked_dir \
       "$plugin_root/skills/$skill" \
       "$opencode_skills/$skill" \
-      "$user_home/.agent/skills/$skill"
+      "$user_home/.agent/skills/$skill" \
+      "$opencode_root/devkit/source/plugins/devkit/skills/$skill" \
+      "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/$skill"
   done < <(devkit_skill_manifest)
 
   ensure_managed_file \
@@ -482,6 +517,16 @@ sync_devkit_opencode_runtime() {
     false
 
   devkit_persist_source_root "$opencode_root/devkit/source-root.txt" "$repo_root"
+}
+
+_DEVKIT_CACHED_REPO_ROOT=""
+ensure_devkit_repo_root_cached() {
+  if [[ -n "$_DEVKIT_CACHED_REPO_ROOT" ]]; then
+    printf '%s\n' "$_DEVKIT_CACHED_REPO_ROOT"
+    return 0
+  fi
+  _DEVKIT_CACHED_REPO_ROOT="$(ensure_devkit_repo_root)"
+  printf '%s\n' "$_DEVKIT_CACHED_REPO_ROOT"
 }
 
 ensure_devkit_hooks() {
