@@ -167,6 +167,16 @@ def main() -> int:
         )
         return 0
 
+    if dig.get("active") and not dig.get("phase5_approved") and not dig.get("phase6_tasks_registered"):
+        if is_dig_implementation_tool(name, tool_input) and not (name in {"Write", "Edit", "MultiEdit"} and _is_plan_file(tool_input)):
+            emit_decision(
+                "ask",
+                "Implementation tool before Phase 5/6 completion",
+                "[devkit-dig] ⚠️ Phase 5 計画レビューと Phase 6 TaskCreate が未完了です。"
+                "調査目的の場合はユーザー承認で続行できます。",
+            )
+            return 0
+
     phases_passed = [token for token in state.get("phases_passed", []) if isinstance(token, str)] if isinstance(state.get("phases_passed"), list) else []
     has_review = "plan_review_completed" in phases_passed and "implementation_review_completed" in phases_passed
     if is_git_commit and not has_review:

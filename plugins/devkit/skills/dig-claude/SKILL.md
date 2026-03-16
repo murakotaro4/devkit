@@ -163,6 +163,14 @@ rm -f /tmp/dig_plan_review_$$.md
 
 ### Phase 6: 実装
 
+**ExitPlanMode 後（Plan Mode からの復帰後）の必須手順**:
+
+1. `/devkit:decomposition` を plan-only で実行し、サブタスクを細分化する（What/Where/How/Why/Verify を含める）
+2. `[Phase 6]` 親タスク + `[Task N]` サブタスクを TaskCreate で一括登録する
+3. TaskList で登録結果を確認してから実装に入る
+
+この 3 ステップを省略してはならない。hook が Phase 6 Tasks 未登録の実装を block する。
+
 Phase 6 開始時に初めて Tasks を materialize する。
 
 #### 6a. parent + subtasks を一括登録
