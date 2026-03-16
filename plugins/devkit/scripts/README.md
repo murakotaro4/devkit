@@ -6,9 +6,11 @@
 
 - 品質ゲートの標準入口は `uv` を使う。
 - repo ルートからの手動実行:
-  - `uv sync --project plugins/devkit`
+  - `uv sync --project plugins/devkit --group dev`
   - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast`
   - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full`
+- pytest テスト単独実行:
+  - `uv run --project plugins/devkit --group dev pytest plugins/devkit/tests/ -v`
 - devkit repo の Git hook 標準は `prek.toml`。
 - `prek` と Claude hook も同じ Python ハーネスを呼び出す。
 - `check_utf8_bom.py` は `pre-commit` では staged docs/config、`verify-fast` / `verify-full` では repo 全体の UTF-8 BOM を弾く。

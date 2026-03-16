@@ -6,7 +6,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit"]
 
 # /devkit-init - DevKit ワークフロー同期
 
-ターゲットリポジトリに DevKit の共有ワークフロールール（agent team 前提の8フェーズ + レビューゲートの**運用契約**）を同期する。
+ターゲットリポジトリに DevKit の共有ワークフロールール（agent team 前提の7フェーズ + レビューゲートの**運用契約**）を同期する。
 
 ## トピック
 $ARGUMENTS

@@ -37,6 +37,14 @@ pass_filenames = false
 stages = ["pre-commit", "pre-push"]
 
 [[repos.hooks]]
+id = "pytest"
+name = "Run pytest"
+entry = "uv run --project plugins/devkit --group dev pytest plugins/devkit/tests/ -x -q"
+language = "system"
+pass_filenames = false
+stages = ["pre-commit", "pre-push"]
+
+[[repos.hooks]]
 id = "plugin-version-bump"
 name = "Check plugin version bump"
 entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_plugin_version_bump.py"
