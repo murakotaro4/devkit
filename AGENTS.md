@@ -217,7 +217,7 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - `Implementer` は自分の担当差分を作る
 - implementer が複数なら `write_scope` に従って責務を分ける
 - `Coordinator` が最終統合責任を持つ
-- 計画には Phase 6 タスク materialization を含めること: 親タスク `[Phase 6] <topic>` + サブタスク `[Task N] <summary>` + 依存関係
+- 計画には Phase 6 タスク materialization を含めること: `[Task 1] <summary>`, `[Task 2] <summary>` ... + 依存関係
 
 ### Phase 7: 実装レビューと検証
 

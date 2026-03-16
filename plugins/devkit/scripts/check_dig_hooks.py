@@ -135,8 +135,7 @@ def main() -> int:
         if blocked_bash_payload.get("hookSpecificOutput", {}).get("permissionDecision") != "block":
             raise RuntimeError(f"pre_tool_gate should block mutating Bash chained after codex exec: {blocked_bash.stdout}")
 
-        write_task(home, session_id, "1", "[Phase 6] sample parent")
-        write_task(home, session_id, "2", "[Task 1] sample child")
+        write_task(home, session_id, "2", "[Task 1] sample task")
 
         allowed = run_hook(
             "pre_tool_gate.py",
@@ -149,8 +148,7 @@ def main() -> int:
             raise RuntimeError(f"pre_tool_gate should pass after Phase 6 tasks: {allowed.stdout}")
 
         stale_session_id = "dig-stale-task-test"
-        touch_old_task(home, stale_session_id, "1", "[Phase 6] stale parent")
-        touch_old_task(home, stale_session_id, "2", "[Task 1] stale child")
+        touch_old_task(home, stale_session_id, "2", "[Task 1] stale task")
         stale_prompt = run_hook(
             "user_prompt_submit.py",
             {"session_id": stale_session_id, "prompt": "/dig implement fresh"},

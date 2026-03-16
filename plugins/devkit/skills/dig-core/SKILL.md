@@ -57,30 +57,30 @@ adapter は以下の操作を runtime のツールで実現する。
 
 | 操作 | 目的 | タイミング |
 |------|------|-----------|
-| materialize_phase6_tasks | Phase 6 親タスク + サブタスク登録 | Phase 5 通過後、Phase 6 開始時 |
-| mark_complete | タスク完了マーク | Phase 6 各サブタスク・全体完了時 |
+| materialize_phase6_tasks | タスク登録 | Phase 5 通過後、Phase 6 開始時 |
+| mark_complete | タスク完了マーク | Phase 6 各タスク・全体完了時 |
 
 - Phase 1-5 では TaskCreate しない。計画・分解・レビューは plan ファイル上のテキストだけで保持する。
 - サブタスク分解の SSOT は `decomposition` だが、dig-claude からの Phase 4-5 呼び出しは **plan-only** とする。TaskCreate は行わず、承認済みの分解結果を Phase 6 開始時に materialize する。
 - Phase 6 materialization の登録規約:
-  - 親タスク: `[Phase 6] <topic>`
-  - サブタスク: `[Task 1] <summary>`, `[Task 2] <summary>` ...
-  - サブタスク番号は dig セッションごとに 1 から振り直す
-  - `small` でも親タスクとは別に `[Task 1]` を最低 1 件作る
-- dig-claude は Phase 5 通過後に、親 1 件 + 全サブタスクを一括登録し、`parent_task_id` と task id 群を plan に追記してよい。
+  - タスク: `[Task 1] <summary>`, `[Task 2] <summary>` ...
+  - タスク番号は dig セッションごとに 1 から振り直す
+  - `small` でも最低 1 件の `[Task 1]` を作る
+  - 各タスクは 5-15 分の単一責務に分解する。What/Where/How/Why/Verify を含める
+  - write_scope が重複しないタスク同士は並列実行可能とする
+- dig-claude は Phase 5 通過後に、全タスクを一括登録し、task id 群を plan に追記してよい。
 - dig-codex は TaskCreate 非対応のため、Phase 1-5 の plan / checklist だけを管理し、Phase 6 materialization は行わない。
 - 停止時のタスク cleanup: Phase 6-8 で停止（レビューブロック・codex unavailable 等）した場合:
-  1. TaskList で親タスクに紐づくサブタスクを取得
-  2. 未完了サブタスクを全て TaskUpdate(status="cancelled") で取り消し
-  3. 親タスクを TaskUpdate(status="cancelled") で取り消し
-  4. dig-codex: プランファイルのチェックリストを `[x] CANCELLED` に更新
+  1. TaskList で登録済みタスクを取得
+  2. 未完了タスクを全て TaskUpdate(status="cancelled") で取り消し
+  3. dig-codex: プランファイルのチェックリストを `[x] CANCELLED` に更新
 - 複合タスク: Phase 4 で分解済み plan を作成 → Phase 5 review 通過 → Phase 6 materialization → 各完了時に mark_complete。
-- 親タスク完了手順（必須）:
-  1. 全サブタスクが完了（複合タスク時は TaskList で確認、単純タスクは該当なし）
+- 全タスク完了手順（必須）:
+  1. 全タスクが完了（複合タスク時は TaskList で確認、単純タスクは該当なし）
   2. コミット契約のコミット前レビュー通過 + `git commit` 成功
-  3. 上記2条件を満たした後に親タスクを mark_complete（TaskUpdate(status="completed")）
-  4. 未完了サブタスクがある場合、または commit 未成功の場合は完了しない
-  5. `git push` は親タスク完了の条件に含めない（push 失敗はリトライ可能であり、commit 成功で作業は保全されている）
+  3. 上記2条件を満たした後に全タスクを mark_complete（TaskUpdate(status="completed")）
+  4. 未完了タスクがある場合、または commit 未成功の場合は完了しない
+  5. `git push` は完了の条件に含めない（push 失敗はリトライ可能であり、commit 成功で作業は保全されている）
 
 ## 並列実行契約
 

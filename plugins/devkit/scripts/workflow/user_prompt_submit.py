@@ -57,9 +57,8 @@ def main() -> int:
             "ask_user_count": 0,
             "phase5_approved": False,
             "phase6_tasks_registered": False,
-            "parent_task_id": "",
-            "subtask_ids": [],
-            "subtask_subjects": [],
+            "task_ids": [],
+            "task_subjects": [],
             "plan_review_attempts": 0,
             "review_blocked": False,
         }
@@ -67,7 +66,7 @@ def main() -> int:
     write_json(state_path, state)
     emit(
         "[devkit-dig] /dig session detected. Enforce the 8-phase flow. "
-        "Do not create Tasks before Phase 5 passes. At Phase 6 start, register one [Phase 6] parent and one or more [Task N] subtasks before implementation."
+        "Do not create Tasks before Phase 5 passes. At Phase 6 start, register [Task 1], [Task 2]... before implementation. No [Phase 6] parent task needed."
     )
     return 0
 

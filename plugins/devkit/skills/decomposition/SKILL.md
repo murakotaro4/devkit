@@ -107,10 +107,7 @@ dig 連携時、このスキルは **TaskCreate をしない**。出力は plan 
 
 dig-claude 側は、Phase 5 review 通過後にその plan の summary を読み、Phase 6 開始時に以下の規約で task materialization する。
 
-- 親タスク: `[Phase 6] <topic>`
-- サブタスク: `[Task 1] <summary>`, `[Task 2] <summary>` ...
-
-`[Phase 6.1]` のような命名は使わない。
+- タスク: `[Task 1] <summary>`, `[Task 2] <summary>` ...
 
 ## 独立実行時の扱い
 

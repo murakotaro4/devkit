@@ -163,7 +163,7 @@ def main() -> int:
             "block",
             "dig implementation started before Phase 6 task registration",
             "[devkit-dig] ⛔ Phase 5 は通過していますが、Phase 6 の Tasks が未登録です。"
-            "先に [Phase 6] 親タスクと [Task 1] 以降のサブタスクを登録してから実装に入ってください。",
+            "先に [Task 1] 以降のタスクを TaskCreate で登録してから実装に入ってください。",
         )
         return 0
 

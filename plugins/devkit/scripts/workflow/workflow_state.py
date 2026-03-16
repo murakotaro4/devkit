@@ -82,9 +82,8 @@ def default_dig_state() -> dict[str, Any]:
         "ask_user_count": 0,
         "phase5_approved": False,
         "phase6_tasks_registered": False,
-        "parent_task_id": "",
-        "subtask_ids": [],
-        "subtask_subjects": [],
+        "task_ids": [],
+        "task_subjects": [],
         "plan_review_attempts": 0,
         "review_blocked": False,
     }
@@ -95,10 +94,10 @@ def ensure_dig_state(state: dict[str, Any]) -> dict[str, Any]:
     dig = dict(raw) if isinstance(raw, dict) else {}
     merged = default_dig_state()
     merged.update({key: value for key, value in dig.items() if key in merged})
-    if not isinstance(merged.get("subtask_ids"), list):
-        merged["subtask_ids"] = []
-    if not isinstance(merged.get("subtask_subjects"), list):
-        merged["subtask_subjects"] = []
+    if not isinstance(merged.get("task_ids"), list):
+        merged["task_ids"] = []
+    if not isinstance(merged.get("task_subjects"), list):
+        merged["task_subjects"] = []
     state["dig"] = merged
     return merged
 
@@ -126,10 +125,8 @@ def sync_dig_tasks_from_store(state: dict[str, Any], session_id: str) -> dict[st
     session_started_at = dig.get("session_started_at")
     started_after = float(session_started_at) if isinstance(session_started_at, (int, float)) else 0.0
 
-    parent = ""
-    parent_id = ""
-    subtask_ids: list[str] = []
-    subtask_subjects: list[str] = []
+    task_ids: list[str] = []
+    task_subjects: list[str] = []
     for entry in entries:
         entry_mtime = entry.get("_mtime")
         if started_after and not isinstance(entry_mtime, (int, float)):
@@ -139,17 +136,13 @@ def sync_dig_tasks_from_store(state: dict[str, Any], session_id: str) -> dict[st
         subject = entry.get("subject")
         if not isinstance(subject, str):
             continue
-        if subject.startswith("[Phase 6] "):
-            parent = subject
-            parent_id = str(entry.get("id", ""))
-        elif re.match(r"^\[Task \d+\]\s+", subject):
-            subtask_subjects.append(subject)
-            subtask_ids.append(str(entry.get("id", "")))
+        if re.match(r"^\[Task \d+\]\s+", subject):
+            task_subjects.append(subject)
+            task_ids.append(str(entry.get("id", "")))
 
-    dig["parent_task_id"] = parent_id
-    dig["subtask_ids"] = [item for item in subtask_ids if item]
-    dig["subtask_subjects"] = subtask_subjects
-    dig["phase6_tasks_registered"] = bool(parent and subtask_subjects)
+    dig["task_ids"] = [item for item in task_ids if item]
+    dig["task_subjects"] = task_subjects
+    dig["phase6_tasks_registered"] = bool(task_subjects)
     return dig
 
 

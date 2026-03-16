@@ -58,41 +58,21 @@ if ! grep -q "^## タスク追跡" "$PLAN_FILE" 2>/dev/null; then
   cat >> "$PLAN_FILE" << 'EOF'
 
 ## タスク追跡
-
-### 親タスク
-- [ ] <topic>
 EOF
 fi
 
-# サブタスク追加: 番号ベースで重複チェック
-add_subtask() {
+# タスク追加: 番号ベースで重複チェック
+add_task() {
   local num="$1" desc="$2" deps="$3"
-  if ! grep -q "\[6\.$num\]" "$PLAN_FILE"; then
-    echo "- [ ] [6.$num] $desc${deps:+ (blocked by: $deps)}" >> "$PLAN_FILE"
+  if ! grep -q "\[Task $num\]" "$PLAN_FILE"; then
+    echo "- [ ] [Task $num] $desc${deps:+ (blocked by: $deps)}" >> "$PLAN_FILE"
   fi
 }
 
 # 完了マーク: 番号で一意指定
 mark_done() {
   local num="$1"
-  sed -i "s/- \[ \] \[6\.$num\]/- [x] [6.$num]/" "$PLAN_FILE"
-}
-
-# 親タスク完了: チェックボックス行のサブタスクが全て完了（cancelled でない）なら親をマーク
-# 呼び出し条件: REVIEW_GATE 通過 + git commit 成功後にのみ呼ぶこと（dig-core 契約）
-# 複合タスクでは 1 件以上のサブタスクが [x] で完了済みであること
-# 注: 現在 dig-codex は計画専用（Step 5 非対応）のため、この関数は呼び出されない。
-#     実行フェーズ対応時に使用する予約定義。現時点での呼び出しは dig-core 契約違反となる。
-mark_parent_done() {
-  # 未完了サブタスク行があれば完了しない
-  if grep -q -e '^- \[ \] \[6\.' "$PLAN_FILE"; then
-    return 1
-  fi
-  # cancelled が含まれていたら完了しない（cancel_all 後に呼ばれた場合の安全弁）
-  if grep -q -e 'CANCELLED' "$PLAN_FILE"; then
-    return 1
-  fi
-  sed -i 's/^- \[ \] <topic>/- [x] <topic>/' "$PLAN_FILE"
+  sed -i "s/- \[ \] \[Task $num\]/- [x] [Task $num]/" "$PLAN_FILE"
 }
 
 # 停止時の全タスク取消
@@ -111,9 +91,9 @@ INIT -> PLAN_CHECK -> INTERVIEW -> REVIEW_DECOMP? -> REVIEW_PRIMARY -> REVIEW_FA
 - Plan Mode false: `PLAN_CHECK -> STOP(DIG_CODEX_PLAN_REQUIRED)`
 - `REVIEW_DECOMP` は Step 3 実行時のみ遷移（スキップ時は INTERVIEW → REVIEW_PRIMARY）
 - Step 3 スキップ時（単純タスク）:
-  1. Step 2 完了後（dig-core 契約の register_parent タイミング）に `## タスク追跡` セクション（親タスクチェックボックス含む）を `$PLAN_FILE` に冪等追記
+  1. Step 2 完了後（dig-core 契約のタスク登録タイミング）に `## タスク追跡` セクションを `$PLAN_FILE` に冪等追記
   2. 最小限のプラン内容（Step 1-2 の要約 + 実装手順）を `$PLAN_FILE` に `cat >>` で追記し、`REVIEW_PRIMARY` の入力を保証
-  3. REVIEW_GATE 通過後に計画完了として DONE 遷移（Codex は計画専用のため `mark_parent_done` は呼ばない。実行は dig-claude に委譲）
+  3. REVIEW_GATE 通過後に計画完了として DONE 遷移（Codex は計画専用。実行は dig-claude に委譲）
 - `REVIEW_PRIMARY` が unavailable の場合は 5 秒待機後 `REVIEW_FALLBACK` を 1 回だけ実行
 - `REVIEW_PRIMARY/REVIEW_FALLBACK` とも unavailable の場合は `cancel_all` → `STOP(DIG_CODEX_PLAN_REVIEW_UNAVAILABLE)`
 - `REVIEW_PARSE` で `REVIEW_COUNTS` が読めない場合は `cancel_all` → `STOP(DIG_CODEX_PLAN_REVIEW_UNAVAILABLE)`
@@ -214,16 +194,15 @@ REVIEW_DECOMP 停止時 cleanup:
 
 Codex では `decomposition` スキルの TaskCreate/TaskUpdate が使用不可のため、分解はテキストベースで実行:
 
-1. `## タスク追跡` セクションを `$PLAN_FILE` に冪等追記（Step 2 完了後、dig-core 契約の register_parent タイミング準拠。cancel_all の前提条件も保証）
+1. `## タスク追跡` セクションを `$PLAN_FILE` に冪等追記（Step 2 完了後、dig-core 契約のタスク登録タイミング準拠。cancel_all の前提条件も保証）
 2. Codex 自身がプランファイルのタスク分解セクションを Bash (`cat >>`) で追記
-3. サブタスクを `add_subtask` 関数でチェックリスト形式で追記（TaskCreate の代替）
+3. タスクを `add_task` 関数でチェックリスト形式で追記（TaskCreate の代替）
 4. REVIEW_GATE_DECOMPOSITION を実行（上記 REVIEW_DECOMP 状態遷移）
 
-### 複合タスクの親タスク完了（Codex は計画フェーズのみ）
+### 複合タスクの完了（Codex は計画フェーズのみ）
 
-Codex は実行フェーズ（Step 5）を持たないため、サブタスク完了と親タスク完了は将来対応。計画フェーズ完了時:
-- 全サブタスクの分解 + REVIEW_GATE_DECOMPOSITION 通過 + REVIEW_GATE_PLAN 通過後に DONE 遷移
-- `mark_parent_done` は呼ばない（実行フェーズがないため、コミット成功の前提条件を満たせない）
+Codex は実行フェーズ（Step 5）を持たないため、タスク完了は将来対応。計画フェーズ完了時:
+- 全タスクの分解 + REVIEW_GATE_DECOMPOSITION 通過 + REVIEW_GATE_PLAN 通過後に DONE 遷移
 - 実行フェーズを含む場合: dig-claude に切り替えて使用
 
 ### セッション振り返り（計画完了後）
@@ -238,7 +217,7 @@ dig-core 契約の「セッション振り返り」に従う。
 
 | 機能 | Claude | Codex | 理由 |
 |------|--------|-------|------|
-| 親タスク登録 | TaskCreate | Bash+テキスト | TaskCreate 非対応 |
+| タスク登録 | TaskCreate | Bash+テキスト | TaskCreate 非対応 |
 | サブタスク登録 | decomposition (TaskCreate) | テキストチェックリスト | 同上 |
 | 並列実行 | agent-parallel / tool-parallel | 非対応（計画フェーズのみ） | Step 5 非対応 |
 | REVIEW_GATE_DECOMPOSITION | 対応 | 対応 | codex exec 共通 |

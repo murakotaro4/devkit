@@ -48,9 +48,8 @@ def main() -> int:
             "ask_user_count": 0,
             "phase5_approved": False,
             "phase6_tasks_registered": False,
-            "parent_task_id": "",
-            "subtask_ids": [],
-            "subtask_subjects": [],
+            "task_ids": [],
+            "task_subjects": [],
             "plan_review_attempts": 0,
             "review_blocked": False,
         }

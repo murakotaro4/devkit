@@ -83,7 +83,7 @@ def main() -> int:
     for token in ["Phase 1", "Phase 5", "Phase 6", "Phase 8"]:
         if token not in claude:
             problems.append(f"dig-claude missing 8-phase token: {token}")
-    for token in ["[Phase 6]", "[Task 1]", "Phase 5 通過後", "agent-parallel を常に第一候補"]:
+    for token in ["[Task 1]", "Phase 5 通過後", "agent-parallel を常に第一候補"]:
         if token not in claude:
             problems.append(f"dig-claude missing task lifecycle token: {token}")
     for token in ["Phase 1", "Phase 5", "Phase 6", "[Task 1]"]:
