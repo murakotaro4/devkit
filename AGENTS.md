@@ -216,9 +216,9 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 ### Phase 6: 実装レビューと検証
 
 - `Reviewer` は implementer と別 agent であること
-- `small` でも独立 reviewer は省略しない
-- `medium` 以上では追加の review 視点を入れる
-- 計画には各タスクの REVIEW_GATE_SUBTASK 判定（必須 or スキップ可 + 理由）と REVIEW_GATE_INTEGRATION 判定を明記すること
+- `small` でも独立 reviewer は省略しない。ただし REVIEW_GATE_PLAN（Phase 4、必須）が独立レビューを担保するため、small で REVIEW_GATE_SUBTASK（変更5行未満 or ドキュメントのみ）と REVIEW_GATE_INTEGRATION（サブタスク1件以下）が両方スキップ条件を満たす場合は Phase 6 ゲートのスキップを許容する
+- `medium` 以上では追加の review 視点を入れる。REVIEW_GATE_SUBTASK は全タスクで必須
+- 計画には各タスクの REVIEW_GATE_SUBTASK 方針（sizing に基づく「必須」or「実装結果次第でスキップ可」）と REVIEW_GATE_INTEGRATION 方針を明記すること。最終判定は Phase 6 で実 diff に基づき行う
 
 ### Phase 7: コミットとプッシュ
 
