@@ -1,6 +1,6 @@
 ---
 name: "decomposition"
-description: "計画やコンテキストから 5-30 分の単一責任サブタスクに分解し、plan ファイルへ追記する。dig 連携時は plan-only で使う。"
+description: "計画やコンテキストから単一責任サブタスクに分解し、plan ファイルへ追記する。dig 連携時は plan-only・5-10 分粒度で使う。"
 argument-hint: "[plan-file-path or context]"
 allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 ---
@@ -54,7 +54,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 |------|------|
 | 具体的 | アクション動詞、正確な file path、対象関数やテストを含む |
 | 自己完結 | 説明文だけで着手できる |
-| 適切な粒度 | 5-30 分で終わる |
+| 適切な粒度 | dig 連携時: 5-10 分。独立実行時: 5-30 分 |
 | 検証可能 | Verify が具体的 |
 
 ### Step 4: What / Where / How / Why / Verify を書く
@@ -80,10 +80,14 @@ plan file がある場合は、以下のように追記する。
 [元タスクの要約]
 
 ### サブタスク一覧
-| # | サブタスク | 依存 | 見積 |
-|---|-----------|------|------|
-| 1 | User モデル追加 | - | 10min |
-| 2 | 認証 middleware 接続 | 1 | 15min |
+| # | サブタスク | 依存 | 見積 | REVIEW_GATE_SUBTASK 方針 |
+|---|-----------|------|------|--------------------------|
+| 1 | User モデル追加 | - | 8min | 必須（medium） |
+| 2 | 認証 middleware 接続 | 1 | 10min | 必須（medium） |
+
+### レビューゲート方針
+- REVIEW_GATE_SUBTASK: sizing に基づき各サブタスクごとに「必須」or「実装結果次第でスキップ可」を記載（最終判定は Phase 6 で実 diff に基づき行う）
+- REVIEW_GATE_INTEGRATION: サブタスク数に基づき「必須」or「スキップ可」を記載
 
 ### サブタスク詳細
 #### User モデル追加
@@ -100,6 +104,8 @@ plan file がある場合は、以下のように追記する。
 - 各サブタスクに Verify があるか
 - 依存関係に矛盾がないか
 - `small` でも最低 1 件の実装サブタスクがあるか
+- dig 連携時、各サブタスクの見積が 10 分以内であること。10 分を超えるサブタスクがある場合は分割してやり直す
+- dig 連携時、各サブタスクの REVIEW_GATE_SUBTASK 方針と REVIEW_GATE_INTEGRATION 方針が記載されていること
 
 ## dig 連携での出力契約
 
@@ -120,6 +126,7 @@ dig-claude 側は、Phase 4 review 通過後にその plan の summary を読み
 - Verify なし
 - 存在しない file path や関数名
 - 循環依存
+- 10 分を超えるサブタスク（dig 連携時）
 
 ## 重要
 

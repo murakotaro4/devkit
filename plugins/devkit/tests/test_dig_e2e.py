@@ -165,6 +165,8 @@ def test_migration_from_v3_state(hook_runner, isolated_home):
     state = load_state(isolated_home, SESSION_ID)
     state["dig"]["phase5_approved"] = True
     del state["dig"]["phase4_approved"]
+    # session_started_at を過去に設定してタスクファイルの mtime フィルタを通す
+    state["dig"]["session_started_at"] = 0.0
     state_path = isolated_home / ".claude" / f"devkit-workflow-{SESSION_ID}.json"
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
