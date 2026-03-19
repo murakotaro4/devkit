@@ -143,6 +143,8 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 | 2nd | `codex -a never exec review --uncommitted -m gpt-5.4 -c 'model_reasoning_effort="medium"'` | Spark unavailable / rate limit / timeout / parse failure |
 | 3rd | 独立した別 agent reviewer + ユーザー通知 | Codex CLI が unavailable または未導入の場合 |
 
+> **並列レビュー実行**: 複数サブタスクの review gate を並列実行してよい。並列化の具体手段は runtime adapter が定義する。Reviewer の独立性と REVIEW_GATE_INTEGRATION の必須要件は維持する。
+
 ### 昇格条件
 
 `medium` 以上では、標準 gate に加えて**追加の review 視点**を入れる。

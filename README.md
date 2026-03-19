@@ -450,6 +450,16 @@ Codex CLI は**推奨**であり、通常フェーズの必須前提ではない
 
 `dig-claude` の Phase 4（計画レビュー）は REVIEW_GATE_PLAN が必須。`critical=0 high=0` になるまで修正→再レビューを繰り返し、3 回目の失敗（`plan_review_attempts >= 3`）で `DIG_CLAUDE_REVIEW_BLOCKED` で commit/push を block して停止する。
 
+### MCP 並列実行（Claude Code 運用知見）
+
+Codex MCP サーバー経由のレビューを並列実行する場合の観測結果（2026-03 検証）:
+
+- Claude Code の同一メッセージ内の MCP ツール呼び出しは**逐次処理**される（Claude Code 現行挙動、変更の可能性あり）
+- **サブエージェント（Agent ツール）経由**なら同一 codex サーバーに対して真の並列実行が可能（10並列確認済み）
+- codex MCP サーバーは **1 インスタンスで十分**（codex2 等の追加は不要）
+- dig-claude の Phase 6 では、agent-parallel モードで各 implementer が worktree 内で独立完了した場合に限り、REVIEW_GATE_SUBTASK を並列レビュー可能（REVIEW_GATE_INTEGRATION は別途必須）
+- この制約は MCP 経由の呼び出しに適用され、`codex exec` CLI（Bash）とは異なる経路
+
 ### CLI の確認方法
 
 レビュー用CLIが正しくインストール・PATH設定されているか確認:
