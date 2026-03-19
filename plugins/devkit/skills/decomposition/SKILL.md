@@ -85,6 +85,8 @@ plan file がある場合は、以下のように追記する。
 | 1 | User モデル追加 | - | 8min | 必須（medium） |
 | 2 | 認証 middleware 接続 | 1 | 10min | 必須（medium） |
 
+> **依存列の規約**: 依存列にはサブタスク番号（`#` 列の値）を記載する。Phase 5 で TaskCreate が割り当てるシステム内部 ID とは別物。dig-claude の 5a-1 フォーマットスクリプトが可読な依存表示を担保する。
+
 ### レビューゲート方針
 - REVIEW_GATE_SUBTASK: sizing に基づき各サブタスクごとに「必須」or「実装結果次第でスキップ可」を記載（最終判定は Phase 6 で実 diff に基づき行う）
 - REVIEW_GATE_INTEGRATION: サブタスク数に基づき「必須」or「スキップ可」を記載

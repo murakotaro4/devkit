@@ -50,6 +50,8 @@ def main() -> int:
             "phase5_tasks_registered": False,
             "task_ids": [],
             "task_subjects": [],
+            "task_id_map": {},
+            "task_blockers": {},
             "plan_review_attempts": 0,
             "review_blocked": False,
         }

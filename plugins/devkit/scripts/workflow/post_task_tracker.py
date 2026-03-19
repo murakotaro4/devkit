@@ -89,7 +89,12 @@ def main() -> int:
     if dig.get("active") and "requirements_confirmed" in merged and not dig.get("requirements_confirmed"):
         dig["requirements_confirmed"] = True
 
-    tool = str(parsed.get("tool_name", "") or parsed.get("toolName", "") or "")
+    tool = ""
+    for _key in ("tool_name", "toolName", "matcher"):
+        _val = parsed.get(_key)
+        if isinstance(_val, str) and _val:
+            tool = _val
+            break
     command = str(tool_input.get("command", ""))
     tool_response = str(parsed.get("tool_response", "") or tool_input.get("tool_response", "") or "")
     if tool == "Bash" and dig.get("active"):
@@ -123,16 +128,35 @@ def main() -> int:
     ensure_dig_state(state)
     write_json(state_path, state)
 
-    if not phases and not (tool == "Bash" and dig.get("active")):
+    is_task_list = tool == "TaskList" and dig.get("active") and dig.get("phase5_tasks_registered")
+    if not phases and not (tool == "Bash" and dig.get("active")) and not is_task_list:
         return 0
+
+    # TaskList 応答なら整形出力を additionalContext に注入
+    task_progress_ctx = ""
+    if is_task_list:
+        try:
+            from format_task_progress import format_progress
+
+            formatted = format_progress(session_id)
+            if formatted:
+                task_progress_ctx = f"\n\n[devkit-dig] 可読タスク進捗:\n{formatted}"
+        except Exception:
+            pass  # 整形失敗時は raw 出力のまま（フォールバック）
+
+    if phases:
+        additional = (
+            f"[devkit-workflow] Phase completed: {', '.join(phases)}. "
+            f"current_phase_token: {latest_phase}. phases_passed: [{', '.join(merged)}]"
+            + task_progress_ctx
+        )
+    else:
+        additional = f"[devkit-dig] タスク進捗:{task_progress_ctx}"
 
     payload = {
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "additionalContext": (
-                f"[devkit-workflow] Phase completed: {', '.join(phases)}. "
-                f"current_phase_token: {latest_phase}. phases_passed: [{', '.join(merged)}]"
-            ),
+            "additionalContext": additional,
         }
     }
     print(json.dumps(payload, ensure_ascii=False), end="")

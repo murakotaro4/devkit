@@ -191,6 +191,21 @@ decomposition 粒度指針:
 - 並列実行可能なタスク同士は `write_scope` を分離する
 - 依存関係がある場合は `addBlockedBy` で明示する
 
+#### 5a-1. タスク進捗の可読表示
+
+TaskCreate はシステム内部 ID（例: `#38`）を割り当てる。`TaskList` はこの内部 ID で依存を表示するが、ユーザーには不透明である。
+
+PostToolUse hook が TaskList 呼び出し時にフォーマットスクリプトを自動実行し、`additionalContext` 経由で `[Task N]` ラベル付きの可読出力を注入する。手動で実行する場合:
+
+```bash
+python3 scripts/workflow/format_task_progress.py "$DIG_SESSION_ID"
+```
+
+**ルール:**
+- `TaskList` の raw 出力を直接ユーザーに見せない
+- 進捗報告時は必ずフォーマット済み出力を使う
+- マッピングに存在しない ID は `#数字` のまま表示する（部分失敗時のフォールバック）
+
 #### 5b. 実行モード選択
 
 `agent-parallel を常に第一候補` とする。

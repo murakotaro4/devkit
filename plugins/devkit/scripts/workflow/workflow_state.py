@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 
+TASK_SUBJECT_RE = re.compile(r"^\[Task \d+\]\s+")
+
 LEGACY_PHASE_MAP = {
     "plan_review": "plan_review_completed",
     "impl_review": "implementation_review_completed",
@@ -84,6 +86,8 @@ def default_dig_state() -> dict[str, Any]:
         "phase5_tasks_registered": False,
         "task_ids": [],
         "task_subjects": [],
+        "task_id_map": {},
+        "task_blockers": {},
         "plan_review_attempts": 0,
         "review_blocked": False,
     }
@@ -108,6 +112,10 @@ def ensure_dig_state(state: dict[str, Any]) -> dict[str, Any]:
         merged["task_ids"] = []
     if not isinstance(merged.get("task_subjects"), list):
         merged["task_subjects"] = []
+    if not isinstance(merged.get("task_id_map"), dict):
+        merged["task_id_map"] = {}
+    if not isinstance(merged.get("task_blockers"), dict):
+        merged["task_blockers"] = {}
     state["dig"] = merged
     return merged
 
@@ -133,10 +141,13 @@ def sync_dig_tasks_from_store(state: dict[str, Any], session_id: str) -> dict[st
     dig = ensure_dig_state(state)
     entries = load_task_entries(session_id)
     session_started_at = dig.get("session_started_at")
-    started_after = float(session_started_at) if isinstance(session_started_at, (int, float)) else 0.0
+    # 1秒のトレランスを差し引く（ファイルシステム mtime と time.time() の微小なずれを吸収）
+    started_after = max(0.0, float(session_started_at) - 1.0) if isinstance(session_started_at, (int, float)) else 0.0
 
     task_ids: list[str] = []
     task_subjects: list[str] = []
+    task_id_map: dict[str, str] = {}
+    task_blockers: dict[str, list[str]] = {}
     for entry in entries:
         entry_mtime = entry.get("_mtime")
         if started_after and not isinstance(entry_mtime, (int, float)):
@@ -146,12 +157,23 @@ def sync_dig_tasks_from_store(state: dict[str, Any], session_id: str) -> dict[st
         subject = entry.get("subject")
         if not isinstance(subject, str):
             continue
-        if re.match(r"^\[Task \d+\]\s+", subject):
+        if TASK_SUBJECT_RE.match(subject):
+            sys_id = str(entry.get("id", ""))
             task_subjects.append(subject)
-            task_ids.append(str(entry.get("id", "")))
+            task_ids.append(sys_id)
+
+            m = re.match(r"^(\[Task \d+\])", subject)
+            if m and sys_id:
+                task_id_map[sys_id] = m.group(1)
+
+            blocked_by = entry.get("blockedBy", [])
+            if isinstance(blocked_by, list) and blocked_by:
+                task_blockers[sys_id] = [str(b) for b in blocked_by]
 
     dig["task_ids"] = [item for item in task_ids if item]
     dig["task_subjects"] = task_subjects
+    dig["task_id_map"] = task_id_map
+    dig["task_blockers"] = task_blockers
     dig["phase5_tasks_registered"] = bool(task_subjects)
     return dig
 

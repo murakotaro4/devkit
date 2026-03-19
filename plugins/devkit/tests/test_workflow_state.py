@@ -29,6 +29,8 @@ def test_default_dig_state_keys():
         "phase5_tasks_registered",
         "task_ids",
         "task_subjects",
+        "task_id_map",
+        "task_blockers",
         "plan_review_attempts",
         "review_blocked",
     }
@@ -107,6 +109,8 @@ def test_sync_dig_tasks_from_store_matches_task_pattern(tmp_path, monkeypatch):
     assert dig["phase5_tasks_registered"] is True
     assert "[Task 1] implement feature" in dig["task_subjects"]
     assert "t1" in dig["task_ids"]
+    assert dig["task_id_map"] == {"t1": "[Task 1]"}
+    assert dig["task_blockers"] == {}
 
 
 # ── 7. sync_dig_tasks_from_store: session_started_at より古いタスクは無視 ──
@@ -138,6 +142,64 @@ def test_sync_dig_tasks_from_store_ignores_stale(tmp_path, monkeypatch):
     assert dig["phase5_tasks_registered"] is False
     assert dig["task_subjects"] == []
     assert dig["task_ids"] == []
+
+
+# ── 7b. sync_dig_tasks_from_store: task_id_map と task_blockers の構築 ──
+
+
+def test_sync_dig_tasks_id_map_and_blockers(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    session_id = "test-session-map"
+    task_dir = tmp_path / ".claude" / "tasks" / session_id
+    task_dir.mkdir(parents=True)
+
+    (task_dir / "001.json").write_text(
+        json.dumps({"id": "38", "subject": "[Task 1] dimensions"}),
+        encoding="utf-8",
+    )
+    (task_dir / "002.json").write_text(
+        json.dumps({"id": "39", "subject": "[Task 2] insulation", "blockedBy": ["38"]}),
+        encoding="utf-8",
+    )
+    (task_dir / "003.json").write_text(
+        json.dumps({"id": "40", "subject": "[Task 3] weight", "blockedBy": ["38", "39"]}),
+        encoding="utf-8",
+    )
+
+    state = {"dig": {"session_started_at": 0.0}}
+    dig = sync_dig_tasks_from_store(state, session_id)
+
+    assert dig["task_id_map"] == {"38": "[Task 1]", "39": "[Task 2]", "40": "[Task 3]"}
+    assert dig["task_blockers"] == {"39": ["38"], "40": ["38", "39"]}
+    assert dig["phase5_tasks_registered"] is True
+
+
+# ── 7c. sync_dig_tasks_from_store: [Task N] 形式でないタスクはマッピングに含まない ──
+
+
+def test_sync_dig_tasks_ignores_non_task_subjects(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    session_id = "test-session-filter"
+    task_dir = tmp_path / ".claude" / "tasks" / session_id
+    task_dir.mkdir(parents=True)
+
+    (task_dir / "001.json").write_text(
+        json.dumps({"id": "50", "subject": "[Task 1] valid task"}),
+        encoding="utf-8",
+    )
+    (task_dir / "002.json").write_text(
+        json.dumps({"id": "51", "subject": "Not a task format"}),
+        encoding="utf-8",
+    )
+
+    state = {"dig": {"session_started_at": 0.0}}
+    dig = sync_dig_tasks_from_store(state, session_id)
+
+    assert dig["task_id_map"] == {"50": "[Task 1]"}
+    assert len(dig["task_ids"]) == 1
+    assert len(dig["task_subjects"]) == 1
 
 
 # ── 8. normalize_phase_token: レガシートークン変換 ──
