@@ -19,6 +19,7 @@ def main() -> int:
     dig = must_read("plugins/devkit/skills/dig/SKILL.md")
     core = must_read("plugins/devkit/skills/dig-core/SKILL.md")
     claude = must_read("plugins/devkit/skills/dig-claude/SKILL.md")
+    cursor = must_read("plugins/devkit/skills/dig-cursor/SKILL.md")
     codex = must_read("plugins/devkit/skills/dig-codex/SKILL.md")
     opencode = must_read("plugins/devkit/skills/dig-opencode/SKILL.md")
     workflow = must_read("plugins/devkit/shared/workflow.md")
@@ -28,33 +29,43 @@ def main() -> int:
 
     problems: list[str] = []
 
-    for token in ["dig-core", "dig-claude", "dig-codex", "dig-opencode"]:
+    for token in ["dig-core", "dig-claude", "dig-cursor", "dig-codex", "dig-opencode"]:
         if token not in dig:
             problems.append(f"dig orchestrator missing reference: {token}")
 
     for token in [
         "../dig-core/SKILL.md",
         "../dig-claude/SKILL.md",
+        "../dig-cursor/SKILL.md",
         "../dig-codex/SKILL.md",
         "../dig-opencode/SKILL.md",
     ]:
         if token not in dig:
             problems.append(f"dig orchestrator missing internal file path: {token}")
 
-    if "runtime=<claude|codex|opencode>" not in dig:
+    if "runtime=<claude|codex|opencode|cursor>" not in dig:
         problems.append("dig orchestrator missing runtime contract")
     if "Claude `/dig` -> `claude`" not in dig:
         problems.append("dig orchestrator missing Claude default: /dig -> claude")
     if "Codex `$dig` -> `codex`" not in dig:
         problems.append("dig orchestrator missing Codex default: $dig -> codex")
+    if "Cursor `/dig` -> `cursor`" not in dig:
+        problems.append("dig orchestrator missing Cursor default: /dig -> cursor")
     if "/devkit:dig" in dig:
         problems.append("dig orchestrator still references removed command: /devkit:dig")
     if "/prompts:devkit-dig" in dig:
         problems.append("dig orchestrator still references removed command: /prompts:devkit-dig")
 
-    for content in [claude, codex, opencode]:
+    for content in [claude, cursor, codex, opencode]:
         if "dig-core" not in content:
             problems.append("adapter does not reference dig-core contract")
+
+    if "DIG_CURSOR_REVIEW_BLOCKED" not in cursor:
+        problems.append("dig-cursor missing review blocked stop code")
+    if "DIG_CURSOR_PLAN_REVIEW_UNAVAILABLE" not in cursor:
+        problems.append("dig-cursor missing plan review unavailable stop code")
+    if "RERUN_COMMAND: /dig runtime=cursor <topic>" not in cursor:
+        problems.append("dig-cursor missing rerun command")
 
     if "DIG_CODEX_PLAN_REQUIRED" not in codex:
         problems.append("dig-codex missing required stop code")

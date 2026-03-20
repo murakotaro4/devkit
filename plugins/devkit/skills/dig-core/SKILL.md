@@ -37,10 +37,11 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 | adapter | Phase 1-4（計画） | Phase 5-7（実行） | タスク管理 | 備考 |
 |---------|-----------------|---------------|-----------|------|
 | dig-claude | 全対応 | 全対応（並列含む） | TaskCreate/TaskUpdate/TaskList | フル機能。Phase 4 通過後に Phase 5 Tasks を materialize する |
+| dig-cursor | 全対応 | 全対応（単一実行または疑似並列） | TodoWrite | Cursor toolchain 版。Phase 4 通過後に Todo を materialize する |
 | dig-codex | 全対応 | 非対応（計画専用） | テキストベース | Plan Mode 内で完結。Phase 5-7 は実行しない |
 | dig-opencode | 基本対応 | 非対応（計画専用） | 非対応 | 最小構成。Phase 5 以降は dig-claude に委譲 |
 
-以下の契約セクションのうち、`REVIEW_GATE_PLAN` は全 adapter に適用する。`Phase 5 task materialization`・`mark_complete`・並列実行・`REVIEW_GATE_SUBTASK`・`REVIEW_GATE_INTEGRATION` は Phase 5-7 対応 adapter（dig-claude）にのみ適用する。計画専用 adapter は Phase 4 の REVIEW_GATE_PLAN まで実行して完了とする。
+以下の契約セクションのうち、`REVIEW_GATE_PLAN` は全 adapter に適用する。`Phase 5 task materialization`・`mark_complete`・並列実行・`REVIEW_GATE_SUBTASK`・`REVIEW_GATE_INTEGRATION` は Phase 5-7 対応 adapter（dig-claude / dig-cursor）に適用する。計画専用 adapter は Phase 4 の REVIEW_GATE_PLAN まで実行して完了とする。
 
 ## 安全ガード
 
@@ -68,16 +69,17 @@ adapter は以下の操作を runtime のツールで実現する。
   - 各タスクは 5-10 分の単一責務に分解する。What/Where/How/Why/Verify を含める
   - write_scope が重複しないタスク同士は並列実行可能とする
 - dig-claude は Phase 4 通過後に、全タスクを一括登録し、task id 群を plan に追記してよい。
+- dig-cursor は Phase 4 通過後に、TodoWrite で実装タスクを一括登録し、進捗を TODO 状態で管理する。
 - dig-codex は TaskCreate 非対応のため、Phase 1-4 の plan / checklist だけを管理し、Phase 5 materialization は行わない。
 - 停止時のタスク cleanup: Phase 5-7 で停止（レビューブロック・codex unavailable 等）した場合:
-  1. TaskList で登録済みタスクを取得
-  2. 未完了タスクを全て TaskUpdate(status="cancelled") で取り消し
+  1. dig-claude: TaskList で登録済みタスクを取得し、未完了タスクを TaskUpdate(status="cancelled") で取り消す
+  2. dig-cursor: TodoWrite で未完了タスクを完了にしないまま保持し、進捗メモに中断理由を記録する
   3. dig-codex: プランファイルのチェックリストを `[x] CANCELLED` に更新
 - 複合タスク: Phase 3 で分解済み plan を作成 → Phase 4 review 通過 → Phase 5 materialization → 各完了時に mark_complete。
 - 全タスク完了手順（必須）:
-  1. 全タスクが完了（複合タスク時は TaskList で確認、単純タスクは該当なし）
+  1. 全タスクが完了（dig-claude: TaskList、dig-cursor: TodoWrite の status 確認。単純タスクは該当なし）
   2. コミット契約のコミット前レビュー通過 + `git commit` 成功
-  3. 上記2条件を満たした後に全タスクを mark_complete（TaskUpdate(status="completed")）
+  3. 上記2条件を満たした後に全タスクを mark_complete（dig-claude: TaskUpdate(status="completed")、dig-cursor: TodoWrite で `completed`）
   4. 未完了タスクがある場合、または commit 未成功の場合は完了しない
   5. `git push` は完了の条件に含めない（push 失敗はリトライ可能であり、commit 成功で作業は保全されている）
 

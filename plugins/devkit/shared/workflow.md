@@ -125,6 +125,7 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 
 - runtime に応じた質問手段を使う
   - Claude: AskUserQuestion
+  - Cursor: AskQuestion
   - Codex Plan Mode: request_user_input
   - OpenCode: question（不可時はメッセージ質問）
 - `Coordinator` または担当 interviewer が目的、成功条件、制約、非対象を固定する
