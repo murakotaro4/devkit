@@ -400,6 +400,7 @@ prune_legacy_opencode_managed_entries() {
   local plugin_skills_root="$2"
   local legacy_source_skills_root="$3"
   local marketplace_skills_root="$4"
+  local codex_source_skills_root="${5:-}"
   [[ -d "$opencode_root" ]] || return 0
 
   while IFS= read -r entry; do
@@ -410,11 +411,20 @@ prune_legacy_opencode_managed_entries() {
     fi
 
     actual_target="$(devkit_resolve_link_target "$entry")"
+    local _prune_match=false
     case "$actual_target" in
       "$plugin_skills_root"/*|"$legacy_source_skills_root"/*|"$marketplace_skills_root"/*)
-        rm -rf "$entry"
+        _prune_match=true
         ;;
     esac
+    if [[ "$_prune_match" != "true" && -n "$codex_source_skills_root" ]]; then
+      case "$actual_target" in
+        "$codex_source_skills_root"/*) _prune_match=true ;;
+      esac
+    fi
+    if [[ "$_prune_match" == "true" ]]; then
+      rm -rf "$entry"
+    fi
   done < <(find "$opencode_root" -mindepth 1 -maxdepth 1 -type l 2>/dev/null)
 }
 
@@ -496,11 +506,13 @@ sync_devkit_opencode_runtime() {
     "$opencode_skills" \
     "$plugin_root/skills" \
     "$opencode_root/devkit/source/plugins/devkit/skills" \
-    "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"
+    "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills" \
+    "$user_home/.codex/devkit/source/plugins/devkit/skills"
   prune_devkit_managed_skill_links "$opencode_skills" \
     "$plugin_root/skills" \
     "$opencode_root/devkit/source/plugins/devkit/skills" \
-    "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"
+    "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills" \
+    "$user_home/.codex/devkit/source/plugins/devkit/skills"
   local skill
   while IFS= read -r skill; do
     ensure_linked_dir \
@@ -508,7 +520,8 @@ sync_devkit_opencode_runtime() {
       "$opencode_skills/$skill" \
       "$user_home/.agent/skills/$skill" \
       "$opencode_root/devkit/source/plugins/devkit/skills/$skill" \
-      "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/$skill"
+      "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/$skill" \
+      "$user_home/.codex/devkit/source/plugins/devkit/skills/$skill"
   done < <(devkit_skill_manifest)
 
   ensure_managed_file \

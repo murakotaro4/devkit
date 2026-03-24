@@ -401,7 +401,7 @@ function Ensure-DevKitDirectoryContainer([string]$Path, [string]$ExpectedLegacyT
   Ensure-DevKitDir $Path
 }
 
-function Ensure-DevKitLinkedDirectory([string]$SourcePath, [string]$DestinationPath, [bool]$CanSymlink, [string]$ExpectedLegacyTarget = $null) {
+function Ensure-DevKitLinkedDirectory([string]$SourcePath, [string]$DestinationPath, [bool]$CanSymlink, [string]$ExpectedLegacyTarget = $null, [string[]]$AdditionalLegacyTargets = @()) {
   if (-not (Test-Path -LiteralPath $SourcePath)) {
     throw "MISSING_SKILL_SOURCE_DIR: $SourcePath"
   }
@@ -411,7 +411,16 @@ function Ensure-DevKitLinkedDirectory([string]$SourcePath, [string]$DestinationP
       $actual = Get-DevKitLinkTargetPath $DestinationPath
       $expected = Convert-DevKitToFullPath $SourcePath
       $legacy = Convert-DevKitToFullPath $ExpectedLegacyTarget
-      if ($actual -ne $expected -and ([string]::IsNullOrWhiteSpace($legacy) -or $actual -ne $legacy)) {
+      $isLegacy = (-not [string]::IsNullOrWhiteSpace($legacy) -and $actual -eq $legacy)
+      if (-not $isLegacy) {
+        foreach ($alt in $AdditionalLegacyTargets) {
+          $altResolved = Convert-DevKitToFullPath $alt
+          if (-not [string]::IsNullOrWhiteSpace($altResolved) -and $actual -eq $altResolved) {
+            $isLegacy = $true; break
+          }
+        }
+      }
+      if ($actual -ne $expected -and -not $isLegacy) {
         throw "BLOCKED_EXISTING_LINK: $DestinationPath => $actual"
       }
 
@@ -530,7 +539,8 @@ function Remove-DevKitLegacyOpenCodeManagedEntries(
   [string]$OpenCodeSkillsRoot,
   [string]$PluginSkillsRoot,
   [string]$LegacySourceSkillsRoot,
-  [string]$MarketplaceSkillsRoot
+  [string]$MarketplaceSkillsRoot,
+  [string]$CodexSourceSkillsRoot = $null
 ) {
   if (-not (Test-Path -LiteralPath $OpenCodeSkillsRoot)) {
     return
@@ -544,7 +554,8 @@ function Remove-DevKitLegacyOpenCodeManagedEntries(
   $roots = @(
     Convert-DevKitToFullPath $PluginSkillsRoot,
     Convert-DevKitToFullPath $LegacySourceSkillsRoot,
-    Convert-DevKitToFullPath $MarketplaceSkillsRoot
+    Convert-DevKitToFullPath $MarketplaceSkillsRoot,
+    Convert-DevKitToFullPath $CodexSourceSkillsRoot
   ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
   foreach ($entry in (Get-ChildItem -LiteralPath $OpenCodeSkillsRoot -Force -ErrorAction SilentlyContinue)) {
@@ -668,7 +679,8 @@ function Sync-DevKitOpenCodeRuntime([string]$UserHome, [scriptblock]$Logger) {
     -OpenCodeSkillsRoot $opencodeSkills `
     -PluginSkillsRoot (Join-Path $pluginRoot "skills") `
     -LegacySourceSkillsRoot (Join-Path $opencodeRoot "devkit\source\plugins\devkit\skills") `
-    -MarketplaceSkillsRoot (Join-Path $UserHome ".claude\plugins\marketplaces\murakotaro4\plugins\devkit\skills")
+    -MarketplaceSkillsRoot (Join-Path $UserHome ".claude\plugins\marketplaces\murakotaro4\plugins\devkit\skills") `
+    -CodexSourceSkillsRoot (Join-Path $UserHome ".codex\devkit\source\plugins\devkit\skills")
   Remove-DevKitStaleManagedSkillLinks -SkillsRoot $opencodeSkills -PluginSkillsRoot (Join-Path $pluginRoot "skills")
 
   foreach ($skill in (Get-DevKitSkillManifest)) {
@@ -676,7 +688,12 @@ function Sync-DevKitOpenCodeRuntime([string]$UserHome, [scriptblock]$Logger) {
       -SourcePath (Join-Path (Join-Path $pluginRoot "skills") $skill) `
       -DestinationPath (Join-Path $opencodeSkills $skill) `
       -CanSymlink $canSymlink `
-      -ExpectedLegacyTarget (Join-Path (Join-Path $UserHome ".agent\skills") $skill)
+      -ExpectedLegacyTarget (Join-Path (Join-Path $UserHome ".agent\skills") $skill) `
+      -AdditionalLegacyTargets @(
+        (Join-Path $opencodeRoot "devkit\source\plugins\devkit\skills\$skill"),
+        (Join-Path $UserHome ".codex\devkit\source\plugins\devkit\skills\$skill"),
+        (Join-Path $UserHome ".claude\plugins\marketplaces\murakotaro4\plugins\devkit\skills\$skill")
+      )
   }
 
   Ensure-DevKitManagedFile `
