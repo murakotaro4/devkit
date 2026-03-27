@@ -37,9 +37,24 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 | dig-core ロール | OpenCode での実現 | 備考 |
 |----------------|-------------------|------|
 | Orchestrator | dig-opencode 本体 | Plan agent 内でフェーズ進行管理 |
-| Plan agent | 本体が直接実行 | Plan agent モードで計画を作成 |
-| Eval agent | codex exec（bash 経由）or Build agent | runtime 能力検出に依存 |
+| Explorer | Plan agent での探索 | Phase 2 コードベース探索 |
+| Researcher | codex exec 相談（bash 利用時） | Phase 2 外部調査 |
+| Plan agent | 本体が直接実行 | Plan agent モードで計画作成 |
+| Eval agent | codex exec or Build agent | Phase 4 レビュー |
 | Implementer | dig-claude に委譲 | Phase 5-7 は非対応 |
+
+```mermaid
+flowchart TD
+    O["Orchestrator (Plan agent)"]
+    O -->|"Phase 1"| Q["question / MESSAGE_QUESTION_FLOW"]
+    O -->|"Phase 2"| P2["Plan agent: 探索"]
+    O -->|"Phase 3"| Plan["計画作成"]
+    O -->|"Phase 4"| CE{"bash 利用可?"}
+    CE -->|Yes| Codex["codex exec: レビュー"]
+    CE -->|No| Build["Build agent: レビュー"]
+    Codex --> Done["計画完了 → dig-claude へ委譲"]
+    Build --> Done
+```
 
 ## 入力パラメータ
 

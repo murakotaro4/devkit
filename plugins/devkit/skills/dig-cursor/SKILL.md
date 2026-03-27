@@ -18,15 +18,7 @@ allowed-tools: ["ReadFile", "Edit", "Glob", "rg", "Shell", "AskQuestion", "TodoW
 
 ## 7フェーズ対応
 
-Cursor runtime での dig は dig-core 契約の 7 フェーズを使う。
-
-1. Phase 1: 要件ヒアリング
-2. Phase 2: 調査
-3. Phase 3: 計画作成
-4. Phase 4: 計画レビュー
-5. Phase 5: 実装
-6. Phase 6: 実装レビューと検証
-7. Phase 7: コミットとプッシュ
+dig-core 契約の 7 フェーズに従う。
 
 ## 実行契約
 
@@ -83,8 +75,7 @@ Cursor runtime での dig は dig-core 契約の 7 フェーズを使う。
 
 | パターン | コマンド形式 | 用途 | フェーズ |
 |---------|------------|------|---------|
-| diff review | `codex -a never exec review --uncommitted -m <model>` | 未コミット差分のレビュー | Phase 4 / Phase 6 |
-| plan review | `codex -a never exec -m <model> "<review prompt>"` + ファイル入力 | 計画書の独立レビュー | Phase 4（Path B 代替） |
+| diff review | `codex -a never exec review --uncommitted -m <model>` | 未コミット差分のレビュー（Phase 4 の計画 + Phase 6 の実装） | Phase 4 / Phase 6 |
 | consultation | `codex -a never exec -m <model> "<advisory prompt>"` | 調査・相談・アドバイス | Phase 2、任意 |
 
 - Phase 4/6: diff review パターンを標準で使用
@@ -98,9 +89,21 @@ dig-core のエージェントアーキテクチャを Cursor ツールに写像
 | dig-core ロール | Cursor での実現 | 備考 |
 |----------------|----------------|------|
 | Orchestrator | dig 本体エージェント | フェーズ進行管理・委譲・統合のみ |
+| Explorer | Agent mode での探索 | Phase 2 コードベース探索 |
+| Researcher | codex exec 相談 / Web 検索 | Phase 2 外部調査 |
 | Plan agent | Agent mode での計画作成 | Phase 3 |
-| Eval agent | codex exec（Shell 経由） | Phase 4/6 レビュー + Phase 2 調査 + 相談 |
+| Eval agent | codex exec（Shell 経由） | Phase 4/6 レビュー専用 |
 | Implementer | Agent mode の編集ツール | Phase 5 実装 |
+
+```mermaid
+flowchart TD
+    O["Orchestrator (dig本体)"]
+    O -->|"Phase 1"| AQ["AskQuestion"]
+    O -->|"Phase 2"| P2["Agent mode: 探索 + codex exec 相談"]
+    O -->|"Phase 3"| PA["Agent mode: 計画作成"]
+    O -->|"Phase 4/6"| CE["Shell: codex exec review"]
+    O -->|"Phase 5"| IM["Agent mode: 実装"]
+```
 
 ## 停止コード
 

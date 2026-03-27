@@ -26,33 +26,10 @@ Phase 5-7 の実行が必要な場合は dig-claude に委譲する。
 - レビュー実行コマンド（REVIEW_GATE_PLAN 用・サニタイズ済みファイル経由）:
   - `REVIEW_PRIMARY_CMD: codex exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium"`
   - `REVIEW_FALLBACK_CMD: codex exec -m gpt-5.4 -c model_reasoning_effort="medium"`
-  - サニタイズ手順: `dig_sanitize $PLAN_FILE /tmp/dig_codex_plan_review_$$.md` → サニタイズ済みファイルでレビュー → `rm -f`
-  - dig_sanitize が非0を返した場合（return 1: HIGH_ENTROPY、return 2: cp/sed失敗）は `cancel_all` → `STOP(DIG_CODEX_PLAN_SANITIZE_BLOCKED)`
 - タイムアウト/リトライ:
   - `REVIEW_TIMEOUT_SECONDS: 180`
   - `REVIEW_BACKOFF_SECONDS: 5`
   - `REVIEW_RETRY_POLICY: no_same_model_retry_one_fallback_hop`
-
-## 共通サニタイズ関数
-
-```bash
-dig_sanitize() {
-  local src="$1" dst="$2"
-  cp "$src" "$dst" || { echo "SANITIZE_CP_FAILED"; return 2; }
-  sed -i -E 's/(api[_-]?key|secret|token|password|credential|private[_-]?key)\s*[=:]\s*\S+/\1=***REDACTED***/gi' "$dst" || { echo "SANITIZE_SED_FAILED"; return 2; }
-  sed -i -E 's/(Bearer\s+)\S+/\1***REDACTED***/gi' "$dst" || { echo "SANITIZE_SED_FAILED"; return 2; }
-  sed -i -E 's/(Authorization\s*[: ]+)(Basic|Bearer|Token|Digest)?\s*\S+/\1***REDACTED***/gi' "$dst" || { echo "SANITIZE_SED_FAILED"; return 2; }
-  sed -i '/-----BEGIN.*PRIVATE KEY-----/,/-----END.*PRIVATE KEY-----/c\***PEM_REDACTED***' "$dst" || { echo "SANITIZE_SED_FAILED"; return 2; }
-  sed -i -E 's/("(api[_-]?key|secret|token|password)"\s*:\s*")[^"]+"/\1***REDACTED***"/gi' "$dst" || { echo "SANITIZE_SED_FAILED"; return 2; }
-  sed -i -E 's/([?&](token|key|secret|api_key)=)[^&\s]+/\1***REDACTED***/gi' "$dst" || { echo "SANITIZE_SED_FAILED"; return 2; }
-  [ -s "$dst" ] || { echo "SANITIZE_OUTPUT_EMPTY"; return 2; }
-  if grep -qE '[A-Za-z0-9+/=]{64,}' "$dst"; then
-    echo "HIGH_ENTROPY_DETECTED"
-    return 1
-  fi
-  return 0
-}
-```
 
 ## タスク管理: Bash経由テキスト追跡
 
@@ -127,19 +104,7 @@ REVIEW_DECOMP 状態遷移:
   REVIEW_DECOMP_RETRY_POLICY: no_same_model_retry_one_fallback_hop
 ```
 
-サニタイズ手順:
-1. `dig_sanitize $PLAN_FILE /tmp/dig_codex_decomp_review_$$.md`
-2. dig_sanitize が非0を返した場合は `cancel_all` → 即停止:
-   - return 1 (HIGH_ENTROPY_DETECTED): `cancel_all` → `STOP(DIG_CODEX_DECOMP_SANITIZE_BLOCKED)`
-   - return 2 (cp/sed失敗・空出力): `cancel_all` → `STOP(DIG_CODEX_DECOMP_SANITIZE_BLOCKED)`
-   - Codex は AskUserQuestion 不可のため、非0は全て即停止
-3. サニタイズ済みファイルでレビュー実行:
-   ```bash
-   $REVIEW_DECOMP_PRIMARY_CMD "以下のファイルのタスク分解セクションをレビューしてください: /tmp/dig_codex_decomp_review_$$.md。
-     観点: 網羅性・粒度・依存関係の矛盾を確認。
-     最終行に REVIEW_RESULT_MARKER=REVIEW_COUNTS と REVIEW_COUNTS critical=<int> high=<int> を出力"
-   ```
-4. `rm -f /tmp/dig_codex_decomp_review_$$.md`
+レビュー対象: $PLAN_FILE のタスク分解セクション
 
 unavailable 判定: 既存ルールと同一（非0終了コード、429、transport切断、認証エラー、タイムアウト）。
 
@@ -167,11 +132,11 @@ REVIEW_DECOMP 停止時 cleanup:
 
 | パターン | コマンド形式 | 用途 | フェーズ |
 |---------|------------|------|---------|
-| plan review | `codex exec -m <model> "<review prompt>"` + サニタイズ済みファイル | 計画書のレビュー | Phase 4（REVIEW_GATE_PLAN） |
-| decomp review | `codex exec -m <model> "<review prompt>"` + サニタイズ済みファイル | 分解結果のレビュー | Phase 3（REVIEW_GATE_DECOMPOSITION） |
+| plan review | `codex exec -m <model> "<review prompt>"` | 計画書のレビュー | Phase 4（REVIEW_GATE_PLAN） |
+| decomp review | `codex exec -m <model> "<review prompt>"` | 分解結果のレビュー | Phase 3（REVIEW_GATE_DECOMPOSITION） |
 | consultation | `codex exec -m <model> "<advisory prompt>"` | 調査・相談・アドバイス | Phase 2、任意 |
 
-- Phase 4: plan review パターンを使用（サニタイズ必須）
+- Phase 4: plan review パターンを使用
 - `review --uncommitted` は Phase 4 の計画書レビューには不適切（分解テキスト対象ではない）
 - 迷った場合: consultation パターンで codex exec に相談してよい
 
@@ -182,9 +147,21 @@ dig-core のエージェントアーキテクチャを Codex ツールに写像:
 | dig-core ロール | Codex での実現 | 備考 |
 |----------------|---------------|------|
 | Orchestrator | dig-codex 本体 | Plan Mode 内でフェーズ進行管理 |
-| Plan agent | 本体が直接実行 | Codex は Plan Mode 内で計画を作成 |
-| Eval agent | codex exec（Bash 経由） | Phase 4 レビュー + 分解レビュー |
+| Explorer | Bash でのコードベース探索 | Phase 2（Plan Mode 内） |
+| Researcher | codex exec 相談 | Phase 2 外部調査 |
+| Plan agent | 本体が直接実行 | Plan Mode で計画作成 |
+| Eval agent | codex exec（Bash 経由） | Phase 4 レビュー専用 |
 | Implementer | 非対応 | Phase 5-7 は dig-claude に委譲 |
+
+```mermaid
+flowchart TD
+    O["Orchestrator (Plan Mode)"]
+    O -->|"Phase 1"| RUI["request_user_input"]
+    O -->|"Phase 2"| P2["Bash: コード探索 + codex exec 相談"]
+    O -->|"Phase 3"| Plan["計画作成 (cat >> plan)"]
+    O -->|"Phase 4"| CE["codex exec: REVIEW_GATE_PLAN"]
+    CE -->|Pass| Done["計画完了 → dig-claude へ委譲"]
+```
 
 ## 停止コード
 
@@ -195,8 +172,6 @@ dig-core のエージェントアーキテクチャを Codex ツールに写像:
 | `DIG_CODEX_PLAN_REVIEW_BLOCKED` | 計画レビューで critical/high 未解消 |
 | `DIG_CODEX_DECOMP_REVIEW_BLOCKED` | 分解レビューで critical/high 未解消 |
 | `DIG_CODEX_DECOMP_REVIEW_UNAVAILABLE` | 分解レビューで codex exec primary + fallback 両方 unavailable |
-| `DIG_CODEX_DECOMP_SANITIZE_BLOCKED` | 分解レビューでサニタイズ失敗（高エントロピー or cp/sed失敗）、ユーザー確認不可 |
-| `DIG_CODEX_PLAN_SANITIZE_BLOCKED` | 計画レビューでサニタイズ失敗（高エントロピー or cp/sed失敗）、ユーザー確認不可 |
 
 ## 停止文テンプレート
 
@@ -216,14 +191,6 @@ dig-core のエージェントアーキテクチャを Codex ツールに写像:
   - `ERROR_CODE: DIG_CODEX_DECOMP_REVIEW_BLOCKED`
   - `RERUN_COMMAND: $dig <topic>`
   - `DIAGNOSTIC_COMMAND: echo REVIEW_COUNTS critical=<n> high=<n>`
-- 分解サニタイズブロック時:
-  - `ERROR_CODE: DIG_CODEX_DECOMP_SANITIZE_BLOCKED`
-  - `RERUN_COMMAND: $dig <topic>`
-  - `DIAGNOSTIC_COMMAND: grep -cE '[A-Za-z0-9+/=]{64,}' $PLAN_FILE`
-- 計画サニタイズブロック時:
-  - `ERROR_CODE: DIG_CODEX_PLAN_SANITIZE_BLOCKED`
-  - `RERUN_COMMAND: $dig <topic>`
-  - `DIAGNOSTIC_COMMAND: grep -cE '[A-Za-z0-9+/=]{64,}' $PLAN_FILE`
 
 ## Step 3 分解経路（Codex 固有）
 
