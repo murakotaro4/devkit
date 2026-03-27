@@ -7,10 +7,22 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 
 # /dig-codex - Codex Adapter
 
+> **Role**: dig-codex = dig-core 契約を Codex Plan Mode（request_user_input / Bash / codex exec）にマッピングする計画専用 adapter
+
+## Plan Mode ↔ Phase マッピング
+
+| モード | 対応フェーズ | 備考 |
+|--------|------------|------|
+| Plan Mode（必須） | Phase 1-4 | 計画専用。Phase 5-7 は非対応 |
+
+Phase 5-7 の実行が必要な場合は dig-claude に委譲する。
+
 ## 実行契約
 
 - Plan Mode 必須
 - 質問: `request_user_input`
+- Phase 1 はラウンド数に上限なし。完了チェックリスト（目的/成功条件/制約/非対象/承認）が全て確定するまで深堀りを続ける
+- 完了確認: request_user_input で「要件は十分固まりましたか？」を必ず確認する
 - レビュー実行コマンド（REVIEW_GATE_PLAN 用・サニタイズ済みファイル経由）:
   - `REVIEW_PRIMARY_CMD: codex exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium"`
   - `REVIEW_FALLBACK_CMD: codex exec -m gpt-5.4 -c model_reasoning_effort="medium"`
@@ -150,6 +162,29 @@ REVIEW_DECOMP 停止時 cleanup:
 - `ERROR_CODE: DIG_CODEX_PLAN_REQUIRED`
 - `RERUN_COMMAND: $dig <topic>`
 - `DIAGNOSTIC_COMMAND: echo current_mode_is_plan`
+
+## codex exec パターン
+
+| パターン | コマンド形式 | 用途 | フェーズ |
+|---------|------------|------|---------|
+| plan review | `codex exec -m <model> "<review prompt>"` + サニタイズ済みファイル | 計画書のレビュー | Phase 4（REVIEW_GATE_PLAN） |
+| decomp review | `codex exec -m <model> "<review prompt>"` + サニタイズ済みファイル | 分解結果のレビュー | Phase 3（REVIEW_GATE_DECOMPOSITION） |
+| consultation | `codex exec -m <model> "<advisory prompt>"` | 調査・相談・アドバイス | Phase 2、任意 |
+
+- Phase 4: plan review パターンを使用（サニタイズ必須）
+- `review --uncommitted` は Phase 4 の計画書レビューには不適切（分解テキスト対象ではない）
+- 迷った場合: consultation パターンで codex exec に相談してよい
+
+## エージェントマッピング
+
+dig-core のエージェントアーキテクチャを Codex ツールに写像:
+
+| dig-core ロール | Codex での実現 | 備考 |
+|----------------|---------------|------|
+| Orchestrator | dig-codex 本体 | Plan Mode 内でフェーズ進行管理 |
+| Plan agent | 本体が直接実行 | Codex は Plan Mode 内で計画を作成 |
+| Eval agent | codex exec（Bash 経由） | Phase 4 レビュー + 分解レビュー |
+| Implementer | 非対応 | Phase 5-7 は dig-claude に委譲 |
 
 ## 停止コード
 

@@ -7,6 +7,10 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash"]
 
 # /dig - Runtime Orchestrator
 
+> **dig** = runtime 解決と dig-core + adapter への委譲のみ
+> **dig-core** = 7フェーズ・ゲート・タスク/コミット契約の SSOT
+> **dig-\<adapter\>** = dig-core 契約を runtime 固有ツールにマッピングする adapter
+
 `/dig` は入口のみを担当する。実行ロジックは `dig-core` と runtime adapter に委譲する。
 Codex / OpenCode に同期する公開スキルは `dig` のみとし、内部契約は同梱ファイルを相対パスで参照する。
 

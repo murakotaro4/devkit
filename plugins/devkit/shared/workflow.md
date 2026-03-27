@@ -1,3 +1,7 @@
+> **Note**: dig ワークフローの SSOT は `plugins/devkit/skills/dig-core/SKILL.md`。
+> この文書は devkit-init による downstream 同期用の汎用ワークフロー契約として維持する。
+> dig 固有の契約（エージェントアーキテクチャ、codex exec パターン、Phase 1 深堀り強化等）は dig-core を参照すること。
+
 # devkit 統一開発ワークフロー（agent team 運用契約）
 
 この文書は全 runtime 共通の**運用契約**を定義する。原則すべてのタスクを agent team 前提で進める。軽微なタスクでも reviewer は必須とし、必要なら役割兼務で縮退する。

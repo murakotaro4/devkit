@@ -132,6 +132,22 @@ def main() -> int:
     if "codex -a never exec review" not in readme:
         problems.append("README missing approval-never review command")
 
+    # ── 新契約チェック ──
+    for adapter_name, content in [("claude", claude), ("cursor", cursor), ("codex", codex), ("opencode", opencode)]:
+        if '> **Role**:' not in content:
+            problems.append(f"dig-{adapter_name} missing role description (> **Role**:)")
+        if "Plan Mode" not in content:
+            problems.append(f"dig-{adapter_name} missing Plan Mode mapping")
+
+    if "## エージェントアーキテクチャ" not in core:
+        problems.append("dig-core missing agent architecture section")
+    if "ラウンド数に上限を設けない" not in core:
+        problems.append("dig-core missing unlimited round policy in Phase 1")
+    if "Path A" not in core or "Path B" not in core:
+        problems.append("dig-core missing review path definitions (Path A / Path B)")
+    if "Codex Exec 相談ルール" not in agents:
+        problems.append("AGENTS.md missing codex exec consultation rule")
+
     if problems:
         print(json.dumps({"ok": False, "problems": problems}, ensure_ascii=False, indent=2))
         return 2

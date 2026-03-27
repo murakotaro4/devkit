@@ -7,13 +7,20 @@ allowed-tools: ["Read", "Edit", "Write", "Grep", "Glob", "Bash"]
 
 # /dig-claude - Claude Adapter
 
-dig-core 契約を Claude Code 環境で実行する adapter。
+> **Role**: dig-claude = dig-core 契約を Claude Code ツール（AskUserQuestionTool / Agent / TaskCreate / codex exec）にマッピングする adapter
+
+## Plan Mode ↔ Phase マッピング
+
+| モード | 対応フェーズ | 備考 |
+|--------|------------|------|
+| Plan Mode | Phase 1-4 | Phase 4 完了まで Plan Mode 内で実行可能 |
+| Agent Mode | Phase 5-7 | ExitPlanMode 後に実行 |
 
 > `AskUserQuestionTool`・`Agent`・`TaskCreate`・`TaskUpdate`・`TaskList` は Claude Code のシステムツールであり、frontmatter の `allowed-tools` には書かない。
 
 ## 7フェーズ対応
 
-Claude runtime での dig は、`workflow.md` と同じ 7 フェーズを使う。
+Claude runtime での dig は dig-core 契約の 7 フェーズを使う。
 
 1. Phase 1: 要件ヒアリング
 2. Phase 2: 調査
@@ -99,8 +106,15 @@ dig_sanitize() {
 - 最低 1 ラウンド必須。4 問を AskUserQuestionTool で同時に質問する
 - 4 問のカバー範囲: (a) 成功基準, (b) 制約・限界, (c) 対象外, (d) 優先度・トレードオフ
 - 選択肢には description を付ける。`multiSelect: true` を活用してユーザーの回答負荷を下げる
-- 最大 2 ラウンドまで再質問可
+- ラウンド数に上限なし。完了チェックリストが全て埋まるまで深堀りを続ける
 - AskUserQuestion が失敗したら `DIG_CLAUDE_QUESTION_FAILED` で停止する
+- 完了チェックリスト（全項目が確定するまで Phase 2 に進まない）:
+  - [ ] 目的（何を達成するか）
+  - [ ] 成功条件（何をもって完了とするか）
+  - [ ] 制約（技術的制約、時間制約、互換性要件等）
+  - [ ] 非対象（今回やらないこと）
+  - [ ] 承認（ユーザーが上記に同意）
+- 完了確認: AskUserQuestionTool で「要件は十分固まりましたか？」を必ず確認する。ユーザーが同意するまで Phase 2 に進まない
 - Phase 1 完了後に `requirements_confirmed` トークンが記録される（PostToolUse hook による自動設定）
 
 質問は「非自明」「選択肢付き」「次の判断に効く」ものに限定する。
@@ -137,6 +151,8 @@ plan には最低限以下を入れる。
 ### Phase 4: 計画レビュー
 
 分解済み plan を Codex でレビューする。
+
+> **レビュー経路**: Phase 4 では Path B（計画書レビュー）を使用する。サニタイズ済み plan ファイルを codex exec に渡す方式。`review --uncommitted` は Phase 6 用であり、Phase 4 では使用しない。
 
 レビュー実行コマンド:
 - REVIEW_PRIMARY_CMD: `codex exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium"`
@@ -346,6 +362,31 @@ commit が必要な場合は常に以下の順で進める。
 
 Phase 7 完了後に `devkit:improve-skill` を実行する。
 dig-core 契約の「セッション振り返り」に従う。
+
+## codex exec パターン
+
+| パターン | コマンド形式 | 用途 | フェーズ |
+|---------|------------|------|---------|
+| diff review | `codex exec review --uncommitted` | 未コミット差分のレビュー | Phase 6（REVIEW_GATE_SUBTASK / INTEGRATION） |
+| plan review | `codex exec -m <model> "<review prompt>"` + サニタイズ済みファイル | 計画書のレビュー | Phase 4（REVIEW_GATE_PLAN） |
+| consultation | `codex exec -m <model> "<advisory prompt>"` | 調査・相談・アドバイス | Phase 2、任意 |
+| file review | `codex exec -m <model> "<prompt>"` + サニタイズ済みファイル | ファイルベースのレビュー | Phase 4/6 |
+
+- Phase 4: Path B（plan review）を使用。計画書ファイルをサニタイズして codex exec に渡す
+- Phase 6: Path A（diff review）を使用。`review --uncommitted` はカスタムプロンプト併用不可
+- Phase 2: consultation パターンで調査・技術相談に使用可能
+- 迷った場合: consultation パターンで codex exec に相談してよい
+
+## エージェントマッピング
+
+dig-core のエージェントアーキテクチャを Claude Code ツールに写像:
+
+| dig-core ロール | Claude Code での実現 | 備考 |
+|----------------|---------------------|------|
+| Orchestrator | dig 本体エージェント | フェーズ進行管理・委譲・統合のみ |
+| Plan agent | Agent ツール（plan-only prompt） | Phase 3 計画作成を委譲 |
+| Eval agent | codex exec（上記4パターン） | Phase 4/6 レビュー + Phase 2 調査 + 相談 |
+| Implementer | Agent ツール（`isolation: "worktree"`） | Phase 5 実装 |
 
 ## 停止コード
 

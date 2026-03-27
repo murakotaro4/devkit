@@ -143,3 +143,71 @@ def test_no_stale_phase_references():
             stale_files.append(str(skill_md.relative_to(REPO_ROOT)))
 
     assert not stale_files, f"古い 8 フェーズ参照が残っている: {stale_files}"
+
+
+# ── 8. 全 adapter にロール記述がある ─────────────────────────────
+
+
+def test_adapters_have_role_description():
+    adapters = [
+        "plugins/devkit/skills/dig-claude/SKILL.md",
+        "plugins/devkit/skills/dig-cursor/SKILL.md",
+        "plugins/devkit/skills/dig-codex/SKILL.md",
+        "plugins/devkit/skills/dig-opencode/SKILL.md",
+    ]
+    for adapter in adapters:
+        text = _read(adapter)
+        assert "> **Role**:" in text, f"{adapter} にロール記述（> **Role**:）がない"
+
+
+# ── 9. 全 adapter に Plan Mode ↔ Phase マッピングがある ──────────
+
+
+def test_adapters_have_plan_mode_mapping():
+    adapters = [
+        "plugins/devkit/skills/dig-claude/SKILL.md",
+        "plugins/devkit/skills/dig-cursor/SKILL.md",
+        "plugins/devkit/skills/dig-codex/SKILL.md",
+        "plugins/devkit/skills/dig-opencode/SKILL.md",
+    ]
+    for adapter in adapters:
+        text = _read(adapter)
+        assert "Plan Mode" in text and "Phase" in text, (
+            f"{adapter} に Plan Mode ↔ Phase マッピングがない"
+        )
+
+
+# ── 10. dig-core にエージェントアーキテクチャがある ────────────────
+
+
+def test_dig_core_agent_architecture():
+    text = _read("plugins/devkit/skills/dig-core/SKILL.md")
+    assert "## エージェントアーキテクチャ" in text, "dig-core にエージェントアーキテクチャセクションがない"
+    for role in ["Orchestrator", "Plan agent", "Eval agent", "Implementer"]:
+        assert role in text, f"dig-core にエージェントロール {role} が定義されていない"
+
+
+# ── 11. dig-core Phase 1 にラウンド数上限がない ───────────────────
+
+
+def test_dig_core_phase1_no_round_limit():
+    text = _read("plugins/devkit/skills/dig-core/SKILL.md")
+    assert "ラウンド数に上限を設けない" in text, "dig-core Phase 1 にラウンド数上限撤廃の記述がない"
+    assert "完了チェックリスト" in text, "dig-core Phase 1 に完了チェックリストがない"
+
+
+# ── 12. AGENTS.md に codex exec 相談ルールがある ──────────────────
+
+
+def test_agents_codex_consultation_rule():
+    text = _read("AGENTS.md")
+    assert "Codex Exec 相談ルール" in text, "AGENTS.md に codex exec 相談ルールがない"
+
+
+# ── 13. dig-core にレビュー経路 2 本が定義されている ──────────────
+
+
+def test_dig_core_review_paths():
+    text = _read("plugins/devkit/skills/dig-core/SKILL.md")
+    assert "Path A" in text and "Path B" in text, "dig-core にレビュー経路 2 本（Path A / Path B）が定義されていない"
+    assert "review --uncommitted" in text, "dig-core に Path A（diff review）の記述がない"

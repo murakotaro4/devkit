@@ -48,6 +48,17 @@
   - `minor`: workflow contract / user-visible behavior 変更
   - `major`: breaking change
 
+## Codex Exec 相談ルール
+
+リポジトリ全体のルール: 行き詰まった場合は `codex exec` で外部モデルに相談する。dig ワークフロー固有ではなく、全エージェント作業に適用する。
+
+```bash
+codex -a never exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium" "<相談内容>"
+```
+
+- 技術的判断に迷った場合、設計の妥当性を確認したい場合に使用する
+- 結果は参考意見として扱い、最終判断は Coordinator が行う
+
 <!-- devkit:workflow:start -->
 <!-- このセクションは shared/workflow.md の静的コピー。共有フローを変更したら両方更新すること。 -->
 ## Shared Workflow
