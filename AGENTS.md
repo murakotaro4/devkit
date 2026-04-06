@@ -14,6 +14,8 @@
 - `plugins/devkit/shared/workflow.md` は downstream 同期用の共有ワークフロー本体なので、共有フローを変える場合はこのファイル内のコピーと一緒に更新する
 - スクリプトの仕様変更時は `README.md` と `plugins/devkit/scripts/README.md` を同期する
 - スキル契約を変える場合は対応する `SKILL.md` と必要な templates / scripts を同期する
+- この repo では、ファイル変更を伴うタスクごとに必ず独立したサブエージェント review を 1 回以上実施する
+- review で指摘が出た場合は修正後に再 review を回し、追加 findings がなくなるまで繰り返す
 
 ## Key Paths
 
@@ -26,7 +28,7 @@
 ## Commit Rules
 
 - コミットメッセージは Conventional Commits を使う
-- 基本形は ``<type>(<scope>): <summary>`` とし、`scope` は必要な場合だけ付ける
+- 基本形は `<type>(<scope>): <summary>` とし、`scope` は必要な場合だけ付ける
 - `type` は `feat` `fix` `docs` `refactor` `test` `chore` `ci` `build` `perf` `revert` を優先して使う
 - `summary` は必ず日本語で簡潔に書く
 - 本文を書く場合も日本語で統一し、変更理由・影響範囲・補足を必要最小限で書く
@@ -60,7 +62,9 @@ codex -a never exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium" "<
 - 結果は参考意見として扱い、最終判断は Coordinator が行う
 
 <!-- devkit:workflow:start -->
+
 <!-- このセクションは shared/workflow.md の静的コピー。共有フローを変更したら両方更新すること。 -->
+
 ## Shared Workflow
 
 # devkit 統一開発ワークフロー（agent team 運用契約）
@@ -73,6 +77,15 @@ codex -a never exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium" "<
 - runtime ごとの hook / automation はこの契約の一部だけを機械強制してよい
 - `team_shape`、`role_assignment`、`write_scope` は plan または task note に明示する運用義務とする
 - 上記 3 項目は、現時点では全 runtime 共通に機械検証される前提ではない
+
+## Harness First
+
+- 品質ルールは prose より決定論的ツールを優先し、lint / format / validation / test で強制する
+- `AGENTS.md` / `CLAUDE.md` は詳細説明の置き場ではなく、正本や実行入口へのルーティングを優先する
+- 実装は `plan -> review -> execute` を分離し、review gate なしで進めない
+- バグや逸脱が出たら、同じ失敗を次回自動検出できる test / check を追加する
+- セッション開始時は branch、dirty worktree、最新 commit、workflow state を確認する
+- UI を持つ downstream repo では E2E を推奨する
 
 ## Workflow State Tokens
 
@@ -237,8 +250,8 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 ### Phase 7: コミットとプッシュ
 
 1. `git add` でステージング
-2. コミット前確認を実施
-3. `git commit` + `git push`
+1. コミット前確認を実施
+1. `git commit` + `git push`
 
 コミットメッセージは Conventional Commits を使い、件名・本文とも日本語で書く。
 
@@ -257,4 +270,5 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 - implementer による単独自己レビュー
 - 実装レビューなしのコミット
 - `Coordinator` の判断なしにスコープを拡張すること
+
 <!-- devkit:workflow:end -->

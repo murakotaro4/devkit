@@ -53,7 +53,9 @@ def normalize_session_payload(payload: Any) -> dict[str, Any]:
     normalized = dict(payload)
     normalized["requirements"] = normalize_text_list(payload.get("requirements", []))
     normalized["constraints"] = normalize_text_list(payload.get("constraints", []))
-    normalized["mode_hint"] = str(payload.get("mode_hint", "undecided")).strip() or "undecided"
+    normalized["mode_hint"] = (
+        str(payload.get("mode_hint", "undecided")).strip() or "undecided"
+    )
     return normalized
 
 
@@ -68,7 +70,9 @@ def infer_name(session: dict[str, Any], explicit_name: str | None) -> str:
     if explicit_name:
         candidate = slugify(explicit_name)
     else:
-        combined = " ".join(session.get("requirements", []) + session.get("constraints", []))
+        combined = " ".join(
+            session.get("requirements", []) + session.get("constraints", [])
+        )
         words = re.findall(r"[a-zA-Z][a-zA-Z0-9-]{2,}", combined)
         if words:
             candidate = slugify("-".join(words[:3]))
@@ -211,8 +215,12 @@ def render_markdown(result: dict[str, Any]) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create skill blueprint checklist from session JSON")
-    parser.add_argument("--session-json", help="Path to session JSON produced by session_extract.py")
+    parser = argparse.ArgumentParser(
+        description="Create skill blueprint checklist from session JSON"
+    )
+    parser.add_argument(
+        "--session-json", help="Path to session JSON produced by session_extract.py"
+    )
     parser.add_argument("--name", help="Optional explicit skill name")
     parser.add_argument(
         "--base-path",

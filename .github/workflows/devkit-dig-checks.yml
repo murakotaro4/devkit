@@ -21,6 +21,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync harness dependencies
+        run: uv sync --project plugins/devkit
+
       - name: CI context
         run: |
           echo "event=${{ github.event_name }}"
@@ -29,10 +40,8 @@ jobs:
           echo "head_ref=${{ github.head_ref }}"
           echo "DIG_VERSION_BASE_REF=${DIG_VERSION_BASE_REF}"
 
-      - name: Run prek (pre-push stage)
-        uses: j178/prek-action@0bb87d7f00b0c99306c8bcb8b8beba1eb581c037
-        with:
-          extra-args: --all-files --hook-stage pre-push
+      - name: Run harness verify
+        run: uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
 
       - name: Summary
         if: always()
@@ -41,11 +50,14 @@ jobs:
             echo "## DevKit Dig Checks";
             echo "";
             echo "- Workflow: \`DevKit Dig Checks\`";
-            echo "- Stage: \`pre-push\` via \`prek\`";
+            echo "- Stage: \`uv run verify-full\`";
             echo "- Base ref used by version gate: \`${DIG_VERSION_BASE_REF}\`";
             echo "";
             echo "### Local parity commands";
             echo "\`\`\`bash";
+            echo "uv sync --project plugins/devkit";
+            echo "uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast";
+            echo "uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full";
             echo "prek run --all-files --hook-stage pre-commit";
             echo "prek run --all-files --hook-stage pre-push";
             echo "\`\`\`";

@@ -5,49 +5,17 @@ default_install_hook_types = ["pre-commit", "pre-push"]
 repo = "local"
 
 [[repos.hooks]]
-id = "utf8-bom"
-name = "Reject UTF-8 BOM in staged docs"
-entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_utf8_bom.py"
+id = "devkit-verify-fast"
+name = "DevKit verify fast"
+entry = "uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast"
 language = "system"
 pass_filenames = false
 stages = ["pre-commit"]
 
 [[repos.hooks]]
-id = "dig-routing"
-name = "Check dig routing"
-entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_dig_routing.py"
-language = "system"
-pass_filenames = false
-stages = ["pre-commit", "pre-push"]
-
-[[repos.hooks]]
-id = "skill-surface-phase-b"
-name = "Check skill surface (phase B)"
-entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_skill_surface.py --phase=B"
-language = "system"
-pass_filenames = false
-stages = ["pre-commit", "pre-push"]
-
-[[repos.hooks]]
-id = "dig-migration-repo"
-name = "Check dig migration (repo mode)"
-entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_dig_migration.py --mode=repo"
-language = "system"
-pass_filenames = false
-stages = ["pre-commit", "pre-push"]
-
-[[repos.hooks]]
-id = "pytest"
-name = "Run pytest"
-entry = "uv run --project plugins/devkit --group dev pytest plugins/devkit/tests/ -x -q"
-language = "system"
-pass_filenames = false
-stages = ["pre-commit", "pre-push"]
-
-[[repos.hooks]]
-id = "plugin-version-bump"
-name = "Check plugin version bump"
-entry = "uv run --project plugins/devkit python plugins/devkit/scripts/check_plugin_version_bump.py"
+id = "devkit-verify-full"
+name = "DevKit verify full"
+entry = "uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full"
 language = "system"
 pass_filenames = false
 stages = ["pre-push"]

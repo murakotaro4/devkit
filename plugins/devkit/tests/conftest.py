@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ def hook_env(isolated_home):
 
 def _run_hook(script_name: str, payload: dict, env: dict) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python3", str(WORKFLOW_DIR / script_name)],
+        [sys.executable, str(WORKFLOW_DIR / script_name)],
         input=json.dumps(payload, ensure_ascii=False),
         cwd=str(REPO_ROOT),
         env=env,

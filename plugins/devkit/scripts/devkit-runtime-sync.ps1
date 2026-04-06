@@ -14,7 +14,9 @@ function Get-DevKitSkillManifest {
     "amazon-search",
     "improve-skill",
     "codex-search",
-    "devkit-init"
+    "devkit-init",
+    "repo-maintainer",
+    "repo-maintainer-init"
   )
 }
 

@@ -92,6 +92,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ci\assert-pr-check
 | [prek](https://github.com/j178/prek) | Git hooks（pre-commit / pre-push）実行基盤 | Linux/WSL: `cargo install prek` / Windows: `scoop install prek` / macOS: `brew install prek` | `prek --version` |
 | [uv](https://docs.astral.sh/uv/) | Pythonベースのハーネス実行・依存同期 | 公式インストーラ / `pipx install uv` など | `uv --version` |
 
+補足:
+
+- Claude hook は `node` launcher 経由で `uv` を優先し、未導入時は system Python へ fallback する
+- `verify-fast` / `verify-full` の手動実行と依存同期は引き続き `uv` を正規入口とする
+
 ### 推奨ツール（レビューゲート用）
 
 devkit のワークフローでは、agent team review を前提としつつ、Codex Spark CLI を標準レビューゲートに使う。
@@ -163,8 +168,8 @@ PowerShell / cmd で `update-devkit` / `update-ccx` を使う場合:
 ## 構成
 
 - `plugins/devkit/.claude-plugin/`: Claude Code プラグイン定義
-- `plugins/devkit/skills/*/SKILL.md`: スキル本体
-- `plugins/devkit/scripts/`: 補助スクリプト（`devkit-setup.ps1`、`update-devkit` / `update-ccx` 関連）
+- `plugins/devkit/skills/*/SKILL.md`: スキル本体（`repo-maintainer` / `repo-maintainer-init` を含む）
+- `plugins/devkit/scripts/`: 補助スクリプト（`devkit-setup.ps1`、`update-devkit` / `update-ccx`、`repo_maintainer.py`）
 - `plugins/devkit/shared/`: 共有ワークフロー定義（workflow.md）
 - `plugins/devkit/templates/`: OpenCode テンプレートと Codex 設定テンプレート
 
@@ -241,9 +246,9 @@ bash "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/upda
 
 ## 使い方（スラッシュ）
 
-- Claude Code: `/dig` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:amazon-search` `/devkit:improve-skill` `/devkit:codex-search` `/devkit:devkit-init`
+- Claude Code: `/dig` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:mermaid-show` `/devkit:improve-skill` `/devkit:codex-search` `/devkit:devkit-init` `/devkit:repo-maintainer` `/devkit:repo-maintainer-init`
 - OpenCode: 環境の標準手段でインストール済みスキルを呼び出し（`/devkit-*` はローカルで定義した場合のみ）
-- Codex CLI: `$dig`
+- Codex CLI: `$dig` `$repo-maintainer` `$repo-maintainer-init`
 
 補足（Codex の `$dig` 利用）:
 
@@ -253,6 +258,44 @@ bash "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/upda
 - `~/.codex/skills` は user-managed skill の配置先としては使わない
 - `~/.agents/skills/dig/SKILL.md` は UTF-8 BOM なしであること（BOM があると frontmatter の `---` を解釈できず `$dig` が読み込まれない）
 - `dig-core` / `dig-codex` などの内部 adapter は `~/.agents/skills` へは公開せず、shared source の `plugins/devkit/skills/` から `dig` が相対参照する
+
+## Nightly Maintainer
+
+cross-repo の nightly maintenance 用に、共有 skill と共通 runner を追加した。
+
+- shared skill:
+  - `repo-maintainer`: nightly / drift / weekly lane の repo 保全更新
+  - `repo-maintainer-init`: 各 repo の scaffold 生成
+- 共通 runner: `plugins/devkit/scripts/repo_maintainer.py`
+- target repo 側の正本: `.devkit/repo-maintainer.toml`
+
+初期化:
+
+```bash
+python plugins/devkit/scripts/repo_maintainer.py init-scaffold --repo /path/to/target-repo
+```
+
+手動実行:
+
+```bash
+python plugins/devkit/scripts/repo_maintainer.py run --repo /path/to/target-repo
+```
+
+`init-scaffold` は target repo に次を生成する:
+
+- `.devkit/repo-maintainer.toml`
+- `MEMORY.md`
+- `logs/skills/`
+- `reviews/daily/`
+- `reviews/weekly/`
+- PowerShell / POSIX wrapper
+- Windows Task Scheduler / macOS `launchd` / Linux `systemd timer` / cron の template
+
+補足:
+
+- runner は temp worktree 上で Codex を実行し、branch / PR / auto-merge を処理する。
+- AI review は `review_commands`、ローカル checks は `check_commands` に寄せる。
+- auto-merge は `git.auto_merge=true` かつ review/check 通過時だけ有効。
 
 ## 更新
 

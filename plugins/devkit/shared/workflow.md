@@ -13,6 +13,15 @@
 - `team_shape`、`role_assignment`、`write_scope` は plan または task note に明示する運用義務とする
 - 上記 3 項目は、現時点では全 runtime 共通に機械検証される前提ではない
 
+## Harness First
+
+- 品質ルールは prose より決定論的ツールを優先し、lint / format / validation / test で強制する
+- `AGENTS.md` / `CLAUDE.md` は詳細説明の置き場ではなく、正本や実行入口へのルーティングを優先する
+- 実装は `plan -> review -> execute` を分離し、review gate なしで進めない
+- バグや逸脱が出たら、同じ失敗を次回自動検出できる test / check を追加する
+- セッション開始時は branch、dirty worktree、最新 commit、workflow state を確認する
+- UI を持つ downstream repo では E2E を推奨する
+
 ## Workflow State Tokens
 
 runtime-specific hook / state が phase を記録する場合、canonical token は次を使う:
@@ -176,8 +185,8 @@ runtime-specific hook / state が phase を記録する場合、canonical token 
 ### Phase 7: コミットとプッシュ
 
 1. `git add` でステージング
-2. コミット前確認を実施
-3. `git commit` + `git push`
+1. コミット前確認を実施
+1. `git commit` + `git push`
 
 コミットメッセージは Conventional Commits を使い、件名・本文とも日本語で書く。
 

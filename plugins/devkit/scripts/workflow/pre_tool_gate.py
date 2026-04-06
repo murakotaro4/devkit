@@ -53,7 +53,7 @@ def suggest_version_message() -> str | None:
     if payload.get("reason") != "plugin version not bumped":
         return None
     return (
-        "[devkit-workflow] ⛔ git push がブロックされました。"
+        "[devkit-workflow] git push がブロックされました。"
         f"plugin.json のバージョンが変更されていません（現在: {payload.get('baseVersion')}）。\n"
         f"必要条件: {payload.get('required')}\n"
         "plugin.json の version を更新してからコミットし直してください。"
@@ -126,7 +126,7 @@ def main() -> int:
             emit_decision(
                 "ask",
                 f"git {action} detected without workflow state",
-                f"[devkit-workflow] ⚠️ git {action} が検出されました。ワークフロー状態が確認できません。レビューゲート（Phase 4/6）を完了していますか？",
+                f"[devkit-workflow] git {action} が検出されました。ワークフロー状態が確認できません。レビューゲート（Phase 4/6）を完了していますか？",
             )
             return 0
         emit_decision("pass", "no workflow state")
@@ -140,7 +140,7 @@ def main() -> int:
             emit_decision(
                 "ask",
                 "Plan file write before Phase 1 requirements confirmed",
-                "[devkit-dig] ⚠️ Phase 1 の要件ヒアリングが完了していません。"
+                "[devkit-dig] Phase 1 の要件ヒアリングが完了していません。"
                 "AskUserQuestion で最低 1 ラウンドの質問を行ってから "
                 "Phase 3 に進んでください。"
                 "Phase 1 を完了済みの場合はユーザー承認で続行できます。",
@@ -151,7 +151,7 @@ def main() -> int:
         emit_decision(
             "ask",
             "ExitPlanMode called before Phase 4 plan review",
-            "[devkit-dig] ⚠️ Phase 4 の計画レビューが完了していません。"
+            "[devkit-dig] Phase 4 の計画レビューが完了していません。"
             "ExitPlanMode を呼ぶ前に codex exec で計画レビューを実行し、"
             "REVIEW_COUNTS critical=0 high=0 を確認してください。"
             "codex exec が利用不能な場合はユーザー承認で続行できます。",
@@ -162,7 +162,7 @@ def main() -> int:
         emit_decision(
             "block",
             "dig implementation started before Phase 5 task registration",
-            "[devkit-dig] ⛔ Phase 4 は通過していますが、Phase 5 の Tasks が未登録です。"
+            "[devkit-dig] Phase 4 は通過していますが、Phase 5 の Tasks が未登録です。"
             "先に [Task 1] 以降のタスクを TaskCreate で登録してから実装に入ってください。",
         )
         return 0
@@ -172,7 +172,7 @@ def main() -> int:
             emit_decision(
                 "ask",
                 "Implementation tool before Phase 4/5 completion",
-                "[devkit-dig] ⚠️ Phase 4 計画レビューと Phase 5 TaskCreate が未完了です。"
+                "[devkit-dig] Phase 4 計画レビューと Phase 5 TaskCreate が未完了です。"
                 "調査目的の場合はユーザー承認で続行できます。",
             )
             return 0
@@ -183,7 +183,7 @@ def main() -> int:
         emit_decision(
             "block",
             "git commit detected without review phase marker",
-            "[devkit-workflow] ⛔ Phase 4 と Phase 6 のレビューが完了していません。plan_review_completed と implementation_review_completed が必要です",
+            "[devkit-workflow] Phase 4 と Phase 6 のレビューが完了していません。plan_review_completed と implementation_review_completed が必要です",
         )
         return 0
 
@@ -191,7 +191,7 @@ def main() -> int:
         emit_decision(
             "block",
             "git push detected without commit review marker",
-            "[devkit-workflow] ⛔ Phase 7 のコミットレビューが完了していません。commit_review_completed が必要です",
+            "[devkit-workflow] Phase 7 のコミットレビューが完了していません。commit_review_completed が必要です",
         )
         return 0
 

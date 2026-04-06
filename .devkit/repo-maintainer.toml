@@ -1,0 +1,50 @@
+forge = "github"
+phase = 1
+allowed_paths = [
+  "AGENTS.md",
+  "CLAUDE.md",
+  "README.md",
+  "MEMORY.md",
+  "docs",
+  "plugins/devkit/shared/workflow.md",
+  "plugins/devkit/scripts/README.md",
+  "plugins/devkit/skills",
+  "logs/skills",
+  "reviews",
+  ".devkit",
+]
+review_commands = [
+  "codex -a never exec review --uncommitted -m gpt-5.3-codex-spark",
+  "codex -a never exec review --uncommitted -m gpt-5.4 -c 'model_reasoning_effort=\"medium\"'",
+]
+check_commands = [
+  "uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast",
+]
+prompt_appendix = "This repository is the DevKit source of truth. In phase 1, prioritize AGENTS.md, README.md, MEMORY.md, plugins/devkit/shared/workflow.md, plugins/devkit/scripts/README.md, and SKILL.md alignment. Do not edit plugin version, runtime sync scripts, or executable code unless phase is raised. When a task changes files, treat independent subagent review as mandatory and rerun review after fixes until no additional findings remain."
+
+[lanes.daily]
+enabled = true
+goal = "Review recent maintenance signals, keep operational docs aligned, and capture durable updates."
+
+[lanes.drift]
+enabled = true
+interval_days = 3
+goal = "Audit implementation-to-document drift and reconcile safe mismatches within the current phase."
+
+[lanes.weekly]
+enabled = true
+weekday = "sun"
+goal = "Consolidate repeated rules, prune stale notes, and refresh the weekly review summary."
+
+[git]
+remote = "origin"
+base_branch = "main"
+auto_merge = true
+commit_template = "chore(repo-maintainer): 夜間メンテナンス更新 ({lane})"
+pr_title_prefix = "[repo-maintainer]"
+
+[codex]
+command = ["codex", "exec"]
+model = "gpt-5.4"
+search = false
+extra_args = []

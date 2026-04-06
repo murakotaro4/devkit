@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
 """並列Codex検索スクリプト"""
+
 import asyncio
 import argparse
 import json
 import sys
 
 
-async def search(query: str, index: int, model: str, semaphore: asyncio.Semaphore) -> dict:
+async def search(
+    query: str, index: int, model: str, semaphore: asyncio.Semaphore
+) -> dict:
     """単一のCodex検索を実行"""
     async with semaphore:
         proc = await asyncio.create_subprocess_exec(
-            "codex", "--search", "exec", "-m", model, query,
+            "codex",
+            "--search",
+            "exec",
+            "-m",
+            model,
+            query,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
         return {
@@ -20,7 +28,9 @@ async def search(query: str, index: int, model: str, semaphore: asyncio.Semaphor
             "query": query,
             "success": proc.returncode == 0,
             "output": stdout.decode("utf-8", errors="replace"),
-            "error": stderr.decode("utf-8", errors="replace") if proc.returncode != 0 else ""
+            "error": stderr.decode("utf-8", errors="replace")
+            if proc.returncode != 0
+            else "",
         }
 
 
@@ -42,7 +52,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="並列Codex検索")
     parser.add_argument("--queries", "-q", required=True, help="JSON配列のクエリ")
     parser.add_argument("--model", "-m", default="gpt-5.2", help="使用モデル")
-    parser.add_argument("--max-concurrent", "-c", type=int, default=5, help="最大同時実行数")
+    parser.add_argument(
+        "--max-concurrent", "-c", type=int, default=5, help="最大同時実行数"
+    )
     args = parser.parse_args()
 
     queries = json.loads(args.queries)

@@ -117,6 +117,10 @@ dig-claude 側は、Phase 4 review 通過後にその plan の summary を読み
 
 - タスク: `[Task 1] <summary>`, `[Task 2] <summary>` ...
 
+## workflow tracker との互換性
+
+サブタスクの metadata に `{phase: "implementation_completed"}` を含めることで、DevKit の workflow tracker が自動的に `phases_passed` を更新する。
+
 ## 独立実行時の扱い
 
 独立実行でも、まずは plan ファイルや出力テキストに分解結果をまとめる。必要ならその後の実行担当が TaskCreate する。

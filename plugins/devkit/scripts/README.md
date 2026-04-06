@@ -15,6 +15,7 @@
 - `prek` と Claude hook も同じ Python ハーネスを呼び出す。
 - `check_utf8_bom.py` は `pre-commit` では staged docs/config、`verify-fast` / `verify-full` では repo 全体の UTF-8 BOM を弾く。
 - `node` / `npm` / `fnm` は外部 CLI 更新用にのみ残し、repo 内の check / hook は使わない。
+- Claude hook は `node` launcher 経由で `uv` を優先し、未導入時は system Python へ fallback する。
 
 ### hook / gate の block 昇格
 
@@ -22,6 +23,40 @@
 - `dig-claude` の計画レビュー（REVIEW_GATE_PLAN）は3 回目の失敗（`plan_review_attempts >= 3`）で `DIG_CLAUDE_REVIEW_BLOCKED` で commit/push を block する。block 解除には計画の根本修正が必要。
 - `dig-codex` の Phase 4 は fail-close。レビュー不能時は `DIG_CODEX_PLAN_REVIEW_UNAVAILABLE`、`critical>0` または `high>0` の場合は `DIG_CODEX_PLAN_REVIEW_BLOCKED` で停止する。
 - `check_dig_routing.py` は `dig-cursor` を含む runtime 参照整合（`dig` orchestrator / adapter / rerun 契約）を検証する。
+
+## repo_maintainer.py
+
+cross-repo nightly maintainer の共通 runner。
+
+### 役割
+
+- temp worktree で Codex を起動して repo 保全更新を行う
+- `.devkit/repo-maintainer.toml` を読んで lane / phase / allowed paths を強制する
+- AI review / local checks / GitHub PR / auto-merge を実行する
+- target repo の `logs/skills/` と `reviews/` を更新する
+
+### サブコマンド
+
+```bash
+python plugins/devkit/scripts/repo_maintainer.py init-scaffold --repo /path/to/repo
+python plugins/devkit/scripts/repo_maintainer.py run --repo /path/to/repo
+```
+
+`init-scaffold` が target repo に生成するもの:
+
+- `.devkit/repo-maintainer.toml`
+- `MEMORY.md`
+- `logs/skills/`
+- `reviews/daily/`
+- `reviews/weekly/`
+- `.devkit/bin/repo-maintainer.{ps1,sh}`
+- `.devkit/scheduler/` 配下の OS 別 template
+
+`run` の補足:
+
+- branch 名は `codex/maint/<yyyymmdd>-<lane>`
+- PR title は `[repo-maintainer] ...`
+- `review_commands` / `check_commands` 未通過時も PR までは作るが、auto-merge はしない
 
 ## update-devkit / update-ccx
 

@@ -95,7 +95,9 @@ def unique_keep_order(values: Iterable[str]) -> list[str]:
     return ordered
 
 
-def collect_matching(lines: list[str], keywords: Iterable[str], limit: int) -> list[str]:
+def collect_matching(
+    lines: list[str], keywords: Iterable[str], limit: int
+) -> list[str]:
     selected = [line for line in lines if contains_any(line, keywords)]
     return unique_keep_order(selected)[:limit]
 
@@ -168,7 +170,9 @@ def render_markdown(data: dict[str, object]) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Extract structured items from session text")
+    parser = argparse.ArgumentParser(
+        description="Extract structured items from session text"
+    )
     parser.add_argument("--input-file", help="Optional path to session text file")
     parser.add_argument(
         "--format",

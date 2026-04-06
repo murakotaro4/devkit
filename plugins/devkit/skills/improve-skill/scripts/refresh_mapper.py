@@ -84,7 +84,9 @@ def includes_any(text: str, keywords: list[str]) -> bool:
     return any(keyword in lower for keyword in keywords)
 
 
-def add_item(bucket: list[dict[str, str]], target: str, reason: str, expected: str) -> None:
+def add_item(
+    bucket: list[dict[str, str]], target: str, reason: str, expected: str
+) -> None:
     bucket.append(
         {
             "target": target,
@@ -94,7 +96,9 @@ def add_item(bucket: list[dict[str, str]], target: str, reason: str, expected: s
     )
 
 
-def build_checklist(skill: dict[str, Any], session: dict[str, Any], priorities: list[str]) -> dict[str, Any]:
+def build_checklist(
+    skill: dict[str, Any], session: dict[str, Any], priorities: list[str]
+) -> dict[str, Any]:
     mandatory: list[dict[str, str]] = []
     recommended: list[dict[str, str]] = []
     confirm: list[dict[str, str]] = []
@@ -119,7 +123,9 @@ def build_checklist(skill: dict[str, Any], session: dict[str, Any], priorities: 
             "AskUserQuestionTool を使う手順を追加する",
         )
 
-    if not includes_any(skill_text, ["必須修正", "推奨修正", "完了条件", "チェックリスト"]):
+    if not includes_any(
+        skill_text, ["必須修正", "推奨修正", "完了条件", "チェックリスト"]
+    ):
         add_item(
             mandatory,
             skill_md_rel,
@@ -167,7 +173,9 @@ def build_checklist(skill: dict[str, Any], session: dict[str, Any], priorities: 
             "セッション抽出やマッピングの補助スクリプトを追加する",
         )
 
-    session_lines = "\n".join(session.get("requirements", []) + session.get("constraints", []))
+    session_lines = "\n".join(
+        session.get("requirements", []) + session.get("constraints", [])
+    )
     if includes_any(session_lines, ["質問", "askuserquestion"]) and not includes_any(
         skill_text, ["askuserquestion", "request_user_input"]
     ):
@@ -178,7 +186,10 @@ def build_checklist(skill: dict[str, Any], session: dict[str, Any], priorities: 
             "深掘り質問フローを実装する",
         )
 
-    if includes_any(session_lines, ["セッション", "反映"]) and "現在セッション" not in skill_text:
+    if (
+        includes_any(session_lines, ["セッション", "反映"])
+        and "現在セッション" not in skill_text
+    ):
         add_item(
             mandatory,
             skill_md_rel,
@@ -245,9 +256,13 @@ def render_markdown(result: dict[str, Any]) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Map session requirements to refresh checklist")
+    parser = argparse.ArgumentParser(
+        description="Map session requirements to refresh checklist"
+    )
     parser.add_argument("--skill", required=True, help="Target skill directory")
-    parser.add_argument("--session-json", help="Path to session JSON produced by session_extract.py")
+    parser.add_argument(
+        "--session-json", help="Path to session JSON produced by session_extract.py"
+    )
     parser.add_argument(
         "--priorities",
         default="trigger,compact,reuse,safety,validation",

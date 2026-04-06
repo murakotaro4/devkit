@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -15,7 +16,7 @@ HOOKS_JSON = ROOT / "plugins/devkit/.claude-plugin/hooks.json"
 
 def run_hook(script: str, payload: dict[str, object], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python3", str(WORKFLOW_DIR / script)],
+        [sys.executable, str(WORKFLOW_DIR / script)],
         input=json.dumps(payload, ensure_ascii=False),
         cwd=ROOT,
         env=env,

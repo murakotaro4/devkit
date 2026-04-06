@@ -10,7 +10,9 @@ devkit_skill_manifest() {
     amazon-search \
     improve-skill \
     codex-search \
-    devkit-init
+    devkit-init \
+    repo-maintainer \
+    repo-maintainer-init
 }
 
 devkit_retired_skill_entries() {

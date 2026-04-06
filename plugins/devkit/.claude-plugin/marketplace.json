@@ -8,7 +8,7 @@
     {
       "name": "devkit",
       "source": "./",
-      "description": "Personal development toolkit with dig runtime adapters and deep-dive utility skills",
+      "description": "Personal development toolkit with dig runtime adapters, nightly repo maintenance, and deep-dive utility skills",
       "strict": true
     }
   ]

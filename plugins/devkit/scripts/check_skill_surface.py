@@ -13,6 +13,13 @@ from pathlib import Path
 ROOT = Path.cwd()
 
 
+def shell_path(path: Path | str) -> str:
+    raw = path.as_posix() if isinstance(path, Path) else str(path).replace("\\", "/")
+    if len(raw) >= 3 and raw[1:3] == ":/":
+        raw = f"/{raw[0].lower()}/{raw[3:]}"
+    return json.dumps(raw)
+
+
 def read_json(rel: str) -> object:
     raw = (ROOT / rel).read_text(encoding="utf-8").lstrip("\ufeff")
     return json.loads(raw)
@@ -41,6 +48,9 @@ def run_bash(script: str) -> None:
 
 
 def run_runtime_smoke_checks() -> None:
+    if os.name == "nt":
+        return
+
     runtime_sync_sh = ROOT / "plugins/devkit/scripts/devkit-runtime-sync.sh"
     script_dir = runtime_sync_sh.parent
 
@@ -50,10 +60,10 @@ def run_runtime_smoke_checks() -> None:
                 [
                     "set -euo pipefail",
                     f"export HOME={json.dumps(checkout_home)}",
-                    f"SCRIPT_DIR={json.dumps(str(script_dir))}",
-                    f"source {json.dumps(str(runtime_sync_sh))}",
+                    f"SCRIPT_DIR={shell_path(script_dir)}",
+                    f"source {shell_path(runtime_sync_sh)}",
                     'ROOT=$(ensure_devkit_repo_root)',
-                    f'test "$ROOT" = {json.dumps(str(ROOT))}',
+                    f'test "$ROOT" = {shell_path(ROOT)}',
                     'test ! -e "$HOME/cursor/devkit"',
                 ]
             )
@@ -67,10 +77,10 @@ def run_runtime_smoke_checks() -> None:
                     f"export HOME={json.dumps(worktree_home)}",
                     'WORKTREE_ROOT="$HOME/worktree-devkit"',
                     'mkdir -p "$WORKTREE_ROOT/plugins"',
-                    f"ln -s {json.dumps(str(ROOT / 'plugins/devkit'))} \"$WORKTREE_ROOT/plugins/devkit\"",
+                    f"ln -s {shell_path(ROOT / 'plugins/devkit')} \"$WORKTREE_ROOT/plugins/devkit\"",
                     'printf "gitdir: /tmp/devkit-fake-worktree\\n" > "$WORKTREE_ROOT/.git"',
                     'export SCRIPT_DIR="$WORKTREE_ROOT/plugins/devkit/scripts"',
-                    f"source {json.dumps(str(runtime_sync_sh))}",
+                    f"source {shell_path(runtime_sync_sh)}",
                     'ROOT="$(devkit_script_checkout_root)"',
                     'test "$ROOT" = "$WORKTREE_ROOT"',
                 ]
@@ -86,7 +96,7 @@ def run_runtime_smoke_checks() -> None:
                     'git init "$HOME" >/dev/null 2>&1',
                     'mkdir -p "$HOME/.codex/bin"',
                     'export SCRIPT_DIR="$HOME/.codex/bin"',
-                    f"source {json.dumps(str(runtime_sync_sh))}",
+                    f"source {shell_path(runtime_sync_sh)}",
                     "! devkit_script_checkout_root",
                 ]
             )
@@ -100,10 +110,10 @@ def run_runtime_smoke_checks() -> None:
                     f"export HOME={json.dumps(explicit_root_home)}",
                     'ALT_ROOT="$HOME/alt-devkit"',
                     'mkdir -p "$ALT_ROOT/plugins"',
-                    f"ln -s {json.dumps(str(ROOT / 'plugins/devkit'))} \"$ALT_ROOT/plugins/devkit\"",
+                    f"ln -s {shell_path(ROOT / 'plugins/devkit')} \"$ALT_ROOT/plugins/devkit\"",
                     'export DEVKIT_SOURCE_ROOT="$ALT_ROOT"',
-                    f"SCRIPT_DIR={json.dumps(str(script_dir))}",
-                    f"source {json.dumps(str(runtime_sync_sh))}",
+                    f"SCRIPT_DIR={shell_path(script_dir)}",
+                    f"source {shell_path(runtime_sync_sh)}",
                     'ROOT=$(ensure_devkit_repo_root)',
                     'test "$ROOT" = "$ALT_ROOT"',
                 ]
@@ -116,19 +126,19 @@ def run_runtime_smoke_checks() -> None:
                 [
                     "set -euo pipefail",
                     f"export HOME={json.dumps(cleanup_home)}",
-                    f"export DEVKIT_SOURCE_ROOT={json.dumps(str(ROOT))}",
-                    f"SCRIPT_DIR={json.dumps(str(script_dir))}",
+                    f"export DEVKIT_SOURCE_ROOT={shell_path(ROOT)}",
+                    f"SCRIPT_DIR={shell_path(script_dir)}",
                     'mkdir -p "$HOME/.codex/skills" "$HOME/.agents"',
-                    f"ln -s {json.dumps(str(ROOT / 'plugins/devkit/skills/dig'))} \"$HOME/.codex/skills/dig\"",
-                    f"ln -s {json.dumps(str(ROOT / 'plugins/devkit/skills/dig-core'))} \"$HOME/.codex/skills/dig-core\"",
+                    f"ln -s {shell_path(ROOT / 'plugins/devkit/skills/dig')} \"$HOME/.codex/skills/dig\"",
+                    f"ln -s {shell_path(ROOT / 'plugins/devkit/skills/dig-core')} \"$HOME/.codex/skills/dig-core\"",
                     'mkdir -p "$HOME/.codex/skills/custom-keep"',
-                    f"source {json.dumps(str(runtime_sync_sh))}",
+                    f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_codex_runtime "$HOME"',
                     'test -L "$HOME/.agents/skills/dig"',
                     'test ! -e "$HOME/.codex/skills/dig"',
                     'test ! -e "$HOME/.codex/skills/dig-core"',
                     'test -d "$HOME/.codex/skills/custom-keep"',
-                    f'test "$(head -n 1 "$HOME/.codex/devkit/source-root.txt")" = {json.dumps(str(ROOT))}',
+                    f'test "$(head -n 1 "$HOME/.codex/devkit/source-root.txt")" = {shell_path(ROOT)}',
                     'grep -F "$HOME/.codex/bin/update-devkit.sh" "$HOME/.local/bin/update-devkit"',
                 ]
             )
@@ -140,8 +150,8 @@ def run_runtime_smoke_checks() -> None:
                 [
                     "set -euo pipefail",
                     f"export HOME={json.dumps(opencode_cleanup_home)}",
-                    f"export DEVKIT_SOURCE_ROOT={json.dumps(str(ROOT))}",
-                    f"SCRIPT_DIR={json.dumps(str(script_dir))}",
+                    f"export DEVKIT_SOURCE_ROOT={shell_path(ROOT)}",
+                    f"SCRIPT_DIR={shell_path(script_dir)}",
                     'mkdir -p "$HOME/.config/opencode/skills" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills" "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"',
                     'mkdir -p "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig-core"',
                     'mkdir -p "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/dig-opencode"',
@@ -149,13 +159,13 @@ def run_runtime_smoke_checks() -> None:
                     'ln -s "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig-core" "$HOME/.config/opencode/skills/dig-core"',
                     'ln -s "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/dig-opencode" "$HOME/.config/opencode/skills/dig-opencode"',
                     'mkdir -p "$HOME/.config/opencode/skills/custom-keep"',
-                    f"source {json.dumps(str(runtime_sync_sh))}",
+                    f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_opencode_runtime "$HOME"',
-                    f'test "$(readlink "$HOME/.config/opencode/skills/dig")" = {json.dumps(str(ROOT / "plugins/devkit/skills/dig"))}',
+                    f'test "$(readlink "$HOME/.config/opencode/skills/dig")" = {shell_path(ROOT / "plugins/devkit/skills/dig")}',
                     'test ! -e "$HOME/.config/opencode/skills/dig-core"',
                     'test ! -e "$HOME/.config/opencode/skills/dig-opencode"',
                     'test -d "$HOME/.config/opencode/skills/custom-keep"',
-                    f'test "$(head -n 1 "$HOME/.config/opencode/devkit/source-root.txt")" = {json.dumps(str(ROOT))}',
+                    f'test "$(head -n 1 "$HOME/.config/opencode/devkit/source-root.txt")" = {shell_path(ROOT)}',
                 ]
             )
         )
@@ -171,8 +181,8 @@ def run_runtime_smoke_checks() -> None:
                     "set -euo pipefail",
                     f"export HOME={json.dumps(clone_failure_home)}",
                     "export DEVKIT_REPO_URL='/definitely/missing/devkit.git'",
-                    f"SCRIPT_DIR={json.dumps(detached_script_dir)}",
-                    f"source {json.dumps(str(detached_runtime_sync))}",
+                    f"SCRIPT_DIR={shell_path(detached_script_dir)}",
+                    f"source {shell_path(detached_runtime_sync)}",
                     "! ensure_devkit_repo_root",
                     'test ! -e "$HOME/cursor/devkit"',
                     'test ! -e "$HOME/.codex/devkit/source-root.txt"',
