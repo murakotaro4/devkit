@@ -9,9 +9,9 @@ function Get-DevKitRepoUrl {
 function Get-DevKitSkillManifest {
   return @(
     "dig",
+    "computer-use-chatgpt-pro",
     "gpt-pro",
     "deep-research",
-    "amazon-search",
     "improve-skill",
     "codex-search",
     "devkit-init",
@@ -22,6 +22,7 @@ function Get-DevKitSkillManifest {
 
 function Get-DevKitRetiredSkillEntries {
   return @(
+    "amazon-search",
     "mermaid-show",
     "dig-core",
     "dig-claude",

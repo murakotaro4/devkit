@@ -206,7 +206,8 @@ class RepoMaintainerTests(unittest.TestCase):
             f'#!/bin/sh\nexec "{sys.executable}" "{script.as_posix()}" "$@"\n',
             executable=True,
         )
-        return bin_dir, state_path, bin_dir / "gh.cmd"
+        gh_path = bin_dir / ("gh.cmd" if os.name == "nt" else "gh")
+        return bin_dir, state_path, gh_path
 
     def add_command_script(self, name: str, exit_code: int) -> Path:
         script = self.root / f"{name}.py"

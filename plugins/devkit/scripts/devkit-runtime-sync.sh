@@ -5,9 +5,9 @@ set -euo pipefail
 devkit_skill_manifest() {
   printf '%s\n' \
     dig \
+    computer-use-chatgpt-pro \
     gpt-pro \
     deep-research \
-    amazon-search \
     improve-skill \
     codex-search \
     devkit-init \
@@ -17,6 +17,7 @@ devkit_skill_manifest() {
 
 devkit_retired_skill_entries() {
   printf '%s\n' \
+    amazon-search \
     mermaid-show \
     dig-core \
     dig-claude \
@@ -88,7 +89,8 @@ devkit_script_checkout_root() {
   [[ -n "${SCRIPT_DIR:-}" ]] || return 1
 
   local hint_root repo_root
-  hint_root="$(cd "$SCRIPT_DIR/../../.." && pwd -P)"
+  hint_root="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+  hint_root="$(devkit_resolve_path "$hint_root")"
 
   if command -v git >/dev/null 2>&1; then
     local git_root
@@ -366,7 +368,9 @@ prune_devkit_managed_skill_links() {
     local is_managed=false
     local _i
     for _i in "$@"; do
-      case "$actual_target" in "$_i"/*) is_managed=true; break ;; esac
+      local resolved_root
+      resolved_root="$(devkit_resolve_path_lenient "$_i")"
+      case "$actual_target" in "$resolved_root"/*) is_managed=true; break ;; esac
     done
     if "$is_managed" && ! devkit_skill_manifest | grep -Fxq "$name"; then
       rm -rf "$entry"
@@ -380,6 +384,10 @@ prune_legacy_codex_managed_entries() {
   local legacy_source_skills_root="$3"
   local marketplace_skills_root="$4"
   [[ -d "$legacy_root" ]] || return 0
+
+  plugin_skills_root="$(devkit_resolve_path_lenient "$plugin_skills_root")"
+  legacy_source_skills_root="$(devkit_resolve_path_lenient "$legacy_source_skills_root")"
+  marketplace_skills_root="$(devkit_resolve_path_lenient "$marketplace_skills_root")"
 
   while IFS= read -r entry; do
     local name actual_target
@@ -404,6 +412,13 @@ prune_legacy_opencode_managed_entries() {
   local marketplace_skills_root="$4"
   local codex_source_skills_root="${5:-}"
   [[ -d "$opencode_root" ]] || return 0
+
+  plugin_skills_root="$(devkit_resolve_path_lenient "$plugin_skills_root")"
+  legacy_source_skills_root="$(devkit_resolve_path_lenient "$legacy_source_skills_root")"
+  marketplace_skills_root="$(devkit_resolve_path_lenient "$marketplace_skills_root")"
+  if [[ -n "$codex_source_skills_root" ]]; then
+    codex_source_skills_root="$(devkit_resolve_path_lenient "$codex_source_skills_root")"
+  fi
 
   while IFS= read -r entry; do
     local name actual_target

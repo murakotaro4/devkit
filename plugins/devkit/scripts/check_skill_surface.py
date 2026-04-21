@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -34,6 +35,20 @@ def extract_block(content: str, start_token: str, end_token: str = "\nfunction "
     if next_function == -1:
         return after_start
     return after_start[:next_function]
+
+
+def manifest_entries(manifest: str) -> set[str]:
+    entries: set[str] = set()
+    for raw_line in manifest.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("devkit_skill_manifest", "function Get-DevKitSkillManifest", "return @(")):
+            continue
+        line = line.removesuffix("\\").strip().removesuffix(",").strip()
+        if line.startswith('"') and line.endswith('"'):
+            line = line[1:-1]
+        if re.fullmatch(r"[A-Za-z0-9_-]+", line):
+            entries.add(line)
+    return entries
 
 
 def run_bash(script: str) -> None:
@@ -82,7 +97,8 @@ def run_runtime_smoke_checks() -> None:
                     'export SCRIPT_DIR="$WORKTREE_ROOT/plugins/devkit/scripts"',
                     f"source {shell_path(runtime_sync_sh)}",
                     'ROOT="$(devkit_script_checkout_root)"',
-                    'test "$ROOT" = "$WORKTREE_ROOT"',
+                    'EXPECTED_ROOT="$(cd "$WORKTREE_ROOT" && pwd -P)"',
+                    'test "$ROOT" = "$EXPECTED_ROOT"',
                 ]
             )
         )
@@ -115,7 +131,8 @@ def run_runtime_smoke_checks() -> None:
                     f"SCRIPT_DIR={shell_path(script_dir)}",
                     f"source {shell_path(runtime_sync_sh)}",
                     'ROOT=$(ensure_devkit_repo_root)',
-                    'test "$ROOT" = "$ALT_ROOT"',
+                    'EXPECTED_ROOT="$(cd "$ALT_ROOT" && pwd -P)"',
+                    'test "$ROOT" = "$EXPECTED_ROOT"',
                 ]
             )
         )
@@ -129,14 +146,18 @@ def run_runtime_smoke_checks() -> None:
                     f"export DEVKIT_SOURCE_ROOT={shell_path(ROOT)}",
                     f"SCRIPT_DIR={shell_path(script_dir)}",
                     'mkdir -p "$HOME/.codex/skills" "$HOME/.agents"',
+                    'mkdir -p "$HOME/.codex/devkit/source/plugins/devkit/skills/amazon-search"',
                     f"ln -s {shell_path(ROOT / 'plugins/devkit/skills/dig')} \"$HOME/.codex/skills/dig\"",
                     f"ln -s {shell_path(ROOT / 'plugins/devkit/skills/dig-core')} \"$HOME/.codex/skills/dig-core\"",
+                    'ln -s "$HOME/.codex/devkit/source/plugins/devkit/skills/amazon-search" "$HOME/.codex/skills/amazon-search"',
                     'mkdir -p "$HOME/.codex/skills/custom-keep"',
                     f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_codex_runtime "$HOME"',
                     'test -L "$HOME/.agents/skills/dig"',
+                    'test -L "$HOME/.agents/skills/computer-use-chatgpt-pro"',
                     'test ! -e "$HOME/.codex/skills/dig"',
                     'test ! -e "$HOME/.codex/skills/dig-core"',
+                    'test ! -e "$HOME/.codex/skills/amazon-search"',
                     'test -d "$HOME/.codex/skills/custom-keep"',
                     f'test "$(head -n 1 "$HOME/.codex/devkit/source-root.txt")" = {shell_path(ROOT)}',
                     'grep -F "$HOME/.codex/bin/update-devkit.sh" "$HOME/.local/bin/update-devkit"',
@@ -153,16 +174,19 @@ def run_runtime_smoke_checks() -> None:
                     f"export DEVKIT_SOURCE_ROOT={shell_path(ROOT)}",
                     f"SCRIPT_DIR={shell_path(script_dir)}",
                     'mkdir -p "$HOME/.config/opencode/skills" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills" "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills"',
-                    'mkdir -p "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig-core"',
+                    'mkdir -p "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig-core" "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/amazon-search"',
                     'mkdir -p "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/dig-opencode"',
                     'ln -s "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig" "$HOME/.config/opencode/skills/dig"',
                     'ln -s "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/dig-core" "$HOME/.config/opencode/skills/dig-core"',
+                    'ln -s "$HOME/.config/opencode/devkit/source/plugins/devkit/skills/amazon-search" "$HOME/.config/opencode/skills/amazon-search"',
                     'ln -s "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/dig-opencode" "$HOME/.config/opencode/skills/dig-opencode"',
                     'mkdir -p "$HOME/.config/opencode/skills/custom-keep"',
                     f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_opencode_runtime "$HOME"',
                     f'test "$(readlink "$HOME/.config/opencode/skills/dig")" = {shell_path(ROOT / "plugins/devkit/skills/dig")}',
+                    f'test "$(readlink "$HOME/.config/opencode/skills/computer-use-chatgpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro")}',
                     'test ! -e "$HOME/.config/opencode/skills/dig-core"',
+                    'test ! -e "$HOME/.config/opencode/skills/amazon-search"',
                     'test ! -e "$HOME/.config/opencode/skills/dig-opencode"',
                     'test -d "$HOME/.config/opencode/skills/custom-keep"',
                     f'test "$(head -n 1 "$HOME/.config/opencode/devkit/source-root.txt")" = {shell_path(ROOT)}',
@@ -202,6 +226,7 @@ def main() -> int:
         "plugins/devkit/skills/dig-claude/SKILL.md",
         "plugins/devkit/skills/dig-codex/SKILL.md",
         "plugins/devkit/skills/dig-opencode/SKILL.md",
+        "plugins/devkit/skills/computer-use-chatgpt-pro/SKILL.md",
         "plugins/devkit/scripts/devkit-runtime-sync.sh",
         "plugins/devkit/scripts/devkit-runtime-sync.ps1",
         "plugins/devkit/templates/opencode/commands/dig.md",
@@ -277,6 +302,24 @@ def main() -> int:
     if "codex -a never exec review" not in workflow:
         problems.append("workflow missing approval-never review command")
 
+    computer_use_skill = (ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    for required_text in [
+        'allowed-tools: ["Bash", "Read", "mcp__computer_use__*"]',
+        "Computer UseでChatGPT Proに質問",
+        "汎用のChatGPT Pro検索・調査は既存のgpt-proを使う",
+        "agent-browser",
+        "CDP",
+        "headless",
+        "DOM eval",
+        "mcp__computer_use__.get_app_state",
+        "macOS 以外",
+        "自律ループをデフォルトにしない",
+    ]:
+        if required_text not in computer_use_skill:
+            problems.append(f"computer-use-chatgpt-pro missing required contract text: {required_text}")
+
     dig_codex = (ROOT / "plugins/devkit/skills/dig-codex/SKILL.md").read_text(encoding="utf-8")
     if "gpt-5.4" not in dig_codex:
         problems.append("dig-codex missing gpt-5.4 fallback review model")
@@ -296,8 +339,13 @@ def main() -> int:
         ("devkit-runtime-sync.sh", shell_manifest),
         ("devkit-runtime-sync.ps1", ps_manifest),
     ]:
-        if "dig" not in manifest:
+        entries = manifest_entries(manifest)
+        if "dig" not in entries:
             problems.append(f"{manifest_name} missing public dig entry")
+        if "computer-use-chatgpt-pro" not in entries:
+            problems.append(f"{manifest_name} missing public computer-use-chatgpt-pro entry")
+        if "amazon-search" in entries:
+            problems.append(f"{manifest_name} still syncs removed skill: amazon-search")
         for token in ["dig-core", "dig-claude", "dig-codex", "dig-opencode"]:
             if f'"{token}"' in manifest or f"{token} \\" in manifest or f"    {token}" in manifest:
                 problems.append(f"{manifest_name} still syncs internal dig adapter: {token}")
@@ -312,10 +360,12 @@ def main() -> int:
         ("devkit-runtime-sync.sh", shell_retired),
         ("devkit-runtime-sync.ps1", ps_retired),
     ]:
-        if "mermaid-show" not in retired_block:
-            problems.append(f"{retired_name} missing retired skill cleanup entry: mermaid-show")
+        retired_entries = manifest_entries(retired_block)
+        for token in ["amazon-search", "mermaid-show"]:
+            if token not in retired_entries:
+                problems.append(f"{retired_name} missing retired skill cleanup entry: {token}")
         for token in ["dig-core", "dig-claude", "dig-codex", "dig-opencode"]:
-            if token not in retired_block:
+            if token not in retired_entries:
                 problems.append(f"{retired_name} missing retired adapter cleanup entry: {token}")
 
     if shutil.which("pwsh"):
@@ -328,7 +378,9 @@ def main() -> int:
                     (
                         f". '{ROOT / 'plugins/devkit/scripts/devkit-runtime-sync.ps1'}'; "
                         "if ((Get-DevKitSkillManifest) -contains 'mermaid-show') { exit 2 }; "
-                        "if (-not ((Get-DevKitRetiredSkillEntries) -contains 'mermaid-show')) { exit 3 }"
+                        "if (-not ((Get-DevKitRetiredSkillEntries) -contains 'mermaid-show')) { exit 3 }; "
+                        "if ((Get-DevKitSkillManifest) -contains 'amazon-search') { exit 4 }; "
+                        "if (-not ((Get-DevKitRetiredSkillEntries) -contains 'amazon-search')) { exit 5 }"
                     ),
                 ],
                 cwd=ROOT,
