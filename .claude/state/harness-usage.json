@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "updatedAt": "2026-02-13T06:36:08.882Z",
+  "updatedAt": "2026-03-15T05:17:54.342Z",
   "skills": {
     "codex": {
       "count": 1,
@@ -17,8 +17,8 @@
   },
   "commands": {
     "dig": {
-      "count": 3,
-      "lastUsed": "2026-01-29T15:48:33.815Z"
+      "count": 4,
+      "lastUsed": "2026-03-15T04:40:56.005Z"
     },
     "codex-review": {
       "count": 4,
@@ -70,9 +70,9 @@
       "lastTriggered": "2026-02-04T10:10:51.010Z"
     },
     "session-init": {
-      "triggered": 55,
+      "triggered": 56,
       "blocked": 0,
-      "lastTriggered": "2026-02-13T06:35:19.586Z"
+      "lastTriggered": "2026-03-15T05:17:54.341Z"
     }
   }
 }
