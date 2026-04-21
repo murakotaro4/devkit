@@ -62,6 +62,153 @@ def run_bash(script: str) -> None:
     )
 
 
+def write_executable(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def run_update_devkit_argument_smoke_checks() -> None:
+    if os.name == "nt":
+        return
+
+    update_ccx_sh = ROOT / "plugins/devkit/scripts/update-ccx.sh"
+    fake_tool = """#!/bin/sh
+echo "$(basename "$0") $*" >> "$DEVKIT_TEST_CALL_LOG"
+case "$(basename "$0")" in
+  brew)
+    case "$1" in
+      --version) echo "Homebrew 0.0.0" ;;
+      --prefix) echo "$DEVKIT_FAKE_BREW_PREFIX" ;;
+    esac
+    ;;
+  fnm)
+    echo "fnm 0.0.0"
+    ;;
+  node)
+    echo "v0.0.0"
+    ;;
+  claude|codex|opencode)
+    if [ "$1" = "--version" ]; then
+      echo "$(basename "$0") 0.0.0"
+    elif [ "$1" = "update" ]; then
+      echo "updated"
+    fi
+    ;;
+esac
+exit 0
+"""
+
+    def run_case(
+        label: str,
+        args: list[str],
+        *,
+        expected_log_lines: list[str],
+        blocked_cli_prefixes: list[str],
+        blocked_log_lines: list[str],
+        expect_codex_sync: bool,
+        expect_opencode_sync: bool,
+        expect_no_cli: bool = False,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix=f"devkit-update-{label}-home-") as home, tempfile.TemporaryDirectory(
+            prefix=f"devkit-update-{label}-bin-"
+        ) as fake_bin:
+            home_path = Path(home)
+            source_root = home_path / "source"
+            (source_root / "plugins").mkdir(parents=True)
+            (source_root / "plugins/devkit").symlink_to(ROOT / "plugins/devkit", target_is_directory=True)
+
+            call_log = home_path / "tool-calls.log"
+            fake_bin_path = Path(fake_bin)
+            for name in ["brew", "claude", "codex", "curl", "fnm", "node", "npm", "opencode"]:
+                write_executable(fake_bin_path / name, fake_tool)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "DEVKIT_FAKE_BREW_PREFIX": str(home_path / "fake-homebrew-prefix"),
+                    "DEVKIT_SOURCE_ROOT": str(source_root),
+                    "DEVKIT_TEST_CALL_LOG": str(call_log),
+                    "HOME": home,
+                    "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
+                }
+            )
+            result = subprocess.run(
+                ["bash", str(update_ccx_sh), *args],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=env,
+                check=True,
+            )
+
+            log_text = call_log.read_text(encoding="utf-8") if call_log.exists() else ""
+            log_lines = log_text.splitlines()
+            if expect_no_cli and log_text.strip():
+                raise AssertionError(f"{label} invoked CLI tooling:\n{log_text}")
+            for expected in expected_log_lines:
+                if expected not in log_lines:
+                    raise AssertionError(f"{label} did not run expected command {expected!r}:\n{log_text}")
+            for blocked in blocked_cli_prefixes:
+                if any(line.startswith(blocked) for line in log_lines):
+                    raise AssertionError(f"{label} touched unselected CLI prefix {blocked!r}:\n{log_text}")
+            for blocked in blocked_log_lines:
+                if blocked in log_lines:
+                    raise AssertionError(f"{label} ran blocked command {blocked!r}:\n{log_text}")
+
+            codex_synced = "✓ Codex runtime synced" in result.stdout
+            opencode_synced = "✓ OpenCode runtime synced" in result.stdout
+            if codex_synced != expect_codex_sync:
+                raise AssertionError(f"{label} Codex sync mismatch:\n{result.stdout}\n{result.stderr}")
+            if opencode_synced != expect_opencode_sync:
+                raise AssertionError(f"{label} OpenCode sync mismatch:\n{result.stdout}\n{result.stderr}")
+
+            codex_skill = home_path / ".agents/skills/computer-use-chatgpt-pro"
+            opencode_skill = home_path / ".config/opencode/skills/computer-use-chatgpt-pro"
+            if codex_skill.exists() != expect_codex_sync:
+                raise AssertionError(f"{label} Codex skill sync mismatch")
+            if opencode_skill.exists() != expect_opencode_sync:
+                raise AssertionError(f"{label} OpenCode skill sync mismatch")
+
+    run_case(
+        "devkit-only-codex",
+        ["--devkit-only", "--runtime", "codex"],
+        expected_log_lines=[],
+        blocked_cli_prefixes=[],
+        blocked_log_lines=[],
+        expect_codex_sync=True,
+        expect_opencode_sync=False,
+        expect_no_cli=True,
+    )
+    run_case(
+        "runtime-codex",
+        ["--runtime", "codex"],
+        expected_log_lines=["npm update -g @openai/codex"],
+        blocked_cli_prefixes=["claude ", "opencode "],
+        blocked_log_lines=["claude update", "brew upgrade opencode", "npm update -g opencode-ai"],
+        expect_codex_sync=True,
+        expect_opencode_sync=False,
+    )
+    run_case(
+        "runtime-opencode",
+        ["--runtime", "opencode"],
+        expected_log_lines=["npm update -g opencode-ai"],
+        blocked_cli_prefixes=["claude ", "codex "],
+        blocked_log_lines=["claude update", "brew upgrade codex", "npm update -g @openai/codex"],
+        expect_codex_sync=False,
+        expect_opencode_sync=True,
+    )
+    run_case(
+        "runtime-all",
+        ["--runtime", "all"],
+        expected_log_lines=["claude update", "npm update -g @openai/codex", "npm update -g opencode-ai"],
+        blocked_cli_prefixes=[],
+        blocked_log_lines=[],
+        expect_codex_sync=True,
+        expect_opencode_sync=True,
+    )
+
+
 def run_runtime_smoke_checks() -> None:
     if os.name == "nt":
         return
@@ -405,6 +552,14 @@ def main() -> int:
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
         problems.append(f"runtime sync smoke failed: {detail}")
+    try:
+        run_update_devkit_argument_smoke_checks()
+    except (AssertionError, subprocess.CalledProcessError) as exc:
+        if isinstance(exc, subprocess.CalledProcessError):
+            detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+        else:
+            detail = str(exc)
+        problems.append(f"update-devkit argument smoke failed: {detail}")
 
     plugin = read_json("plugins/devkit/.claude-plugin/plugin.json")
     if not isinstance(plugin, dict) or not isinstance(plugin.get("version"), str):

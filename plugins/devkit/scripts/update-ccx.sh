@@ -20,6 +20,7 @@ declare -a WARNINGS=()
 CLI_ONLY=false
 DEVKIT_ONLY=false
 RUNTIME_SELECTION="all"
+RUN_MODE="run"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/devkit-runtime-sync.sh"
@@ -247,6 +248,7 @@ EOF
 }
 
 parse_args() {
+    RUN_MODE="run"
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --version|-v)
@@ -254,7 +256,7 @@ parse_args() {
                     echo "INVALID_ARGS: --version cannot be combined with other arguments" >&2
                     return 1
                 fi
-                echo "version"
+                RUN_MODE="version"
                 return 0
                 ;;
             --cli-only)
@@ -292,7 +294,24 @@ parse_args() {
         return 1
     fi
 
-    echo "run"
+    RUN_MODE="run"
+}
+
+should_manage_claude_runtime() {
+    [[ "$RUNTIME_SELECTION" == "all" ]]
+}
+
+should_manage_codex_runtime() {
+    [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "codex" ]]
+}
+
+should_manage_opencode_runtime() {
+    [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "opencode" ]]
+}
+
+join_summary_parts() {
+    local IFS=' / '
+    echo "$*"
 }
 
 # ============================================================
@@ -494,11 +513,19 @@ ensure_opencode() {
 section_setup() {
     echo ""
     echo "=== [Setup] ==="
-    ensure_fnm
-    ensure_nodejs
-    ensure_claude
-    ensure_codex
-    ensure_opencode
+    if should_manage_codex_runtime || should_manage_opencode_runtime; then
+        ensure_fnm
+        ensure_nodejs
+    fi
+    if should_manage_claude_runtime; then
+        ensure_claude
+    fi
+    if should_manage_codex_runtime; then
+        ensure_codex
+    fi
+    if should_manage_opencode_runtime; then
+        ensure_opencode
+    fi
 }
 
 # ============================================================
@@ -629,9 +656,18 @@ section_update() {
 
     # Setup 後に detect_* を再実行して正しいインストール方法を取得
     local claude_install codex_install opencode_install
-    claude_install=$(detect_claude_install)
-    codex_install=$(detect_codex_install)
-    opencode_install=$(detect_opencode_install)
+    claude_install="skip"
+    codex_install="skip"
+    opencode_install="skip"
+    if should_manage_claude_runtime; then
+        claude_install=$(detect_claude_install)
+    fi
+    if should_manage_codex_runtime; then
+        codex_install=$(detect_codex_install)
+    fi
+    if should_manage_opencode_runtime; then
+        opencode_install=$(detect_opencode_install)
+    fi
 
     # Setup でインストール失敗したツールはスキップ
     if [[ "$claude_install" == "not_found" ]]; then
@@ -647,30 +683,40 @@ section_update() {
         opencode_install="skip"
     fi
 
-    # 更新前バージョン表示
-    echo "[Before] claude: $(get_claude_version) ($claude_install) / codex: $(get_codex_version) ($codex_install) / opencode: $(get_opencode_version) ($opencode_install)"
-
-    local update_claude_cli=false
-    local update_codex_cli=false
-    local update_opencode_cli=false
-
-    if [[ "$RUNTIME_SELECTION" == "all" ]]; then
-        update_claude_cli=true
-        update_codex_cli=true
-        update_opencode_cli=true
-    elif [[ "$RUNTIME_SELECTION" == "codex" ]]; then
-        update_codex_cli=true
-    elif [[ "$RUNTIME_SELECTION" == "opencode" ]]; then
-        update_opencode_cli=true
+    local before_parts=()
+    if should_manage_claude_runtime; then
+        before_parts+=("claude: $(get_claude_version) ($claude_install)")
     fi
+    if should_manage_codex_runtime; then
+        before_parts+=("codex: $(get_codex_version) ($codex_install)")
+    fi
+    if should_manage_opencode_runtime; then
+        before_parts+=("opencode: $(get_opencode_version) ($opencode_install)")
+    fi
+    echo "[Before] $(join_summary_parts "${before_parts[@]}")"
 
     # 各ツールの更新
-    [[ "$claude_install" != "skip" && "$update_claude_cli" == true ]] && update_claude "$claude_install"
-    [[ "$codex_install" != "skip" && "$update_codex_cli" == true ]] && update_codex "$codex_install"
-    [[ "$opencode_install" != "skip" && "$update_opencode_cli" == true ]] && update_opencode "$opencode_install"
+    if [[ "$claude_install" != "skip" ]]; then
+        update_claude "$claude_install"
+    fi
+    if [[ "$codex_install" != "skip" ]]; then
+        update_codex "$codex_install"
+    fi
+    if [[ "$opencode_install" != "skip" ]]; then
+        update_opencode "$opencode_install"
+    fi
 
-    # 更新後バージョン表示
-    echo "[After]  claude: $(get_claude_version) / codex: $(get_codex_version) / opencode: $(get_opencode_version)"
+    local after_parts=()
+    if should_manage_claude_runtime; then
+        after_parts+=("claude: $(get_claude_version)")
+    fi
+    if should_manage_codex_runtime; then
+        after_parts+=("codex: $(get_codex_version)")
+    fi
+    if should_manage_opencode_runtime; then
+        after_parts+=("opencode: $(get_opencode_version)")
+    fi
+    echo "[After]  $(join_summary_parts "${after_parts[@]}")"
 }
 
 section_devkit_sync() {
@@ -715,13 +761,12 @@ section_devkit_sync() {
 # メイン処理
 # ============================================================
 main() {
-    local mode
-    if ! mode="$(parse_args "$@")"; then
+    if ! parse_args "$@"; then
         show_usage
         exit 1
     fi
 
-    if [[ "$mode" == "version" ]]; then
+    if [[ "$RUN_MODE" == "version" ]]; then
         show_versions
         exit 0
     fi
