@@ -163,12 +163,22 @@ exit 0
             if opencode_synced != expect_opencode_sync:
                 raise AssertionError(f"{label} OpenCode sync mismatch:\n{result.stdout}\n{result.stderr}")
 
-            codex_skill = home_path / ".agents/skills/computer-use-chatgpt-pro"
-            opencode_skill = home_path / ".config/opencode/skills/computer-use-chatgpt-pro"
-            if codex_skill.exists() != expect_codex_sync:
+            codex_skills = {
+                "computer-use-chatgpt-pro": home_path / ".agents/skills/computer-use-chatgpt-pro",
+                "gpt-pro": home_path / ".agents/skills/gpt-pro",
+            }
+            opencode_skills = {
+                "computer-use-chatgpt-pro": home_path / ".config/opencode/skills/computer-use-chatgpt-pro",
+                "gpt-pro": home_path / ".config/opencode/skills/gpt-pro",
+            }
+            if codex_skills["computer-use-chatgpt-pro"].exists() != expect_codex_sync:
                 raise AssertionError(f"{label} Codex skill sync mismatch")
-            if opencode_skill.exists() != expect_opencode_sync:
+            if codex_skills["gpt-pro"].exists() != expect_codex_sync:
+                raise AssertionError(f"{label} Codex gpt-pro sync mismatch")
+            if opencode_skills["computer-use-chatgpt-pro"].exists() != expect_opencode_sync:
                 raise AssertionError(f"{label} OpenCode skill sync mismatch")
+            if opencode_skills["gpt-pro"].exists() != expect_opencode_sync:
+                raise AssertionError(f"{label} OpenCode gpt-pro sync mismatch")
 
     run_case(
         "devkit-only-codex",
@@ -300,8 +310,9 @@ def run_runtime_smoke_checks() -> None:
                     'mkdir -p "$HOME/.codex/skills/custom-keep"',
                     f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_codex_runtime "$HOME"',
-                    'test -L "$HOME/.agents/skills/dig"',
-                    'test -L "$HOME/.agents/skills/computer-use-chatgpt-pro"',
+                    f'test "$(readlink "$HOME/.agents/skills/dig")" = {shell_path(ROOT / "plugins/devkit/skills/dig")}',
+                    f'test "$(readlink "$HOME/.agents/skills/gpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/gpt-pro")}',
+                    f'test "$(readlink "$HOME/.agents/skills/computer-use-chatgpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro")}',
                     'test ! -e "$HOME/.codex/skills/dig"',
                     'test ! -e "$HOME/.codex/skills/dig-core"',
                     'test ! -e "$HOME/.codex/skills/amazon-search"',
@@ -331,6 +342,7 @@ def run_runtime_smoke_checks() -> None:
                     f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_opencode_runtime "$HOME"',
                     f'test "$(readlink "$HOME/.config/opencode/skills/dig")" = {shell_path(ROOT / "plugins/devkit/skills/dig")}',
+                    f'test "$(readlink "$HOME/.config/opencode/skills/gpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/gpt-pro")}',
                     f'test "$(readlink "$HOME/.config/opencode/skills/computer-use-chatgpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro")}',
                     'test ! -e "$HOME/.config/opencode/skills/dig-core"',
                     'test ! -e "$HOME/.config/opencode/skills/amazon-search"',
@@ -449,9 +461,26 @@ def main() -> int:
     if "codex -a never exec review" not in workflow:
         problems.append("workflow missing approval-never review command")
 
-    computer_use_skill = (ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro/SKILL.md").read_text(
-        encoding="utf-8"
-    )
+    gpt_pro_skill = (ROOT / "plugins/devkit/skills/gpt-pro/SKILL.md").read_text(encoding="utf-8")
+    for required_text in [
+        "agent-browser 0.26",
+        "--auto-connect",
+        "computer-use-chatgpt-pro",
+        "Chrome プロセスが動いているだけでは不十分",
+        "この skill は `--auto-connect` 専用",
+    ]:
+        if required_text not in gpt_pro_skill:
+            problems.append(f"gpt-pro missing required contract text: {required_text}")
+    for forbidden_text in [
+        "--profile Default",
+        "--cdp 9222",
+        "補助手順",
+        "fallback の場合",
+    ]:
+        if forbidden_text in gpt_pro_skill:
+            problems.append(f"gpt-pro still contains removed fallback text: {forbidden_text}")
+
+    computer_use_skill = (ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro/SKILL.md").read_text(encoding="utf-8")
     for required_text in [
         'allowed-tools: ["Bash", "Read", "mcp__computer_use__*"]',
         "Computer UseでChatGPT Proに質問",
@@ -466,6 +495,19 @@ def main() -> int:
     ]:
         if required_text not in computer_use_skill:
             problems.append(f"computer-use-chatgpt-pro missing required contract text: {required_text}")
+
+    for required_text in [
+        "/devkit:gpt-pro",
+        "$gpt-pro",
+        "$computer-use-chatgpt-pro",
+        "ブラウザ経由",
+        "ChatGPT アプリ経由",
+        "agent-browser --auto-connect",
+    ]:
+        if required_text not in readme:
+            problems.append(f"README missing ChatGPT Pro routing text: {required_text}")
+    if "/devkit:mermaid-show" in readme:
+        problems.append("README still lists retired public skill: /devkit:mermaid-show")
 
     dig_codex = (ROOT / "plugins/devkit/skills/dig-codex/SKILL.md").read_text(encoding="utf-8")
     if "gpt-5.4" not in dig_codex:
@@ -489,6 +531,8 @@ def main() -> int:
         entries = manifest_entries(manifest)
         if "dig" not in entries:
             problems.append(f"{manifest_name} missing public dig entry")
+        if "gpt-pro" not in entries:
+            problems.append(f"{manifest_name} missing public gpt-pro entry")
         if "computer-use-chatgpt-pro" not in entries:
             problems.append(f"{manifest_name} missing public computer-use-chatgpt-pro entry")
         if "amazon-search" in entries:
@@ -508,6 +552,8 @@ def main() -> int:
         ("devkit-runtime-sync.ps1", ps_retired),
     ]:
         retired_entries = manifest_entries(retired_block)
+        if "gpt-pro" in retired_entries:
+            problems.append(f"{retired_name} incorrectly retires active skill: gpt-pro")
         for token in ["amazon-search", "mermaid-show"]:
             if token not in retired_entries:
                 problems.append(f"{retired_name} missing retired skill cleanup entry: {token}")

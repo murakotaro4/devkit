@@ -14,6 +14,7 @@
 - `plugins/devkit/shared/workflow.md` は downstream 同期用の共有ワークフロー本体なので、共有フローを変える場合はこのファイル内のコピーと一緒に更新する
 - スクリプトの仕様変更時は `README.md` と `plugins/devkit/scripts/README.md` を同期する
 - スキル契約を変える場合は対応する `SKILL.md` と必要な templates / scripts を同期する
+- スキル契約や user-visible workflow を刷新するときは、ユーザーが明示しない限り fallback や後方互換の維持を要件にしない。新しい正本の挙動を明確化し、旧経路を半端に残さない
 - この repo では、ファイル変更を伴うタスクごとに必ず独立したサブエージェント review を 1 回以上実施する
 - review で指摘が出た場合は修正後に再 review を回し、追加 findings がなくなるまで繰り返す
 

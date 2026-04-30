@@ -246,10 +246,15 @@ bash "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/upda
 
 ## 使い方（スラッシュ）
 
-- Claude Code: `/dig` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:mermaid-show` `/devkit:improve-skill` `/devkit:codex-search` `/devkit:devkit-init` `/devkit:repo-maintainer` `/devkit:repo-maintainer-init`
+- Claude Code: `/dig` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:improve-skill` `/devkit:codex-search` `/devkit:devkit-init` `/devkit:repo-maintainer` `/devkit:repo-maintainer-init`
 - OpenCode: 環境の標準手段でインストール済みスキルを呼び出し（`/devkit-*` はローカルで定義した場合のみ）
-- Codex CLI: `$dig` `$repo-maintainer` `$repo-maintainer-init`
+- Codex CLI: `$dig` `$gpt-pro` `$repo-maintainer` `$repo-maintainer-init`
 - Codex Desktop (macOS + Computer Use): `$computer-use-chatgpt-pro`
+
+ChatGPT Pro 相談の住み分け:
+
+- ブラウザ経由: `/devkit:gpt-pro` または `$gpt-pro`（`agent-browser --auto-connect` 前提）
+- ChatGPT アプリ経由: `$computer-use-chatgpt-pro`
 
 補足（Codex の `$dig` 利用）:
 

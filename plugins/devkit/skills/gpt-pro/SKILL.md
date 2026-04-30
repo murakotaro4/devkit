@@ -1,184 +1,191 @@
 ---
 name: "gpt-pro"
-description: "agent-browserでChatGPT Proを自動操作し、Web検索・調査を委譲する"
+description: "agent-browser 0.26系でChatGPT Proを自動操作し、Web検索・調査を委譲する"
 argument-hint: "[topic]"
 allowed-tools: ["Bash", "Read"]
 ---
 
-# Agent-Browser + ChatGPT Pro (CDP)
+# Agent-Browser + ChatGPT Pro
 
 ## 使い方
 
-```
+```text
 /devkit:gpt-pro [質問内容]
 ```
 
 `$ARGUMENTS` に渡された質問内容を ChatGPT Pro に送信し、Web検索・調査を委譲する。
+Codex 同期後の公開名は `$gpt-pro`。`$computer-use-chatgpt-pro` は ChatGPT デスクトップアプリ専用で、この skill とは別用途。
+
+## 正本と対象範囲
+
+- repo 管理下のブラウザ経路の正本はこの `gpt-pro`
+- `computer-use-chatgpt-pro` は ChatGPT アプリ専用
+- `~/.codex/skills/agent-browser-chatgpt` のようなローカル個別 skill は repo 管理対象外。残っていても stale の可能性があるため、この skill を優先する
 
 ## 目的
 
-Cloudflare対策として、実ChromeのCDP接続でChatGPT Proを自動操作する。
-手順は「CDPでChrome起動 → agent-browser接続 → 手動ログイン（初回のみ） → Proモデル選択 → 検索モード有効化 → 送信 → 返信取得」。
+Cloudflare 対策と既存ログイン状態の再利用のため、`agent-browser` 0.26 系で実 Chrome を操作して ChatGPT Pro に質問する。
+この skill は `--auto-connect` 専用とし、別経路へは切り替えない。
 
 ## 前提条件
 
-- `agent-browser` をグローバルにインストール済み（`npm install -g agent-browser`）
+- `agent-browser` 0.26.x 以降が入っていること
 - Google Chrome がインストール済み
-- 初回ログイン用のGUIセッションがある
+- ChatGPT へ手動ログインできる GUI セッションがあること
 
-## 推奨フロー
+## 接続フロー
 
-### 1) CDP付きでChrome起動
-
-プロファイルロック回避のため専用プロファイル推奨:
+### 1) `agent-browser` の version を確認
 
 ```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.chrome-cdp-profile"
+agent-browser --version
 ```
 
-既存セッションを使う場合は通常起動→CDP付きで再起動。ただしポリシーやプロファイルロックで失敗する可能性あり。
+`0.26.x` 未満なら先に更新する。
 
-### 2) CDPがLISTENしているか確認
+### 2) `--auto-connect` を確認する
+
+まず既存 Chrome へ attach できるか確認する。
 
 ```bash
-curl -s http://127.0.0.1:9222/json/version
+agent-browser --auto-connect get url
 ```
 
-### 3) 接続してChatGPTを開く
+成功したら、この turn では以降の各コマンドを `agent-browser --auto-connect ...` の完全形で実行する。
+
+重要: `--auto-connect` は Chrome プロセスが動いているだけでは不十分。接続可能なデバッグ対象が必要。通常の Chrome が開いているだけで attach できない場合は、この skill では停止する。
+
+`agent-browser 0.26` は daemon 経由でセッションを維持するため、以降は `agent-browser --auto-connect ...` の完全形をそのまま繰り返す。
+
+### 3) ChatGPT を開いてログイン状態を確認
 
 ```bash
-agent-browser --cdp 9222 open https://chatgpt.com/
+agent-browser --auto-connect open https://chatgpt.com/
+agent-browser --auto-connect snapshot -i --compact
 ```
 
-### 4) 手動ログイン（初回のみ）
+未ログインならこの時点で手動ログインする。
 
-開いたChromeでログイン。ログイン後は最小化してOK。
+### 4) 新しいチャットで開始
 
-### 5) 新しいチャットで開始
-
-過去コンテキスト混入を避けるため、検索・調査は新しいタブ/新規チャットで実行する。
+過去コンテキスト混入を避けるため、検索・調査は新規チャットで実行する。
 
 ```bash
-agent-browser --cdp 9222 tab new
-agent-browser --cdp 9222 open https://chatgpt.com/
+agent-browser --auto-connect tab new
+agent-browser --auto-connect open https://chatgpt.com/
 ```
 
-または「新しいチャット」リンクをクリック:
+必要なら UI から新しいチャットを押す。
 
 ```bash
-agent-browser --cdp 9222 click "text=新しいチャット"
-# 英語UIの場合:
-# agent-browser --cdp 9222 click "text=New chat"
+agent-browser --auto-connect click "text=新しいチャット"
+# agent-browser --auto-connect click "text=New chat"
 ```
 
-### 6) スナップショットでUI確認
+### 5) Pro モデルと検索モードを確認
+
+Thinking ではなく Pro を使う。検索系の依頼は必ず Pro で実行する。
 
 ```bash
-agent-browser --cdp 9222 snapshot -i --compact
+agent-browser --auto-connect snapshot -i --compact
 ```
 
-### 7) Proモデルに切り替え、検索モードを有効化
-
-原則としてThinkingは使わず、Proをデフォルトにする。検索系の依頼は必ずProで実行する。
-
-モデルセレクターをクリック:
+最初のモデル切替は日本語 `aria-label` に固定しない。snapshot で見えている現在モデル名のボタンを押してメニューを開く。例:
 
 ```bash
-agent-browser --cdp 9222 click "button[aria-label*='モデル セレクター']"
+agent-browser --auto-connect click "text=Thinking"
+# agent-browser --auto-connect click "text=Auto"
+# agent-browser --auto-connect click "text=Pro"
 ```
 
-「Pro」を選択後、「検索」/「Search」/「Web」を含む項目を選ぶ。
-表記は変わるため再スナップショットで確認:
+メニューが開いたら「Pro」を選び、その後に「検索」/「Search」/「Web」を含む項目を有効化する。表記は変わるため、必要に応じて再度 snapshot で確認する。
 
 ```bash
-agent-browser --cdp 9222 snapshot -i --compact
+agent-browser --auto-connect snapshot -i --compact
 ```
 
-### 8) メッセージ送信
+### 6) メッセージ送信
 
-入力欄は `#prompt-textarea`（contenteditable）:
+入力欄は通常 `#prompt-textarea`。
 
 ```bash
-agent-browser --cdp 9222 click "#prompt-textarea"
-agent-browser --cdp 9222 type "#prompt-textarea" "$ARGUMENTS"
-agent-browser --cdp 9222 press Enter
+agent-browser --auto-connect click "#prompt-textarea"
+agent-browser --auto-connect type "#prompt-textarea" "$ARGUMENTS"
+agent-browser --auto-connect press Enter
 ```
 
-### 9) 最新のアシスタント返信を取得
+### 7) 最新のアシスタント返信を取得
 
 ```bash
-agent-browser --cdp 9222 eval "(function(){const els=[...document.querySelectorAll('[data-message-author-role=\"assistant\"]')]; return els.length?els[els.length-1].innerText:null;})()"
+agent-browser --auto-connect eval "(function(){const els=[...document.querySelectorAll('[data-message-author-role=\"assistant\"]')]; return els.length?els[els.length-1].innerText:null;})()"
 ```
 
-### 10) 長時間処理の待機（ポーリング）
+### 8) 長時間処理の待機
 
-Proの調査は時間がかかるため、**30〜60秒間隔でポーリング**する。
-以下は「30秒ごとに最大60分待つ」例（返信が出たら終了）:
+Pro の調査は時間がかかるため、30〜60 秒間隔でポーリングする。以下は 30 秒ごとに最大 60 分待つ例。
 
 ```bash
-initial_count=$(agent-browser --cdp 9222 eval "(()=>document.querySelectorAll('[data-message-author-role=\"assistant\"]').length)()")
-initial_text=$(agent-browser --cdp 9222 eval "(()=>{const els=[...document.querySelectorAll('[data-message-author-role=\"assistant\"]')]; return els.length?els[els.length-1].innerText:null;})()")
+initial_count=$(agent-browser --auto-connect eval "(()=>document.querySelectorAll('[data-message-author-role=\"assistant\"]').length)()")
+initial_text=$(agent-browser --auto-connect eval "(()=>{const els=[...document.querySelectorAll('[data-message-author-role=\"assistant\"]')]; return els.length?els[els.length-1].innerText:null;})()")
+prev_text="$initial_text"
+stable_hits=0
 for i in {1..120}; do
-  curr_count=$(agent-browser --cdp 9222 eval "(()=>document.querySelectorAll('[data-message-author-role=\"assistant\"]').length)()")
-  busy=$(agent-browser --cdp 9222 eval "(()=>[...document.querySelectorAll('button')].map(b=>b.innerText).filter(t=>/思考中|停止|今すぐ回答/.test(t)).length)()")
-  latest_text=$(agent-browser --cdp 9222 eval "(()=>{const els=[...document.querySelectorAll('[data-message-author-role=\"assistant\"]')]; return els.length?els[els.length-1].innerText:null;})()")
+  curr_count=$(agent-browser --auto-connect eval "(()=>document.querySelectorAll('[data-message-author-role=\"assistant\"]').length)()")
+  busy=$(agent-browser --auto-connect eval "(()=>{const text=[...document.querySelectorAll('button,[role=\"status\"],[aria-live]')].map(el=>el.innerText||'').join('\n'); const ariaBusy=document.querySelectorAll('[aria-busy=\"true\"]').length; return (ariaBusy>0 || /思考中|停止|今すぐ回答|Thinking|Stop|Stop generating|Respond now|Searching/.test(text)) ? 1 : 0;})()")
+  latest_text=$(agent-browser --auto-connect eval "(()=>{const els=[...document.querySelectorAll('[data-message-author-role=\"assistant\"]')]; return els.length?els[els.length-1].innerText:null;})()")
   if [ "$busy" -eq "0" ] && { [ "$curr_count" -gt "$initial_count" ] || [ "$latest_text" != "$initial_text" ]; }; then
+    if [ "$latest_text" = "$prev_text" ]; then
+      stable_hits=$((stable_hits + 1))
+    else
+      stable_hits=0
+    fi
+  else
+    stable_hits=0
+  fi
+  if [ "$stable_hits" -ge 1 ]; then
     echo "$latest_text"
     break
   fi
-  agent-browser --cdp 9222 wait 30000
+  prev_text="$latest_text"
+  agent-browser --auto-connect wait 30000
 done
 ```
 
-### 11) 返信が古い/未更新のときの確認
+### 9) 返信が古いままに見えるとき
 
-直近の返信が「以前の内容」のままに見える場合は、Proがまだ思考中の可能性がある。
-スナップショットで「Pro が思考中」「今すぐ回答」などが出ていないか確認:
+直近の返信が未更新に見える場合は、まだ思考中の可能性がある。
 
 ```bash
-agent-browser --cdp 9222 snapshot -i --compact
+agent-browser --auto-connect snapshot -i --compact
 ```
 
-必要に応じて「今すぐ回答」ボタンをクリックして短縮する。
+「Pro が思考中」「今すぐ回答」などの状態を確認し、必要なら UI で短縮する。
 
-### 12) 相談を継続する（同じチャットで深掘り）
+## 追加相談テンプレ
 
-同じチャットで追加要件や比較条件を追記して相談を続ける。
-
-#### 汎用の追加相談テンプレ
-
-```
+```text
 追加調査お願いします。
 条件： [条件A / 条件B / 条件C]
 出力形式：候補を3〜5件、項目（モデル名/主要スペック/入出力/注意点/価格帯・入手性）で表形式または箇条書きで。
 妥協点があれば提示してください。
 ```
 
-#### 目的別テンプレ（例）
-
-```
+```text
 目的： [購入/比較/選定/リスク確認]
 優先度： [1位/2位/3位]
 制約： [地域/予算/互換性/必須条件]
 ```
 
-## ヘッドレス注意点
-
-- ChatGPTはヘッドレスを弾くことが多い。実ChromeのCDP接続が最も安定。
-- どうしてもヘッドレスなら `--headless=new --remote-debugging-port=9222` で起動するが失敗しやすい。
-
 ## トラブルシュート
 
-- **CDPポートが開かない**: Chromeを完全終了→CDP付きで再起動。
-- **`agent-browser` が接続できない**: `curl http://127.0.0.1:9222/json/version` がJSONを返すか確認。
-- **Cloudflareに弾かれる**: Playwrightヘッドレスではなく実ChromeのCDP接続を使う。
+### `--auto-connect` が失敗する
+
+- `agent-browser --auto-connect get url` が失敗したら、その Chrome は attach 対象ではない
+- Chrome プロセスが動いていても、接続可能なデバッグ対象がなければ失敗する
+- attach できる Chrome を用意できないなら、この skill は使わず停止する
 
 ## セーフティ
 
-- パスワード/トークンはチャットやファイルに貼らない。
-- クッキーやプロファイルを扱う場合は `credentials/` 配下に置く。
-  - `credentials/` は必ず `.gitignore` に追加し、外部共有禁止。
-  - CDPプロファイルディレクトリはユーザー専用ディレクトリ（`$HOME/.chrome-cdp-profile` など）を推奨。
-- ログイン情報は手動入力のみ。自動化スクリプトに認証情報をハードコードしない。
+- パスワードやトークンをチャットや repo ファイルに貼らない
+- ログイン情報は手動入力のみ。自動化スクリプトに認証情報を埋め込まない
+- ブラウザプロファイルを別管理するならユーザー専用ディレクトリを使い、repo 配下へ入れない
