@@ -462,20 +462,59 @@ def main() -> int:
         problems.append("workflow missing approval-never review command")
 
     gpt_pro_skill = (ROOT / "plugins/devkit/skills/gpt-pro/SKILL.md").read_text(encoding="utf-8")
+    deep_research_skill = (ROOT / "plugins/devkit/skills/deep-research/SKILL.md").read_text(encoding="utf-8")
+    chrome_runner = ROOT / "plugins/devkit/scripts/chrome_chatgpt_runner.py"
     for required_text in [
-        "agent-browser 0.26",
-        "--auto-connect",
+        "Chrome の通常 `Default` profile",
+        "専用 profile や API-first 経路へは切り替えない",
+        "Chrome の再起動まで許可",
+        "agent-browser",
+        "Playwright `connectOverCDP`",
+        "Chrome 拡張経路",
+        "chrome_chatgpt_runner.py",
         "computer-use-chatgpt-pro",
-        "Chrome プロセスが動いているだけでは不十分",
-        "この skill は `--auto-connect` 専用",
+        "localhost,127.0.0.1,::1",
     ]:
         if required_text not in gpt_pro_skill:
             problems.append(f"gpt-pro missing required contract text: {required_text}")
+    for required_text in [
+        "Chrome の通常 `Default` profile",
+        "API-first 経路は使わない",
+        "Chrome の再起動まで許可",
+        "agent-browser",
+        "Playwright `connectOverCDP`",
+        "Chrome 拡張経路",
+        "chrome_chatgpt_runner.py",
+        "sandboxed iframe",
+        "localhost,127.0.0.1,::1",
+    ]:
+        if required_text not in deep_research_skill:
+            problems.append(f"deep-research missing required contract text: {required_text}")
+    if not chrome_runner.exists():
+        problems.append("missing Chrome Default profile ChatGPT runner")
+    else:
+        runner_text = chrome_runner.read_text(encoding="utf-8")
+        for required_text in [
+            "Default",
+            "connectOverCDP",
+            "agent-browser",
+            "NO_PROXY",
+            "restart-chrome",
+            "extract-deep-research",
+        ]:
+            if required_text not in runner_text:
+                problems.append(f"chrome_chatgpt_runner missing required text: {required_text}")
     for forbidden_text in [
-        "--profile Default",
-        "--cdp 9222",
-        "補助手順",
-        "fallback の場合",
+        "この skill は `--auto-connect` 専用",
+        "attach できる Chrome を用意できないなら、この skill は使わず停止する",
+        "$HOME/.chrome-cdp-profile",
+        "/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome",
+    ]:
+        if forbidden_text in deep_research_skill:
+            problems.append(f"deep-research still contains removed browser contract text: {forbidden_text}")
+    for forbidden_text in [
+        "この skill は `--auto-connect` 専用",
+        "attach できる Chrome を用意できないなら、この skill は使わず停止する",
     ]:
         if forbidden_text in gpt_pro_skill:
             problems.append(f"gpt-pro still contains removed fallback text: {forbidden_text}")
@@ -502,7 +541,9 @@ def main() -> int:
         "$computer-use-chatgpt-pro",
         "ブラウザ経由",
         "ChatGPT アプリ経由",
-        "agent-browser --auto-connect",
+        "Chrome Default profile",
+        "chrome_chatgpt_runner.py",
+        "Playwright `connectOverCDP`",
     ]:
         if required_text not in readme:
             problems.append(f"README missing ChatGPT Pro routing text: {required_text}")
@@ -585,11 +626,17 @@ def main() -> int:
             detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
             problems.append(f"PowerShell manifest smoke failed: {detail}")
 
-    js_files = sorted(
-        path.relative_to(ROOT).as_posix()
-        for path in (ROOT / "plugins/devkit").rglob("*")
-        if path.is_file() and path.suffix in {".js", ".mjs"}
-    )
+    js_files: list[str] = []
+    for path in (ROOT / "plugins/devkit").rglob("*"):
+        rel = path.relative_to(ROOT)
+        if any(part in {".venv", "__pycache__"} for part in rel.parts):
+            continue
+        try:
+            if path.is_file() and path.suffix in {".js", ".mjs"}:
+                js_files.append(rel.as_posix())
+        except OSError:
+            continue
+    js_files = sorted(js_files)
     if js_files:
         problems.append(f"JavaScript files must be removed from plugins/devkit: {', '.join(js_files)}")
 

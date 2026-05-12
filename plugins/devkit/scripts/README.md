@@ -58,6 +58,37 @@ python plugins/devkit/scripts/repo_maintainer.py run --repo /path/to/repo
 - PR title は `[repo-maintainer] ...`
 - `review_commands` / `check_commands` 未通過時も PR までは作るが、auto-merge はしない
 
+## chrome_chatgpt_runner.py
+
+`gpt-pro` / `deep-research` の共通 runner。API-first にはせず、Chrome の通常 `Default` profile を正本にする。
+
+### 役割
+
+- Windows / macOS / Linux の Google Chrome 実体と Default profile path を検出する
+- CDP port、proxy bypass、profile 起動状態、ChatGPT 操作用 backend を診断する
+- 通常 Chrome が CDP 無効で起動中なら、許可された場合だけ Chrome を終了して Default profile を CDP 付きで再起動する
+- backend 優先順を `agent-browser`、Playwright `connectOverCDP`、runtime の Chrome 拡張経路に固定する
+- Deep Research の sandboxed iframe target を CDP `/json` から再取得し、`websockets` がある環境では結果抽出する
+
+### サブコマンド
+
+Windows PowerShell / cmd では `py -3`、macOS / Linux / WSL / Git Bash では `python3` を使う。
+
+```bash
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py diagnose
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome diagnose
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome gpt-pro "調査内容"
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome deep-research "調査内容"
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py wait-gpt-pro --timeout-minutes 60 --interval 30
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py extract-deep-research
+```
+
+### 注意点
+
+- `localhost,127.0.0.1,::1` は `NO_PROXY` / `no_proxy` に含める
+- Chrome 拡張経路は shell helper から直接呼べないため、agent-browser / Playwright が失敗した場合の runtime handoff として扱う
+- Chrome の `Default` profile を使う契約のため、専用 profile への自動 fallback はしない
+
 ## update-devkit / update-ccx
 
 `update-devkit` が主名称。`update-ccx` は互換 alias。

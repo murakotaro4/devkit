@@ -107,6 +107,8 @@ devkit のワークフローでは、agent team review を前提としつつ、C
 |--------|------|-------------|-------------|
 | [Codex CLI](https://github.com/openai/codex) | Spark / fallback review gate | `npm install -g @openai/codex` | `codex --version` |
 | [OpenCode](https://github.com/opencode-ai/opencode) | 追加AI IDE（任意） | `npm install -g opencode-ai` | `opencode --version` |
+| Google Chrome | ChatGPT Pro / Deep Research の Default profile 実行 | 公式サイトからインストール | Chrome を通常起動 |
+| agent-browser | ChatGPT UI の主操作 backend | `npm install -g agent-browser` | `agent-browser --version` |
 
 ### Windows 環境の準備
 
@@ -253,8 +255,23 @@ bash "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/upda
 
 ChatGPT Pro 相談の住み分け:
 
-- ブラウザ経由: `/devkit:gpt-pro` または `$gpt-pro`（`agent-browser --auto-connect` 前提）
+- ブラウザ経由: `/devkit:gpt-pro` または `$gpt-pro`（Chrome Default profile + CDP 前提）
 - ChatGPT アプリ経由: `$computer-use-chatgpt-pro`
+
+ChatGPT ブラウザ経路の実行契約:
+
+- API-first にはせず、Chrome の通常 `Default` profile を正本にする
+- 通常 Chrome が CDP 無効で起動中なら、必要に応じて Chrome の再起動まで許可する
+- `localhost,127.0.0.1,::1` は proxy bypass 対象にする
+- backend 優先順は `agent-browser`、Playwright `connectOverCDP`、runtime の Chrome 拡張経路
+- 診断と実行の共通入口は `plugins/devkit/scripts/chrome_chatgpt_runner.py`
+- Windows PowerShell / cmd では `py -3`、macOS / Linux / WSL / Git Bash では `python3` を使う
+
+```bash
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py diagnose
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome gpt-pro "調査内容"
+py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome deep-research "調査内容"
+```
 
 補足（Codex の `$dig` 利用）:
 
