@@ -286,6 +286,23 @@ def load_config(path: Path) -> MaintainerConfig:
     )
 
 
+# git hook（pre-commit 等）から呼ばれた場合、呼び出し元リポジトリ向けの
+# GIT_* 環境変数（相対パスの GIT_INDEX_FILE 等）が別リポジトリへの操作を壊すため除去する
+_GIT_ENV_OVERRIDES = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_PREFIX",
+)
+
+
+def _sanitized_git_env() -> dict[str, str]:
+    return {key: value for key, value in os.environ.items() if key not in _GIT_ENV_OVERRIDES}
+
+
 def git(args: list[str], *, cwd: Path, check: bool = True) -> CommandResult:
     result = subprocess.run(
         ["git", *args],
@@ -293,6 +310,7 @@ def git(args: list[str], *, cwd: Path, check: bool = True) -> CommandResult:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env=_sanitized_git_env(),
     )
     output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
     if check and result.returncode != 0:
