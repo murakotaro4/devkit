@@ -1,4 +1,4 @@
-name: DevKit Dig Checks
+name: DevKit Checks
 
 on:
   pull_request:
@@ -6,15 +6,15 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: devkit-dig-checks-${{ github.event.pull_request.number || github.ref }}
+  group: devkit-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  dig-checks:
+  devkit-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DIG_VERSION_BASE_REF: origin/${{ github.base_ref || 'main' }}
+      DEVKIT_VERSION_BASE_REF: origin/${{ github.base_ref || 'main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
           echo "ref=${{ github.ref }}"
           echo "base_ref=${{ github.base_ref }}"
           echo "head_ref=${{ github.head_ref }}"
-          echo "DIG_VERSION_BASE_REF=${DIG_VERSION_BASE_REF}"
+          echo "DEVKIT_VERSION_BASE_REF=${DEVKIT_VERSION_BASE_REF}"
 
       - name: Run harness verify
         run: uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
@@ -47,11 +47,11 @@ jobs:
         if: always()
         run: |
           {
-            echo "## DevKit Dig Checks";
+            echo "## DevKit Checks";
             echo "";
-            echo "- Workflow: \`DevKit Dig Checks\`";
+            echo "- Workflow: \`DevKit Checks\`";
             echo "- Stage: \`uv run verify-full\`";
-            echo "- Base ref used by version gate: \`${DIG_VERSION_BASE_REF}\`";
+            echo "- Base ref used by version gate: \`${DEVKIT_VERSION_BASE_REF}\`";
             echo "";
             echo "### Local parity commands";
             echo "\`\`\`bash";
@@ -65,7 +65,7 @@ jobs:
             echo "### GitHub-side verification";
             echo "\`\`\`bash";
             echo "gh pr checks <PR_NUMBER> --watch";
-            echo "gh run list --workflow \"DevKit Dig Checks\" --limit 10";
+            echo "gh run list --workflow \"DevKit Checks\" --limit 10";
             echo "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\ci\\assert-pr-checks.ps1 -PrNumber <PR_NUMBER>";
             echo "\`\`\`";
           } >> "$GITHUB_STEP_SUMMARY"

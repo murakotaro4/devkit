@@ -3,7 +3,7 @@ param(
   [int]$PrNumber,
 
   [string]$Repo = "",
-  [string]$WorkflowName = "DevKit Dig Checks",
+  [string]$WorkflowName = "DevKit Checks",
   [int]$TimeoutSeconds = 300,
   [int]$PollIntervalSeconds = 10
 )

@@ -8,26 +8,31 @@ function Get-DevKitRepoUrl {
 
 function Get-DevKitSkillManifest {
   return @(
-    "dig",
     "computer-use-chatgpt-pro",
     "gpt-pro",
     "deep-research",
     "improve-skill",
     "codex-search",
-    "devkit-init",
     "repo-maintainer",
     "repo-maintainer-init"
   )
 }
 
 function Get-DevKitRetiredSkillEntries {
+  # 旧 dig adapter や廃止スキル、Claude 専用化に伴い他 runtime へ配布しなくなった
+  # dig 本体の残存リンク掃除対象。
   return @(
     "amazon-search",
     "mermaid-show",
+    "dig",
     "dig-core",
     "dig-claude",
     "dig-codex",
-    "dig-opencode"
+    "dig-cursor",
+    "dig-opencode",
+    "codex-impl",
+    "decomposition",
+    "devkit-init"
   )
 }
 
@@ -678,6 +683,18 @@ function Sync-DevKitOpenCodeRuntime([string]$UserHome, [scriptblock]$Logger) {
     -ExpectedLegacyTarget (Join-Path $UserHome ".agent\skills") `
     -AssertLegacySkillRoot
   Ensure-DevKitDirectoryContainer -Path $opencodeCommands
+
+  # 旧バージョンが cp 配布した OpenCode dig command を掃除する（retired prune は
+  # skills の symlink 専用で commands 配下の通常ファイルには届かないため）。
+  # ユーザー自作の dig.md を巻き込まないよう、旧テンプレート由来の場合のみ削除する。
+  $legacyDigCommand = Join-Path $opencodeCommands "dig.md"
+  if (Test-Path -LiteralPath $legacyDigCommand) {
+    $legacyDigContent = Get-Content -LiteralPath $legacyDigCommand -Raw -ErrorAction SilentlyContinue
+    if ($legacyDigContent -and $legacyDigContent.Contains("runtime=opencode")) {
+      Remove-Item -LiteralPath $legacyDigCommand -Force
+    }
+  }
+
   Remove-DevKitLegacyOpenCodeManagedEntries `
     -OpenCodeSkillsRoot $opencodeSkills `
     -PluginSkillsRoot (Join-Path $pluginRoot "skills") `
@@ -698,10 +715,6 @@ function Sync-DevKitOpenCodeRuntime([string]$UserHome, [scriptblock]$Logger) {
         (Join-Path $UserHome ".claude\plugins\marketplaces\murakotaro4\plugins\devkit\skills\$skill")
       )
   }
-
-  Ensure-DevKitManagedFile `
-    -SourcePath (Join-Path $pluginRoot "templates\opencode\commands\dig.md") `
-    -DestinationPath (Join-Path $opencodeCommands "dig.md")
 
   Set-DevKitPersistedSourceRoot -StateFile (Join-Path $opencodeDevKit "source-root.txt") -RepoRoot $repoRoot
 

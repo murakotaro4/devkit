@@ -21,6 +21,14 @@ LEGACY_PATTERNS = [
     r"agent-orch-(core|openai|anthropic|google)\b",
     r"plugins/devkit/skills/codex\b",
     r"plugins/devkit/skills/agent-orch-(core|openai|anthropic|google)\b",
+    r"dig-(core|claude|codex|cursor|opencode)\b",
+    r"codex-impl\b",
+    r"(?:skills/|/devkit:)decomposition\b",
+    r"devkit-init\b",
+    r"shared/workflow\.md",
+    r"REVIEW_GATE_[A-Z]",
+    r"team_shape\b",
+    r"DIG_[A-Z]+_[A-Z]",
 ]
 TEXT_EXT = {
     ".md",
@@ -65,9 +73,10 @@ def collect_files(directory: Path) -> list[Path]:
 def is_allowed_exception(file_rel: str, line: str, in_migration_notice: bool) -> bool:
     if "migration-allow" in line:
         return True
-    if file_rel == "CHANGELOG.md":
+    name = file_rel.rsplit("/", 1)[-1]
+    if name == "CHANGELOG.md":
         return True
-    if file_rel == "README.md":
+    if name == "README.md":
         return in_migration_notice
     return False
 
@@ -81,7 +90,7 @@ def scan_text_file(abs_path: Path, rel_path: str) -> list[dict[str, object]]:
     in_migration_notice = False
 
     for index, line in enumerate(lines, start=1):
-        if rel_path == "README.md":
+        if rel_path.rsplit("/", 1)[-1] == "README.md":
             if re.match(r"^##\s+Migration Notice\b", line):
                 in_migration_notice = True
             elif re.match(r"^##\s+", line) and in_migration_notice:
@@ -98,7 +107,7 @@ def scan_text_file(abs_path: Path, rel_path: str) -> list[dict[str, object]]:
                     "path": rel_path,
                     "line": index,
                     "token": match.group(0),
-                    "replacement": "Use /dig runtime adapters and new templates",
+                    "replacement": "Use the new /dig skill (deep-dive + implementation delegation)",
                 }
             )
 
@@ -109,15 +118,18 @@ def scan_dir(directory: Path) -> dict[str, list[dict[str, object]]]:
     findings: list[dict[str, object]] = []
     binaries: list[dict[str, object]] = []
 
+    # checker 自身と、retired エントリとして legacy 名を契約上保持する配布スクリプトは走査対象外。
+    skip_names = {
+        "check_legacy_migration.py",
+        "check_skill_surface.py",
+        "check_plugin_version_bump.py",
+        "devkit-runtime-sync.sh",
+        "devkit-runtime-sync.ps1",
+    }
+
     for file_path in collect_files(directory):
         rel = file_path.relative_to(directory).as_posix()
-        if rel.startswith("plugins/devkit/scripts/check_dig_migration.py"):
-            continue
-        if rel.startswith("plugins/devkit/scripts/check_skill_surface.py"):
-            continue
-        if rel.startswith("plugins/devkit/scripts/check_dig_routing.py"):
-            continue
-        if rel.startswith("plugins/devkit/scripts/check_plugin_version_bump.py"):
+        if file_path.name in skip_names:
             continue
 
         buf = file_path.read_bytes()
@@ -125,7 +137,10 @@ def scan_dir(directory: Path) -> dict[str, list[dict[str, object]]]:
             binaries.append({"path": rel, "sha256": hashlib.sha256(buf).hexdigest()})
             continue
 
-        findings.extend(scan_text_file(file_path, rel))
+        try:
+            findings.extend(scan_text_file(file_path, rel))
+        except UnicodeDecodeError:
+            binaries.append({"path": rel, "sha256": hashlib.sha256(buf).hexdigest()})
 
     return {"findings": findings, "binaries": binaries}
 
@@ -157,7 +172,7 @@ def main() -> int:
         artifact = (ROOT / args.artifact).resolve()
         if not artifact.exists():
             raise RuntimeError(f"Artifact not found: {artifact}")
-        with TemporaryDirectory(prefix="dig-mig-") as temp_dir_name:
+        with TemporaryDirectory(prefix="legacy-mig-") as temp_dir_name:
             temp_dir = Path(temp_dir_name)
             extract_artifact(artifact, temp_dir)
             result = scan_dir(temp_dir)

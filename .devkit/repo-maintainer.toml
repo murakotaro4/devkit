@@ -6,7 +6,6 @@ allowed_paths = [
   "README.md",
   "MEMORY.md",
   "docs",
-  "plugins/devkit/shared/workflow.md",
   "plugins/devkit/scripts/README.md",
   "plugins/devkit/skills",
   "logs/skills",
@@ -20,7 +19,7 @@ review_commands = [
 check_commands = [
   "uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast",
 ]
-prompt_appendix = "This repository is the DevKit source of truth. In phase 1, prioritize AGENTS.md, README.md, MEMORY.md, plugins/devkit/shared/workflow.md, plugins/devkit/scripts/README.md, and SKILL.md alignment. Do not edit plugin version, runtime sync scripts, or executable code unless phase is raised. When a task changes files, treat independent subagent review as mandatory and rerun review after fixes until no additional findings remain."
+prompt_appendix = "This repository is the DevKit source of truth. In phase 1, prioritize AGENTS.md, README.md, MEMORY.md, plugins/devkit/scripts/README.md, and SKILL.md alignment. Do not edit plugin version, runtime sync scripts, or executable code unless phase is raised. When a task changes files, treat independent subagent review as mandatory and rerun review after fixes until no additional findings remain."
 
 [lanes.daily]
 enabled = true

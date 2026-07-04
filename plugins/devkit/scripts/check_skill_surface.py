@@ -43,6 +43,7 @@ def manifest_entries(manifest: str) -> set[str]:
         line = raw_line.strip()
         if not line or line.startswith(("devkit_skill_manifest", "function Get-DevKitSkillManifest", "return @(")):
             continue
+        line = line.split("#", 1)[0].strip()
         line = line.removesuffix("\\").strip().removesuffix(",").strip()
         if line.startswith('"') and line.endswith('"'):
             line = line[1:-1]
@@ -310,11 +311,11 @@ def run_runtime_smoke_checks() -> None:
                     'mkdir -p "$HOME/.codex/skills/custom-keep"',
                     f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_codex_runtime "$HOME"',
-                    f'test "$(readlink "$HOME/.agents/skills/dig")" = {shell_path(ROOT / "plugins/devkit/skills/dig")}',
+                    'test ! -e "$HOME/.agents/skills/dig" -a ! -L "$HOME/.agents/skills/dig"',
                     f'test "$(readlink "$HOME/.agents/skills/gpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/gpt-pro")}',
                     f'test "$(readlink "$HOME/.agents/skills/computer-use-chatgpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro")}',
-                    'test ! -e "$HOME/.codex/skills/dig"',
-                    'test ! -e "$HOME/.codex/skills/dig-core"',
+                    'test ! -e "$HOME/.codex/skills/dig" -a ! -L "$HOME/.codex/skills/dig"',
+                    'test ! -e "$HOME/.codex/skills/dig-core" -a ! -L "$HOME/.codex/skills/dig-core"',
                     'test ! -e "$HOME/.codex/skills/amazon-search"',
                     'test -d "$HOME/.codex/skills/custom-keep"',
                     f'test "$(head -n 1 "$HOME/.codex/devkit/source-root.txt")" = {shell_path(ROOT)}',
@@ -341,7 +342,7 @@ def run_runtime_smoke_checks() -> None:
                     'mkdir -p "$HOME/.config/opencode/skills/custom-keep"',
                     f"source {shell_path(runtime_sync_sh)}",
                     'sync_devkit_opencode_runtime "$HOME"',
-                    f'test "$(readlink "$HOME/.config/opencode/skills/dig")" = {shell_path(ROOT / "plugins/devkit/skills/dig")}',
+                    'test ! -e "$HOME/.config/opencode/skills/dig" -a ! -L "$HOME/.config/opencode/skills/dig"',
                     f'test "$(readlink "$HOME/.config/opencode/skills/gpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/gpt-pro")}',
                     f'test "$(readlink "$HOME/.config/opencode/skills/computer-use-chatgpt-pro")" = {shell_path(ROOT / "plugins/devkit/skills/computer-use-chatgpt-pro")}',
                     'test ! -e "$HOME/.config/opencode/skills/dig-core"',
@@ -381,14 +382,9 @@ def main() -> int:
 
     required = [
         "plugins/devkit/skills/dig/SKILL.md",
-        "plugins/devkit/skills/dig-core/SKILL.md",
-        "plugins/devkit/skills/dig-claude/SKILL.md",
-        "plugins/devkit/skills/dig-codex/SKILL.md",
-        "plugins/devkit/skills/dig-opencode/SKILL.md",
         "plugins/devkit/skills/computer-use-chatgpt-pro/SKILL.md",
         "plugins/devkit/scripts/devkit-runtime-sync.sh",
         "plugins/devkit/scripts/devkit-runtime-sync.ps1",
-        "plugins/devkit/templates/opencode/commands/dig.md",
         "plugins/devkit/.claude-plugin/plugin.json",
         "plugins/devkit/.claude-plugin/marketplace.json",
         "README.md",
@@ -406,19 +402,9 @@ def main() -> int:
         if not (ROOT / rel).exists():
             problems.append(f"missing required: {rel}")
 
-    for rel in [
-        "plugins/devkit/skills/dig/SKILL.md",
-        "plugins/devkit/skills/dig-core/SKILL.md",
-        "plugins/devkit/skills/dig-claude/SKILL.md",
-        "plugins/devkit/skills/dig-codex/SKILL.md",
-        "plugins/devkit/skills/dig-opencode/SKILL.md",
-    ]:
-        abs_path = ROOT / rel
-        if not abs_path.exists():
-            continue
-        buf = abs_path.read_bytes()
-        if len(buf) >= 3 and buf[:3] == b"\xef\xbb\xbf":
-            problems.append(f"BOM not allowed in dig skill frontmatter: {rel}")
+    dig_skill_path = ROOT / "plugins/devkit/skills/dig/SKILL.md"
+    if dig_skill_path.exists() and dig_skill_path.read_bytes()[:3] == b"\xef\xbb\xbf":
+        problems.append("BOM not allowed in dig skill frontmatter: plugins/devkit/skills/dig/SKILL.md")
 
     if args.phase == "B":
         for rel in removed:
@@ -426,11 +412,7 @@ def main() -> int:
                 problems.append(f"must be removed in phase B: {rel}")
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    import re
-
-    readme = re.sub(r"##\s+Migration Notice[\s\S]*?(?=\n##\s+|$)", "", readme, flags=re.M)
-    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    workflow = (ROOT / "plugins/devkit/shared/workflow.md").read_text(encoding="utf-8")
+    readme = re.sub(r"##\s+Migration Notice[\s\S]*?(?=\n##\s+|\Z)", "", readme)
     dig = (ROOT / "plugins/devkit/skills/dig/SKILL.md").read_text(encoding="utf-8")
 
     if re.search(r"/devkit:codex(?!-)\b", readme) or "/devkit:agent-orch-" in readme:
@@ -443,23 +425,6 @@ def main() -> int:
         problems.append("dig skill still references removed command: /devkit:dig")
     if "/prompts:devkit-dig" in dig:
         problems.append("dig skill still references removed command: /prompts:devkit-dig")
-    for token in ["DIG_CODEX_PLAN_REVIEW_UNAVAILABLE", "DIG_CODEX_PLAN_REVIEW_BLOCKED"]:
-        if token not in readme:
-            problems.append(f"README missing dig-codex stop code: {token}")
-        if token not in workflow:
-            problems.append(f"workflow missing dig-codex stop code: {token}")
-    if "gpt-5.3-codex-spark" not in workflow:
-        problems.append("workflow missing spark review model")
-    if "gpt-5.4" not in workflow:
-        problems.append("workflow missing gpt-5.4 fallback review model")
-    if "gpt-5.4" not in agents:
-        problems.append("AGENTS.md missing gpt-5.4 fallback review model")
-    if "gpt-5.4" not in readme:
-        problems.append("README missing gpt-5.4 fallback review model")
-    if 'model_reasoning_effort="medium"' not in workflow:
-        problems.append("workflow missing medium effort fallback")
-    if "codex -a never exec review" not in workflow:
-        problems.append("workflow missing approval-never review command")
 
     gpt_pro_skill = (ROOT / "plugins/devkit/skills/gpt-pro/SKILL.md").read_text(encoding="utf-8")
     deep_research_skill = (ROOT / "plugins/devkit/skills/deep-research/SKILL.md").read_text(encoding="utf-8")
@@ -550,10 +515,6 @@ def main() -> int:
     if "/devkit:mermaid-show" in readme:
         problems.append("README still lists retired public skill: /devkit:mermaid-show")
 
-    dig_codex = (ROOT / "plugins/devkit/skills/dig-codex/SKILL.md").read_text(encoding="utf-8")
-    if "gpt-5.4" not in dig_codex:
-        problems.append("dig-codex missing gpt-5.4 fallback review model")
-
     runtime_sync_sh = (ROOT / "plugins/devkit/scripts/devkit-runtime-sync.sh").read_text(encoding="utf-8")
     runtime_sync_ps1 = (ROOT / "plugins/devkit/scripts/devkit-runtime-sync.ps1").read_text(encoding="utf-8")
     shell_manifest = extract_block(
@@ -570,8 +531,8 @@ def main() -> int:
         ("devkit-runtime-sync.ps1", ps_manifest),
     ]:
         entries = manifest_entries(manifest)
-        if "dig" not in entries:
-            problems.append(f"{manifest_name} missing public dig entry")
+        if "dig" in entries:
+            problems.append(f"{manifest_name} still syncs Claude-only dig skill to other runtimes")
         if "gpt-pro" not in entries:
             problems.append(f"{manifest_name} missing public gpt-pro entry")
         if "computer-use-chatgpt-pro" not in entries:
@@ -598,7 +559,17 @@ def main() -> int:
         for token in ["amazon-search", "mermaid-show"]:
             if token not in retired_entries:
                 problems.append(f"{retired_name} missing retired skill cleanup entry: {token}")
-        for token in ["dig-core", "dig-claude", "dig-codex", "dig-opencode"]:
+        for token in [
+            "dig",
+            "dig-core",
+            "dig-claude",
+            "dig-codex",
+            "dig-cursor",
+            "dig-opencode",
+            "codex-impl",
+            "decomposition",
+            "devkit-init",
+        ]:
             if token not in retired_entries:
                 problems.append(f"{retired_name} missing retired adapter cleanup entry: {token}")
 

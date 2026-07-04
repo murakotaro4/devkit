@@ -90,9 +90,6 @@ try {
   Write-Host "  update-devkit"
   Write-Host "  update-ccx"
   Write-Host ""
-  Write-Host "Run dig from Codex:"
-  Write-Host '  $dig <topic>'
-  Write-Host ""
   Write-Host "Manual update command:"
   Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$($CodexBin)\update-devkit.ps1`" --devkit-only"
   exit 0

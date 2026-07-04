@@ -17,10 +17,8 @@ def script(path: str) -> str:
 
 CHECKS_FAST: list[list[str]] = [
     [sys.executable, script("check_utf8_bom.py"), "--mode=repo"],
-    [sys.executable, script("check_dig_hooks.py")],
-    [sys.executable, script("check_dig_routing.py")],
     [sys.executable, script("check_skill_surface.py"), "--phase=B"],
-    [sys.executable, script("check_dig_migration.py"), "--mode=repo"],
+    [sys.executable, script("check_legacy_migration.py"), "--mode=repo"],
     [sys.executable, "-m", "pytest", str(SCRIPT_DIR.parent / "tests"), "-x", "-q"],
 ]
 

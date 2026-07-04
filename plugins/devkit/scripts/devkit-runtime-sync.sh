@@ -4,25 +4,32 @@ set -euo pipefail
 
 devkit_skill_manifest() {
   printf '%s\n' \
-    dig \
     computer-use-chatgpt-pro \
     gpt-pro \
     deep-research \
     improve-skill \
     codex-search \
-    devkit-init \
     repo-maintainer \
     repo-maintainer-init
 }
 
 devkit_retired_skill_entries() {
-  printf '%s\n' \
-    amazon-search \
-    mermaid-show \
-    dig-core \
-    dig-claude \
-    dig-codex \
+  # 旧 dig adapter や廃止スキル、Claude 専用化に伴い他 runtime へ配布しなくなった
+  # dig 本体の残存リンク掃除対象。
+  local _entries=(
+    amazon-search
+    mermaid-show
+    dig
+    dig-core
+    dig-claude
+    dig-codex
+    dig-cursor
     dig-opencode
+    codex-impl
+    decomposition
+    devkit-init
+  )
+  printf '%s\n' "${_entries[@]}"
 }
 
 devkit_repo_url() {
@@ -518,6 +525,13 @@ sync_devkit_opencode_runtime() {
   ensure_directory_container "$opencode_skills" "$user_home/.agent/skills" true
   ensure_directory_container "$opencode_commands"
 
+  # 旧バージョンが cp 配布した OpenCode dig command を掃除する（retired prune は
+  # skills の symlink 専用で commands 配下の通常ファイルには届かないため）。
+  # ユーザー自作の dig.md を巻き込まないよう、旧テンプレート由来の場合のみ削除する。
+  if [ -f "$opencode_commands/dig.md" ] && grep -q 'runtime=opencode' "$opencode_commands/dig.md"; then
+    rm -f "$opencode_commands/dig.md"
+  fi
+
   local plugin_root="$repo_root/plugins/devkit"
   prune_legacy_opencode_managed_entries \
     "$opencode_skills" \
@@ -540,11 +554,6 @@ sync_devkit_opencode_runtime() {
       "$user_home/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/skills/$skill" \
       "$user_home/.codex/devkit/source/plugins/devkit/skills/$skill"
   done < <(devkit_skill_manifest)
-
-  ensure_managed_file \
-    "$plugin_root/templates/opencode/commands/dig.md" \
-    "$opencode_commands/dig.md" \
-    false
 
   devkit_persist_source_root "$opencode_root/devkit/source-root.txt" "$repo_root"
 }

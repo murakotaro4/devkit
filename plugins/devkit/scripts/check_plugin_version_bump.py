@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 ROOT = Path.cwd()
-BASE_REF = os.environ.get("DIG_VERSION_BASE_REF", "origin/main")
+BASE_REF = os.environ.get("DEVKIT_VERSION_BASE_REF", "origin/main")
 
 
 def run_git(*args: str) -> str:
