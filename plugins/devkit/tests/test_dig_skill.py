@@ -52,9 +52,11 @@ def test_interview_and_approval_contract():
 
 def test_backend_selection_contract():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    assert 'model_reasoning_effort="medium"' in text, "codex の effort 選択肢がない"
+    assert "effort xhigh" in text, "codex の effort xhigh 選択肢がない"
+    assert "effort high" in text, "codex の effort high 選択肢がない"
+    assert "effort medium" in text, "codex の effort medium 選択肢がない"
     assert "sonnet" in text.lower(), "Claude サブエージェント(Sonnet)の選択肢がない"
-    assert "haiku" in text.lower(), "Claude サブエージェント(Haiku)の選択肢がない"
+    assert "haiku" not in text.lower(), "Haiku が選択肢として残っている(v5.1.0 で廃止済み)"
     assert "command -v codex" in text, "codex 不在時のフォールバック判定がない"
 
 
@@ -65,17 +67,20 @@ def test_delegation_command_contract():
     text = SKILL_PATH.read_text(encoding="utf-8")
     assert "--sandbox workspace-write" in text, "実装委譲の sandbox が workspace-write でない"
     assert "-a never" in text, "approval policy never の指定がない"
-    assert "codex exec resume --last" in text, "修正再委譲（resume --last）の記述がない"
+    assert "codex -a never exec resume --last" in text, "修正再委譲（-a never exec resume --last）の記述がない"
+    assert not re.search(r"codex exec .*-a never", text), (
+        "-a never が codex exec より後ろに置かれた旧語順が残っている"
+    )
     assert "review --uncommitted" in text, "セカンドオピニオン review の記述がない"
     assert "commit 禁止" in text, "backend への commit 禁止の記述がない"
 
 
-# ── 6. モデルを焼き込まない（config.toml の既定に従う） ─────────────
+# ── 6. モデルを焼き込まない（config 既定に従う） ─────────────────────
 
 
 def test_no_hardcoded_model():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    assert "config.toml" in text, "モデルが config 既定に従う旨の記述がない"
+    assert "config 既定" in text, "モデルが config 既定に従う旨の記述がない"
     assert not re.search(r"-m\s+gpt-", text), "委譲コマンドにモデルが焼き込まれている"
     assert "spark" not in text, "旧モデル（spark）への言及が残っている"
 
@@ -83,7 +88,35 @@ def test_no_hardcoded_model():
 # 旧 dig 契約トークンの残存検査は check_legacy_migration.py --mode=repo が repo 全体で担当する。
 
 
-# ── 7. README にコマンドが掲載されている ──────────────────────────
+# ── 7. 3 役 backend 選択(計画レビュー / 実装 / diff レビュー) ─────
+
+
+def test_three_role_backend_selection_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "計画レビュー" in text, "計画レビュー役の記述がない"
+    assert "backend 選択" in text, "backend 選択 step の記述がない"
+    assert "model=opus" in text, "diff レビュー用 Claude サブエージェント(Opus)の記述がない"
+    assert "model=sonnet" in text, "実装用 Claude サブエージェント(Sonnet)の記述がない"
+
+
+# ── 8. 9 step フロー(完了報告 step まで揃っている) ─────────────────
+
+
+def test_nine_step_flow_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "### 9. 完了報告" in text, "9 step 目の完了報告見出しがない"
+
+
+# ── 9. 計画レビュー step の記述(read-only sandbox) ──────────────
+
+
+def test_plan_review_step_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "### 4. 計画レビュー" in text, "計画レビュー step の見出しがない"
+    assert "--sandbox read-only" in text, "計画レビューの read-only sandbox 指定がない"
+
+
+# ── 10. README にコマンドが掲載されている ──────────────────────────
 
 
 def test_readme_lists_command():
