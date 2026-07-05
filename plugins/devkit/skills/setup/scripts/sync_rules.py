@@ -33,6 +33,7 @@ def run_git_root(target: Path) -> Path:
         ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
         check=True,
         capture_output=True,
+        encoding="utf-8",
         text=True,
     )
     return Path(result.stdout.strip()).resolve()
