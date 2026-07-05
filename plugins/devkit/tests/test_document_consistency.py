@@ -8,12 +8,19 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DISTRIBUTED_SKILLS = ("dig", "improve-skill", "setup", "refactor", "memory-review")
-PLUGIN_DESCRIPTION_SURFACES = ("/dig", "skill 改善", "setup", "refactor", "memory-review")
+DISTRIBUTED_SKILLS = ("dig", "improve-skill", "setup", "refactor", "memory-review", "goal-prompt")
+PLUGIN_DESCRIPTION_SURFACES = ("/dig", "skill 改善", "setup", "refactor", "memory-review", "goal-prompt")
 
 
 def _read(relpath: str) -> str:
     return (REPO_ROOT / relpath).read_text(encoding="utf-8")
+
+
+def _backtick_fence(line: str) -> tuple[int, str] | None:
+    match = re.match(r"^(`{3,})(.*)$", line)
+    if not match:
+        return None
+    return len(match.group(1)), match.group(2).strip()
 
 
 # ── 1. CLAUDE.md が AGENTS.md を正本として参照している ─────────────
@@ -105,7 +112,40 @@ def test_skill_frontmatter_name_matches_directory():
         assert name_match.group(1) == skill_path.parent.name, f"{skill_path} の name とディレクトリ名が不一致"
 
 
-# ── 7. AGENTS.md の codex exec stdin 閉鎖契約 ─────────────────────
+# ── 7. skill Markdown のコードフェンスは壊れていない ───────────────
+
+
+def test_skill_markdown_fences_are_balanced():
+    for skill_name in DISTRIBUTED_SKILLS:
+        relpath = f"plugins/devkit/skills/{skill_name}/SKILL.md"
+        open_fence: tuple[int, int] | None = None
+
+        for line_no, line in enumerate(_read(relpath).splitlines(), start=1):
+            fence = _backtick_fence(line)
+            if fence is None:
+                continue
+
+            fence_len, info = fence
+            if open_fence is None:
+                open_fence = (fence_len, line_no)
+                continue
+
+            open_len, open_line_no = open_fence
+            if fence_len < open_len:
+                continue
+            if not info:
+                open_fence = None
+                continue
+
+            raise AssertionError(
+                f"{relpath}:{line_no} に未エスケープの入れ子コードフェンスがある: "
+                f"{line!r} (外側開始: {open_line_no} 行目、{open_len} バッククォート)"
+            )
+
+        assert open_fence is None, f"{relpath}:{open_fence[1]} のコードフェンスが閉じていない"
+
+
+# ── 8. AGENTS.md の codex exec stdin 閉鎖契約 ─────────────────────
 
 
 def test_agents_codex_stdin_guard():
@@ -117,7 +157,7 @@ def test_agents_codex_stdin_guard():
     assert not offenders, f"stdin 閉鎖(< /dev/null)がない codex コマンド行: {offenders}"
 
 
-# ── 8. Release Rules の正本は AGENTS.md、README は参照 ─────────────
+# ── 9. Release Rules の正本は AGENTS.md、README は参照 ─────────────
 
 
 def test_release_rules_canonical_in_agents_md():
@@ -131,7 +171,7 @@ def test_release_rules_canonical_in_agents_md():
         )
 
 
-# ── 9. スキル共通契約・採用基準の正本化と参照 ──────────────────────
+# ── 10. スキル共通契約・採用基準の正本化と参照 ─────────────────────
 
 
 def test_shared_skill_contract_canonical_and_referenced():

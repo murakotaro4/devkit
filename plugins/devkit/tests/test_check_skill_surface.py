@@ -18,6 +18,7 @@ def test_expected_skill_surface_matches_repository():
         "setup",
         "refactor",
         "memory-review",
+        "goal-prompt",
     }
 
 

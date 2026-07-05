@@ -1,5 +1,5 @@
 {
   "name": "devkit",
-  "description": "DevKit の /dig 実装オーケストレーション、skill 改善、リポジトリ setup、refactor 計画化、memory-review メモリ監査を提供し、Node statusline を同梱します。",
-  "version": "7.2.0"
+  "description": "DevKit の /dig 実装オーケストレーション、skill 改善、リポジトリ setup、refactor 計画化、memory-review メモリ監査、goal-prompt ゴールプロンプト作成を提供し、Node statusline を同梱します。",
+  "version": "7.3.0"
 }

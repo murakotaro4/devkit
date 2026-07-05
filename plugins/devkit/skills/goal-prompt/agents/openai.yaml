@@ -1,0 +1,4 @@
+interface:
+  display_name: "Goal Prompt"
+  short_description: "Build goal prompts for autonomous runs"
+  default_prompt: "Use $goal-prompt to interview for a verifiable goal prompt, recommend the right launch command, and hand implementation-heavy session work to $dig when appropriate."
