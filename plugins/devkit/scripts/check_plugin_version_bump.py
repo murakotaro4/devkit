@@ -19,6 +19,7 @@ def run_git(*args: str) -> str:
         cwd=ROOT,
         check=True,
         capture_output=True,
+        encoding="utf-8",
         text=True,
     )
     return result.stdout.strip()

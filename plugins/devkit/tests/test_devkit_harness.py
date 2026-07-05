@@ -12,7 +12,7 @@ def test_full_checks_are_fast_checks_plus_version_gate():
 
 
 def test_fast_checks_order():
-    names = [command[1].rsplit("/", 1)[-1] if len(command) > 1 else "" for command in devkit_harness.CHECKS_FAST]
+    names = [Path(command[1]).name if len(command) > 1 else "" for command in devkit_harness.CHECKS_FAST]
 
     assert names[:3] == [
         "check_utf8_bom.py",

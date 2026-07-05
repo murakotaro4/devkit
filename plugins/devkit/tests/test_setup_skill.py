@@ -138,7 +138,9 @@ def test_sync_rules_script_is_idempotent_and_preserves_user_content(tmp_path):
     metadata = json.loads((repo / ".claude/devkit-rules.json").read_text(encoding="utf-8"))
     assert metadata["version"] == "1"
     assert isinstance(metadata["synced_at"], str) and metadata["synced_at"]
-    assert metadata["template_sha256"] == sha256(template.read_bytes()).hexdigest()
+    normalized_template = template.read_text(encoding="utf-8").encode("utf-8")
+    expected_template_sha256 = sha256(normalized_template).hexdigest()
+    assert metadata["template_sha256"] == expected_template_sha256
     assert (repo / ".claude/devkit-rules-backup/AGENTS.md.bak").exists()
 
     second = _run_sync_json(repo, template)
