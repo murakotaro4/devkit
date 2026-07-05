@@ -8,6 +8,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+DISTRIBUTED_SKILLS = ("dig", "improve-skill", "setup", "refactor", "memory-review")
+PLUGIN_DESCRIPTION_SURFACES = ("/dig", "skill 改善", "setup", "refactor", "memory-review")
 
 
 def _read(relpath: str) -> str:
@@ -30,7 +32,7 @@ def test_agents_md_core_rules():
     assert "Conventional Commits" in text, "AGENTS.md にコミット規約がない"
     assert "Codex Exec 相談ルール" in text, "AGENTS.md に codex exec 相談ルールがない"
     assert "version" in text, "AGENTS.md に version bump ルールがない"
-    for skill_name in ("dig", "improve-skill", "setup", "refactor"):
+    for skill_name in DISTRIBUTED_SKILLS:
         assert skill_name in text, f"AGENTS.md に v7 の配布 skill がない: {skill_name}"
 
 
@@ -60,6 +62,21 @@ def test_marketplace_descriptions_match_plugin_json():
     assert not (REPO_ROOT / "plugins/devkit/.claude-plugin/marketplace.json").exists(), (
         "重複 marketplace manifest が残っている"
     )
+
+
+def test_distributed_skill_mentions_stay_in_sync():
+    plugin = json.loads(_read("plugins/devkit/.claude-plugin/plugin.json"))
+    documents = {
+        "README.md": _read("README.md"),
+        "plugins/devkit/scripts/README.md": _read("plugins/devkit/scripts/README.md"),
+    }
+
+    for doc_name, text in documents.items():
+        for skill_name in DISTRIBUTED_SKILLS:
+            assert skill_name in text, f"{doc_name} に配布 skill がない: {skill_name}"
+
+    for surface in PLUGIN_DESCRIPTION_SURFACES:
+        assert surface in plugin["description"], f"plugin description に配布 surface がない: {surface}"
 
 
 # ── 5. pyproject の pythonpath は存在するディレクトリだけを指す ─────

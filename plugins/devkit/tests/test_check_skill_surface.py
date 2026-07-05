@@ -17,6 +17,7 @@ def test_expected_skill_surface_matches_repository():
         "improve-skill",
         "setup",
         "refactor",
+        "memory-review",
     }
 
 
