@@ -1,5 +1,5 @@
 {
   "name": "devkit",
   "description": "DevKit の /dig 実装オーケストレーション、skill 改善、リポジトリ setup、refactor 計画化を提供し、Node statusline を同梱します。",
-  "version": "7.0.0"
+  "version": "7.0.1"
 }
