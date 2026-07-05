@@ -71,7 +71,7 @@
 リポジトリ全体のルール: 行き詰まった場合は `codex exec` で外部モデルに相談する。全エージェント作業に適用する。
 
 ```bash
-codex -a never exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium" "<相談内容>"
+codex -a never exec -m gpt-5.3-codex-spark -c model_reasoning_effort="medium" "<相談内容>" < /dev/null
 ```
 
 - 技術的判断に迷った場合、設計の妥当性を確認したい場合に使用する

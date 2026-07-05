@@ -122,3 +122,34 @@ def test_plan_review_step_contract():
 def test_readme_lists_command():
     readme = _read("README.md")
     assert "`/dig`" in readme, "README に /dig が載っていない"
+
+
+# ── 11. cursor-agent 実装 backend の契約 ──────────────────────────
+
+
+def test_cursor_backend_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "--model composer-2.5" in text, "cursor-agent のモデル明示(composer-2.5)がない"
+    assert "Composer 2.5" in text, "Composer 2.5 の選択肢ラベルがない"
+    assert "cursor-agent -p" in text, "cursor-agent のヘッドレス実行(-p)の記述がない"
+    assert "--trust" in text, "cursor-agent の workspace 信頼(--trust)の記述がない"
+    assert "command -v cursor-agent" in text, "cursor-agent 不在時のフォールバック判定がない"
+    assert "--resume" in text, "cursor-agent の修正ループ(--resume)の記述がない"
+    assert "--force" in text, "cursor-agent のヘッドレス自動許可(--force)の記述がない"
+    assert "chat-id.txt" in text, "chatId の保存先契約がない"
+    assert "[--sandbox enabled]" not in text, "sandbox 有無が未確定のまま placeholder が残っている"
+    assert "sandbox なし" in text, "sandbox なし運用の警告がない"
+    assert "--sandbox enabled" not in text, "sandbox なし契約と矛盾する記述がある"
+
+
+# ── 12. codex exec の stdin 閉鎖契約 ──────────────────────────────
+
+
+def test_codex_stdin_guard():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    offenders = [
+        line for line in text.splitlines()
+        if "codex -a never exec" in line and "< /dev/null" not in line
+    ]
+    assert not offenders, f"stdin 閉鎖(< /dev/null)がない codex コマンド行: {offenders}"
+    assert "< /dev/null" in text, "codex exec の stdin 閉鎖(< /dev/null)の記述がない"

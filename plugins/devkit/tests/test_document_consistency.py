@@ -85,3 +85,15 @@ def test_skill_frontmatter_name_matches_directory():
         name_match = re.search(r'^name:\s*"([^"]+)"\s*$', match.group(1), re.MULTILINE)
         assert name_match, f"{skill_path} に name がない"
         assert name_match.group(1) == skill_path.parent.name, f"{skill_path} の name とディレクトリ名が不一致"
+
+
+# ── 7. AGENTS.md の codex exec stdin 閉鎖契約 ─────────────────────
+
+
+def test_agents_codex_stdin_guard():
+    text = _read("AGENTS.md")
+    offenders = [
+        line for line in text.splitlines()
+        if "codex -a never exec" in line and "< /dev/null" not in line
+    ]
+    assert not offenders, f"stdin 閉鎖(< /dev/null)がない codex コマンド行: {offenders}"
