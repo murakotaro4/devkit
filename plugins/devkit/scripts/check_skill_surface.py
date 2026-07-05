@@ -519,9 +519,9 @@ try {{
   function Unregister-ScheduledTask {{ param([string]$TaskName, [switch]$Confirm) $script:TaskLog.Add("unregister:$TaskName") | Out-Null }}
   function Register-ScheduledTask {{ param([string]$TaskName) $script:TaskLog.Add("register:$TaskName") | Out-Null }}
   . (Join-Path $Root "plugins/devkit/scripts/devkit-lib.ps1")
-  $home = Join-Path $Tmp.FullName "home"
-  New-Item -ItemType Directory -Path $home | Out-Null
-  Remove-DevKitLegacyAssets -UserHome $home -SourceRoot $Root -Logger $null
+  $userHome = Join-Path $Tmp.FullName "home"
+  New-Item -ItemType Directory -Path $userHome | Out-Null
+  Remove-DevKitLegacyAssets -UserHome $userHome -SourceRoot $Root -Logger $null
   if (-not ($script:TaskLog -contains "unregister:DevKitSkillsDailyUpdate")) {{ throw "legacy task was not unregistered" }}
   if (($script:TaskLog | Where-Object {{ $_ -like "register:*" }}).Count -gt 0) {{ throw "new scheduled task was registered" }}
 

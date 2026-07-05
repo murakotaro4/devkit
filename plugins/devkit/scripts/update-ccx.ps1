@@ -15,7 +15,7 @@ $Script:NpmUnavailableReported = $false
 $Script:CliOnly = $false
 $Script:DevKitOnly = $false
 
-function Import-DevKitLibForUpdate {
+function Resolve-DevKitLibForUpdate {
   $libPath = Join-Path $PSScriptRoot "devkit-lib.ps1"
   if (Test-Path -LiteralPath $libPath) {
     $normalRoot = $null
@@ -36,8 +36,7 @@ function Import-DevKitLibForUpdate {
     if (-not [string]::IsNullOrWhiteSpace($normalRoot)) {
       $env:DEVKIT_SOURCE_ROOT = $normalRoot
     }
-    . $libPath
-    return
+    return $libPath
   }
 
   $repoCandidates = New-Object System.Collections.Generic.List[string]
@@ -69,15 +68,14 @@ function Import-DevKitLibForUpdate {
       New-Item -ItemType Directory -Path $codexBin -Force | Out-Null
       Copy-Item -LiteralPath $repoLib -Destination (Join-Path $codexBin "devkit-lib.ps1") -Force
       $env:DEVKIT_SOURCE_ROOT = $repoRoot
-      . (Join-Path $codexBin "devkit-lib.ps1")
-      return
+      return (Join-Path $codexBin "devkit-lib.ps1")
     }
   }
 
   throw "MISSING_SOURCE_FILE: $libPath"
 }
 
-Import-DevKitLibForUpdate
+. (Resolve-DevKitLibForUpdate)
 
 function Add-ResultError([string]$Message) {
   if (-not $Script:Errors.Contains($Message)) {
