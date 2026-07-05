@@ -1,33 +1,82 @@
 #!/bin/bash
 #
-# update-ccx.sh - update-devkit の互換 alias。Claude Code / Codex CLI / opencode 更新 + DevKit runtime sync
+# update-ccx.sh - compatibility alias for update-devkit.
 #
-# Windows PowerShell / cmd users should use update-ccx.ps1 or update-ccx.cmd.
-#
-# 対応環境: macOS (Homebrew / npm) / WSL (native / npm) / Linux / Windows (Git Bash)
+# Updates Claude Code / Codex CLI and keeps the DevKit Codex plugin registered
+# through the Codex plugin marketplace.
 #
 # Usage:
-#   update-devkit.sh           # 推奨: CLI 更新 + DevKit runtime sync
-#   update-ccx.sh              # 互換 alias
-#   update-devkit.sh --version # 現在のバージョンを表示
+#   update-devkit.sh           # update CLIs and DevKit plugin registration
+#   update-ccx.sh              # compatibility alias
+#   update-devkit.sh --version # show current versions
 #
 
 set -o pipefail
 
-# エラー収集用配列
 declare -a ERRORS=()
 declare -a WARNINGS=()
 CLI_ONLY=false
 DEVKIT_ONLY=false
-RUNTIME_SELECTION="all"
 RUN_MODE="run"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/devkit-runtime-sync.sh"
 
-# ============================================================
-# OS検出
-# ============================================================
+source_devkit_lib_for_update() {
+    local lib_path="$SCRIPT_DIR/devkit-lib.sh"
+    if [[ -f "$lib_path" ]]; then
+        local normal_root=""
+        if [[ -f "$SCRIPT_DIR/../../../plugins/devkit/scripts/devkit-lib.sh" ]]; then
+            normal_root="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+        elif [[ -f "$HOME/cursor/devkit/plugins/devkit/scripts/devkit-lib.sh" ]]; then
+            normal_root="$HOME/cursor/devkit"
+        else
+            local state_file="$HOME/.codex/devkit/source-root.txt"
+            if [[ -f "$state_file" ]]; then
+                normal_root="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//' || true)"
+            fi
+        fi
+        if [[ -n "$normal_root" ]]; then
+            export DEVKIT_SOURCE_ROOT="$normal_root"
+        fi
+        source "$lib_path" || return 1
+        return 0
+    fi
+
+    local repo_root=""
+    local -a repo_candidates=()
+
+    if [[ -f "$SCRIPT_DIR/../../../plugins/devkit/scripts/devkit-lib.sh" ]]; then
+        repo_candidates+=("$(cd "$SCRIPT_DIR/../../.." && pwd)")
+    fi
+    repo_candidates+=("$HOME/cursor/devkit")
+
+    local state_file="$HOME/.codex/devkit/source-root.txt"
+    if [[ -f "$state_file" ]]; then
+        repo_root="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//' || true)"
+        if [[ -n "$repo_root" ]]; then
+            repo_candidates+=("$repo_root")
+        fi
+    fi
+
+    for repo_root in "${repo_candidates[@]}"; do
+        [[ -n "$repo_root" ]] || continue
+        lib_path="$repo_root/plugins/devkit/scripts/devkit-lib.sh"
+        if [[ -f "$lib_path" ]]; then
+            # v5 -> v6 one-time rebootstrap: old installed updaters do not know devkit-lib.sh.
+            mkdir -p "$HOME/.codex/bin"
+            cp "$lib_path" "$HOME/.codex/bin/devkit-lib.sh"
+            export DEVKIT_SOURCE_ROOT="$repo_root"
+            source "$HOME/.codex/bin/devkit-lib.sh" || return 1
+            return 0
+        fi
+    done
+
+    printf 'MISSING_SOURCE_FILE: %s\n' "$SCRIPT_DIR/devkit-lib.sh" >&2
+    return 1
+}
+
+source_devkit_lib_for_update || exit 1
+
 detect_os() {
     case "$(uname -s)" in
         Darwin) echo "macos" ;;
@@ -45,9 +94,6 @@ detect_os() {
 
 OS_TYPE=$(detect_os)
 
-# ============================================================
-# バージョン取得関数
-# ============================================================
 get_claude_version() {
     claude --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
 }
@@ -56,15 +102,26 @@ get_codex_version() {
     codex --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
 }
 
-get_opencode_version() {
-    opencode --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
+resolve_command_path() {
+    local command_path="$1"
+
+    if command -v realpath &>/dev/null; then
+        realpath "$command_path" 2>/dev/null
+    elif command -v greadlink &>/dev/null; then
+        greadlink -f "$command_path" 2>/dev/null
+    elif [[ -L "$command_path" ]]; then
+        local link_target
+        link_target=$(readlink "$command_path" 2>/dev/null)
+        if [[ "$link_target" != /* ]]; then
+            printf '%s/%s\n' "$(cd "$(dirname "$command_path")" && cd "$(dirname "$link_target")" && pwd)" "$(basename "$link_target")"
+        else
+            printf '%s\n' "$link_target"
+        fi
+    else
+        printf '%s\n' "$command_path"
+    fi
 }
 
-# ============================================================
-# インストール方法検出関数（既存ロジック維持）
-# ============================================================
-
-# Claude Code のインストール方法を検出
 detect_claude_install() {
     local claude_path
     claude_path=$(command -v claude 2>/dev/null)
@@ -74,25 +131,9 @@ detect_claude_install() {
         return
     fi
 
-    # シンボリックリンクを解決して判定（macOS/Linux対応）
     local resolved_path
-    if command -v realpath &>/dev/null; then
-        resolved_path=$(realpath "$claude_path" 2>/dev/null)
-    elif command -v greadlink &>/dev/null; then
-        resolved_path=$(greadlink -f "$claude_path" 2>/dev/null)
-    elif [[ -L "$claude_path" ]]; then
-        local link_target
-        link_target=$(readlink "$claude_path" 2>/dev/null)
-        if [[ "$link_target" != /* ]]; then
-            resolved_path="$(cd "$(dirname "$claude_path")" && cd "$(dirname "$link_target")" && pwd)/$(basename "$link_target")"
-        else
-            resolved_path="$link_target"
-        fi
-    else
-        resolved_path="$claude_path"
-    fi
+    resolved_path="$(resolve_command_path "$claude_path")"
 
-    # パスベースで判定
     if [[ "$resolved_path" == *".local/share/claude/"* ]] || [[ "$resolved_path" == *".local/bin/claude"* ]]; then
         echo "native"
         return
@@ -101,7 +142,6 @@ detect_claude_install() {
         return
     fi
 
-    # macOS: Homebrew Cask チェック
     if [[ "$OS_TYPE" == "macos" ]] && command -v brew &>/dev/null; then
         local brew_prefix
         brew_prefix=$(brew --prefix 2>/dev/null)
@@ -113,7 +153,6 @@ detect_claude_install() {
         fi
     fi
 
-    # フォールバック
     if claude update --help &>/dev/null; then
         echo "native"
     else
@@ -121,7 +160,6 @@ detect_claude_install() {
     fi
 }
 
-# Codex CLI のインストール方法を検出
 detect_codex_install() {
     local codex_path
     codex_path=$(command -v codex 2>/dev/null)
@@ -132,21 +170,7 @@ detect_codex_install() {
     fi
 
     local resolved_path
-    if command -v realpath &>/dev/null; then
-        resolved_path=$(realpath "$codex_path" 2>/dev/null)
-    elif command -v greadlink &>/dev/null; then
-        resolved_path=$(greadlink -f "$codex_path" 2>/dev/null)
-    elif [[ -L "$codex_path" ]]; then
-        local link_target
-        link_target=$(readlink "$codex_path" 2>/dev/null)
-        if [[ "$link_target" != /* ]]; then
-            resolved_path="$(cd "$(dirname "$codex_path")" && cd "$(dirname "$link_target")" && pwd)/$(basename "$link_target")"
-        else
-            resolved_path="$link_target"
-        fi
-    else
-        resolved_path="$codex_path"
-    fi
+    resolved_path="$(resolve_command_path "$codex_path")"
 
     if [[ "$resolved_path" == *"node_modules"* ]] || [[ "$codex_path" == *".nvm/"* ]] || [[ "$codex_path" == *".npm/"* ]] || [[ "$codex_path" == */fnm/* ]] || [[ "$resolved_path" == */fnm/* ]]; then
         echo "npm"
@@ -157,6 +181,10 @@ detect_codex_install() {
         local brew_prefix
         brew_prefix=$(brew --prefix 2>/dev/null)
         if [[ -n "$brew_prefix" ]] && [[ "$resolved_path" == "$brew_prefix"* ]]; then
+            if brew list --cask codex &>/dev/null 2>&1; then
+                echo "homebrew-cask"
+                return
+            fi
             echo "brew"
             return
         fi
@@ -170,80 +198,20 @@ detect_codex_install() {
     echo "unknown"
 }
 
-# opencode のインストール方法を検出
-detect_opencode_install() {
-    local opencode_path
-    opencode_path=$(command -v opencode 2>/dev/null)
-
-    if [[ -z "$opencode_path" ]]; then
-        echo "not_found"
-        return
-    fi
-
-    local resolved_path
-    if command -v realpath &>/dev/null; then
-        resolved_path=$(realpath "$opencode_path" 2>/dev/null)
-    elif command -v greadlink &>/dev/null; then
-        resolved_path=$(greadlink -f "$opencode_path" 2>/dev/null)
-    elif [[ -L "$opencode_path" ]]; then
-        local link_target
-        link_target=$(readlink "$opencode_path" 2>/dev/null)
-        if [[ "$link_target" != /* ]]; then
-            resolved_path="$(cd "$(dirname "$opencode_path")" && cd "$(dirname "$link_target")" && pwd)/$(basename "$link_target")"
-        else
-            resolved_path="$link_target"
-        fi
-    else
-        resolved_path="$opencode_path"
-    fi
-
-    if [[ "$resolved_path" == *"node_modules"* ]] || [[ "$opencode_path" == *".nvm/"* ]] || [[ "$opencode_path" == *".npm/"* ]] || [[ "$opencode_path" == */fnm/* ]] || [[ "$resolved_path" == */fnm/* ]]; then
-        echo "npm"
-        return
-    fi
-
-    if [[ "$OS_TYPE" == "macos" ]] && command -v brew &>/dev/null; then
-        local brew_prefix
-        brew_prefix=$(brew --prefix 2>/dev/null)
-        if [[ -n "$brew_prefix" ]] && [[ "$resolved_path" == "$brew_prefix"* ]]; then
-            if brew list opencode &>/dev/null 2>&1; then
-                echo "brew:opencode"
-                return
-            elif brew list opencode-ai &>/dev/null 2>&1; then
-                echo "brew:opencode-ai"
-                return
-            fi
-        fi
-    fi
-
-    if command -v npm &>/dev/null && npm list -g opencode-ai &>/dev/null 2>&1; then
-        echo "npm"
-        return
-    fi
-
-    echo "unknown"
-}
-
-# ============================================================
-# バージョン表示モード
-# ============================================================
 show_versions() {
     echo "Environment: $OS_TYPE"
     echo "Claude Code: $(get_claude_version)"
     echo "Codex CLI:   $(get_codex_version)"
-    echo "opencode:    $(get_opencode_version)"
 }
 
 show_usage() {
     cat <<'EOF'
 Usage:
-  update-devkit.sh                    # preferred name: update tools and DevKit runtimes
+  update-devkit.sh                    # preferred name: update tools and DevKit plugin registration
   update-ccx.sh                       # compatibility alias
   update-devkit.sh --version          # show current versions
-  update-devkit.sh --cli-only         # update Claude/Codex/OpenCode only
-  update-devkit.sh --devkit-only      # sync DevKit-managed Codex/OpenCode assets only
-  update-devkit.sh --runtime codex    # update only Codex CLI + Codex-managed assets
-  update-devkit.sh --runtime opencode # update only OpenCode CLI + OpenCode-managed assets
+  update-devkit.sh --cli-only         # update Claude/Codex CLIs only
+  update-devkit.sh --devkit-only      # update DevKit managed files and Codex plugin registration only
 EOF
 }
 
@@ -265,22 +233,6 @@ parse_args() {
             --devkit-only)
                 DEVKIT_ONLY=true
                 ;;
-            --runtime)
-                shift
-                if [[ $# -eq 0 ]]; then
-                    echo "INVALID_ARGS: --runtime requires codex, opencode, or all" >&2
-                    return 1
-                fi
-                case "$1" in
-                    codex|opencode|all)
-                        RUNTIME_SELECTION="$1"
-                        ;;
-                    *)
-                        echo "INVALID_ARGS: --runtime requires codex, opencode, or all" >&2
-                        return 1
-                        ;;
-                esac
-                ;;
             *)
                 echo "INVALID_ARGS: unknown argument '$1'" >&2
                 return 1
@@ -293,20 +245,6 @@ parse_args() {
         echo "INVALID_ARGS: --cli-only and --devkit-only cannot be combined" >&2
         return 1
     fi
-
-    RUN_MODE="run"
-}
-
-should_manage_claude_runtime() {
-    [[ "$RUNTIME_SELECTION" == "all" ]]
-}
-
-should_manage_codex_runtime() {
-    [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "codex" ]]
-}
-
-should_manage_opencode_runtime() {
-    [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "opencode" ]]
 }
 
 join_summary_parts() {
@@ -314,68 +252,56 @@ join_summary_parts() {
     echo "$*"
 }
 
-# ============================================================
-# [Prerequisites] セクション
-# ============================================================
 section_prerequisites() {
     echo ""
     echo "=== [Prerequisites] ==="
 
-    # curl
     if ! command -v curl &>/dev/null; then
-        echo "✗ curl is not installed."
+        echo "ERROR: curl is not installed."
         exit 1
     fi
-    echo "✓ curl: available"
+    echo "OK curl: available"
 
-    # Bash version
     local bash_major="${BASH_VERSINFO[0]}"
     if [[ "$bash_major" -lt 4 ]]; then
-        echo "⚠ Bash $BASH_VERSION (4.0+ recommended)"
+        echo "WARN Bash $BASH_VERSION (4.0+ recommended)"
     else
-        echo "✓ Bash: $BASH_VERSION"
+        echo "OK Bash: $BASH_VERSION"
     fi
 
-    # Package manager
     case "$OS_TYPE" in
         windows)
             if command -v winget &>/dev/null; then
-                echo "✓ winget: available"
+                echo "OK winget: available"
             else
-                echo "⚠ winget: not found (fnm install will use curl fallback)"
+                echo "WARN winget: not found (fnm install will use curl fallback)"
             fi
             ;;
         macos)
             if command -v brew &>/dev/null; then
-                echo "✓ brew: $(brew --version 2>/dev/null | head -1)"
+                echo "OK brew: $(brew --version 2>/dev/null | head -1)"
             else
-                echo "⚠ brew: not found (installations will use npm/curl)"
+                echo "WARN brew: not found (installations will use npm/curl)"
             fi
             ;;
         wsl|linux)
-            echo "✓ OS: $OS_TYPE (curl-based installation)"
+            echo "OK OS: $OS_TYPE (curl-based installation)"
             ;;
     esac
 }
 
-# ============================================================
-# [Setup] セクション - ensure_* 関数群
-# ============================================================
-
 ensure_fnm() {
     if command -v fnm &>/dev/null; then
-        echo "✓ fnm: already installed ($(fnm --version 2>/dev/null))"
+        echo "OK fnm: already installed ($(fnm --version 2>/dev/null))"
         return 0
     fi
+
     echo -n "Installing fnm... "
     case "$OS_TYPE" in
         windows)
             if command -v winget &>/dev/null; then
-                if winget install Schniz.fnm --accept-package-agreements --accept-source-agreements >/dev/null 2>&1; then
-                    :
-                else
+                winget install Schniz.fnm --accept-package-agreements --accept-source-agreements >/dev/null 2>&1 || \
                     curl -fsSL https://fnm.vercel.app/install | bash >/dev/null 2>&1
-                fi
             else
                 curl -fsSL https://fnm.vercel.app/install | bash >/dev/null 2>&1
             fi
@@ -391,13 +317,13 @@ ensure_fnm() {
             curl -fsSL https://fnm.vercel.app/install | bash >/dev/null 2>&1
             ;;
     esac
-    # fnm を現在のセッションで有効化（curl installer は ~/.local/share/fnm に配置）
+
     export PATH="$HOME/.local/share/fnm:$HOME/.fnm:$PATH"
     eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)" 2>/dev/null
     if command -v fnm &>/dev/null; then
-        echo "✓ ($(fnm --version 2>/dev/null))"
+        echo "OK ($(fnm --version 2>/dev/null))"
     else
-        echo "✗"
+        echo "ERROR"
         ERRORS+=("fnm: installation failed")
         return 1
     fi
@@ -405,19 +331,21 @@ ensure_fnm() {
 
 ensure_nodejs() {
     if command -v node &>/dev/null; then
-        echo "✓ Node.js: already installed ($(node --version 2>/dev/null))"
+        echo "OK Node.js: already installed ($(node --version 2>/dev/null))"
         return 0
     fi
+
     if ! command -v fnm &>/dev/null; then
-        echo "✗ Node.js: fnm not available, cannot install"
+        echo "ERROR Node.js: fnm not available, cannot install"
         ERRORS+=("Node.js: fnm required but not available")
         return 1
     fi
+
     echo -n "Installing Node.js (LTS)... "
     if fnm install --lts >/dev/null 2>&1 && fnm use --lts >/dev/null 2>&1; then
-        echo "✓ ($(node --version 2>/dev/null))"
+        echo "OK ($(node --version 2>/dev/null))"
     else
-        echo "✗"
+        echo "ERROR"
         ERRORS+=("Node.js: fnm install --lts failed")
         return 1
     fi
@@ -425,30 +353,29 @@ ensure_nodejs() {
 
 ensure_claude() {
     if command -v claude &>/dev/null; then
-        echo "✓ Claude Code: already installed ($(get_claude_version))"
+        echo "OK Claude Code: already installed ($(get_claude_version))"
         return 0
     fi
+
     echo -n "Installing Claude Code (native)... "
     case "$OS_TYPE" in
         windows)
             if powershell.exe -Command "irm https://claude.ai/install.ps1 | iex" >/dev/null 2>&1; then
-                # PATH を再読み込み
                 hash -r 2>/dev/null
-                echo "✓"
+                echo "OK"
             else
-                echo "✗"
+                echo "ERROR"
                 ERRORS+=("Claude Code: native install failed")
                 return 1
             fi
             ;;
         macos|wsl|linux|*)
             if curl -fsSL https://claude.ai/install.sh | bash >/dev/null 2>&1; then
-                # PATH を再読み込み
                 export PATH="$HOME/.local/bin:$PATH"
                 hash -r 2>/dev/null
-                echo "✓"
+                echo "OK"
             else
-                echo "✗"
+                echo "ERROR"
                 ERRORS+=("Claude Code: native install failed")
                 return 1
             fi
@@ -458,79 +385,37 @@ ensure_claude() {
 
 ensure_codex() {
     if command -v codex &>/dev/null; then
-        echo "✓ Codex CLI: already installed ($(get_codex_version))"
+        echo "OK Codex CLI: already installed ($(get_codex_version))"
         return 0
     fi
+
     if ! command -v npm &>/dev/null; then
-        echo "✗ Codex CLI: npm not available"
+        echo "ERROR Codex CLI: npm not available"
         ERRORS+=("Codex CLI: npm required but not available")
         return 1
     fi
+
     echo -n "Installing Codex CLI... "
     if npm install -g @openai/codex >/dev/null 2>&1; then
-        echo "✓"
+        echo "OK"
     else
-        echo "✗"
+        echo "ERROR"
         ERRORS+=("Codex CLI: npm install failed")
         return 1
-    fi
-}
-
-ensure_opencode() {
-    if command -v opencode &>/dev/null; then
-        echo "✓ opencode: already installed ($(get_opencode_version))"
-        return 0
-    fi
-    echo -n "Installing opencode... "
-    local install_ok=false
-    # macOS: brew を優先
-    if [[ "$OS_TYPE" == "macos" ]] && command -v brew &>/dev/null; then
-        if brew install opencode-ai >/dev/null 2>&1; then
-            echo "✓ (via brew)"
-            install_ok=true
-        else
-            echo -n "brew failed, trying npm... "
-        fi
-    fi
-    # npm フォールバック
-    if [[ "$install_ok" == false ]]; then
-        if command -v npm &>/dev/null; then
-            if npm_config_optional=true npm install -g opencode-ai >/dev/null 2>&1; then
-                echo "✓ (via npm)"
-            else
-                echo "✗"
-                ERRORS+=("opencode: installation failed")
-                return 1
-            fi
-        else
-            echo "✗ No package manager available"
-            ERRORS+=("opencode: no package manager available")
-            return 1
-        fi
     fi
 }
 
 section_setup() {
     echo ""
     echo "=== [Setup] ==="
-    if should_manage_codex_runtime || should_manage_opencode_runtime; then
+
+    if ! command -v codex &>/dev/null; then
         ensure_fnm
         ensure_nodejs
     fi
-    if should_manage_claude_runtime; then
-        ensure_claude
-    fi
-    if should_manage_codex_runtime; then
-        ensure_codex
-    fi
-    if should_manage_opencode_runtime; then
-        ensure_opencode
-    fi
+    ensure_claude
+    ensure_codex
 }
-
-# ============================================================
-# [Update] セクション - 更新関数群
-# ============================================================
 
 update_claude() {
     local install_method="$1"
@@ -538,28 +423,28 @@ update_claude() {
     case "$install_method" in
         native)
             if claude update </dev/null 2>/dev/null; then
-                echo "✓"
+                echo "OK"
             else
                 local exit_code=$?
-                echo "✗"
+                echo "ERROR"
                 ERRORS+=("Claude Code: claude update failed (exit code $exit_code)")
             fi
             ;;
         homebrew-cask)
             if brew upgrade --cask claude; then
-                echo "✓"
+                echo "OK"
             else
                 local exit_code=$?
-                echo "✗"
+                echo "ERROR"
                 ERRORS+=("Claude Code: brew upgrade --cask failed (exit code $exit_code)")
             fi
             ;;
         npm)
             if npm update -g @anthropic-ai/claude-code; then
-                echo "✓"
+                echo "OK"
             else
                 local exit_code=$?
-                echo "✗"
+                echo "ERROR"
                 ERRORS+=("Claude Code: npm update failed (exit code $exit_code)")
             fi
             ;;
@@ -571,80 +456,36 @@ update_codex() {
     echo -n "Updating Codex CLI ($install_method)... "
     case "$install_method" in
         npm)
-            local update_output
-            local update_exit
+            local update_output update_exit
             update_output=$(npm update -g @openai/codex 2>&1)
             update_exit=$?
             if [[ $update_exit -eq 0 ]]; then
-                echo "✓"
+                echo "OK"
             elif grep -qE "EBUSY|resource busy or locked" <<<"$update_output"; then
                 echo "SKIPPED"
                 WARNINGS+=("Codex CLI: skipped self-update because codex is locked by the current session")
             else
-                echo "✗"
+                echo "ERROR"
                 printf '%s\n' "$update_output" >&2
                 ERRORS+=("Codex CLI: npm update failed (exit code $update_exit)")
             fi
             ;;
         brew)
             if brew upgrade codex; then
-                echo "✓"
+                echo "OK"
             else
                 local exit_code=$?
-                echo "✗"
+                echo "ERROR"
                 ERRORS+=("Codex CLI: brew upgrade failed (exit code $exit_code)")
             fi
             ;;
-    esac
-}
-
-update_opencode() {
-    local install_method="$1"
-    echo -n "Updating opencode ($install_method)... "
-    case "$install_method" in
-        npm)
-            local update_output
-            local update_exit
-            update_output=$(npm update -g opencode-ai 2>&1)
-            update_exit=$?
-
-            if [[ $update_exit -eq 0 ]]; then
-                echo "✓"
-            elif grep -qF -- "Could not find package" <<<"$update_output"; then
-                echo -n "(reinstalling) "
-                local install_output
-                local install_exit
-                install_output=$(npm_config_optional=true npm install -g opencode-ai 2>&1)
-                install_exit=$?
-                if [[ $install_exit -eq 0 ]]; then
-                    echo "✓"
-                else
-                    echo "✗"
-                    printf '%s\n' "$install_output" >&2
-                    ERRORS+=("opencode: reinstall failed (exit code $install_exit)")
-                fi
-            else
-                echo "✗"
-                printf '%s\n' "$update_output" >&2
-                ERRORS+=("opencode: npm update failed (exit code $update_exit)")
-            fi
-            ;;
-        brew:opencode)
-            if brew upgrade opencode; then
-                echo "✓"
+        homebrew-cask)
+            if brew upgrade --cask codex; then
+                echo "OK"
             else
                 local exit_code=$?
-                echo "✗"
-                ERRORS+=("opencode: brew upgrade opencode failed (exit code $exit_code)")
-            fi
-            ;;
-        brew:opencode-ai)
-            if brew upgrade opencode-ai; then
-                echo "✓"
-            else
-                local exit_code=$?
-                echo "✗"
-                ERRORS+=("opencode: brew upgrade opencode-ai failed (exit code $exit_code)")
+                echo "ERROR"
+                ERRORS+=("Codex CLI: brew upgrade --cask failed (exit code $exit_code)")
             fi
             ;;
     esac
@@ -654,112 +495,251 @@ section_update() {
     echo ""
     echo "=== [Update] ==="
 
-    # Setup 後に detect_* を再実行して正しいインストール方法を取得
-    local claude_install codex_install opencode_install
-    claude_install="skip"
-    codex_install="skip"
-    opencode_install="skip"
-    if should_manage_claude_runtime; then
-        claude_install=$(detect_claude_install)
-    fi
-    if should_manage_codex_runtime; then
-        codex_install=$(detect_codex_install)
-    fi
-    if should_manage_opencode_runtime; then
-        opencode_install=$(detect_opencode_install)
-    fi
+    local claude_install codex_install
+    claude_install=$(detect_claude_install)
+    codex_install=$(detect_codex_install)
 
-    # Setup でインストール失敗したツールはスキップ
     if [[ "$claude_install" == "not_found" ]]; then
-        echo "⚠ Claude Code: not installed, skipping update"
+        echo "WARN Claude Code: not installed, skipping update"
         claude_install="skip"
     fi
     if [[ "$codex_install" == "not_found" ]] || [[ "$codex_install" == "unknown" ]]; then
-        echo "⚠ Codex CLI: not installed, skipping update"
+        echo "WARN Codex CLI: not installed, skipping update"
         codex_install="skip"
     fi
-    if [[ "$opencode_install" == "not_found" ]] || [[ "$opencode_install" == "unknown" ]]; then
-        echo "⚠ opencode: not installed, skipping update"
-        opencode_install="skip"
-    fi
 
-    local before_parts=()
-    if should_manage_claude_runtime; then
-        before_parts+=("claude: $(get_claude_version) ($claude_install)")
-    fi
-    if should_manage_codex_runtime; then
-        before_parts+=("codex: $(get_codex_version) ($codex_install)")
-    fi
-    if should_manage_opencode_runtime; then
-        before_parts+=("opencode: $(get_opencode_version) ($opencode_install)")
-    fi
+    local before_parts=(
+        "claude: $(get_claude_version) ($claude_install)"
+        "codex: $(get_codex_version) ($codex_install)"
+    )
     echo "[Before] $(join_summary_parts "${before_parts[@]}")"
 
-    # 各ツールの更新
     if [[ "$claude_install" != "skip" ]]; then
         update_claude "$claude_install"
     fi
     if [[ "$codex_install" != "skip" ]]; then
         update_codex "$codex_install"
     fi
-    if [[ "$opencode_install" != "skip" ]]; then
-        update_opencode "$opencode_install"
-    fi
 
-    local after_parts=()
-    if should_manage_claude_runtime; then
-        after_parts+=("claude: $(get_claude_version)")
-    fi
-    if should_manage_codex_runtime; then
-        after_parts+=("codex: $(get_codex_version)")
-    fi
-    if should_manage_opencode_runtime; then
-        after_parts+=("opencode: $(get_opencode_version)")
-    fi
+    local after_parts=(
+        "claude: $(get_claude_version)"
+        "codex: $(get_codex_version)"
+    )
     echo "[After]  $(join_summary_parts "${after_parts[@]}")"
 }
 
-section_devkit_sync() {
+section_managed_copy() {
     echo ""
-    echo "=== [DevKit Sync] ==="
+    echo "=== [DevKit Managed Files] ==="
 
-    export PATH="$HOME/.local/bin:$PATH"
-
-    if [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "codex" ]]; then
-        if sync_devkit_codex_runtime "$HOME"; then
-            echo "✓ Codex runtime synced"
-        else
-            echo "✗ Codex runtime sync failed"
-            ERRORS+=("Codex runtime sync failed")
-        fi
+    local repo_root plugin_scripts codex_bin local_bin script_name
+    if ! repo_root="$(ensure_devkit_repo_root_cached)"; then
+        ERRORS+=("DevKit checkout: update failed")
+        return 1
     fi
 
-    if [[ "$RUNTIME_SELECTION" == "all" || "$RUNTIME_SELECTION" == "opencode" ]]; then
-        if sync_devkit_opencode_runtime "$HOME"; then
-            echo "✓ OpenCode runtime synced"
-        else
-            echo "✗ OpenCode runtime sync failed"
-            ERRORS+=("OpenCode runtime sync failed")
+    plugin_scripts="$repo_root/plugins/devkit/scripts"
+    codex_bin="$HOME/.codex/bin"
+    local_bin="$HOME/.local/bin"
+
+    for script_name in update-devkit.sh update-ccx.sh devkit-lib.sh; do
+        if ! ensure_managed_file "$plugin_scripts/$script_name" "$codex_bin/$script_name" true; then
+            ERRORS+=("DevKit managed file: failed to update $script_name")
+            return 1
         fi
+    done
+
+    chmod +x "$codex_bin/update-devkit.sh" "$codex_bin/update-ccx.sh"
+    devkit_persist_codex_source_root "$HOME" "$repo_root"
+    install_devkit_shell_shim "$local_bin/update-devkit" "$codex_bin/update-devkit.sh"
+    install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
+    echo "OK managed files updated"
+}
+
+codex_marketplace_section() {
+    local config_file="$HOME/.codex/config.toml"
+    [[ -f "$config_file" ]] || return 1
+
+    awk '
+        /^\[marketplaces\.murakotaro4\][[:space:]]*$/ { inside = 1; found = 1; next }
+        /^\[/ && inside { exit }
+        inside { print }
+        END { if (!found) exit 1 }
+    ' "$config_file"
+}
+
+codex_marketplace_state() {
+    local section
+    if ! section="$(codex_marketplace_section)"; then
+        echo "missing"
+        return
     fi
 
-    # marketplace repo の hook を設定
-    # shim 経由実行時 SCRIPT_DIR は runtime clone を指すため、
-    # marketplace repo は既知の固定パスで参照する
-    local marketplace_root="$HOME/.claude/plugins/marketplaces/murakotaro4"
-    if [[ -d "$marketplace_root/.git" ]]; then
-        if ensure_devkit_hooks "$marketplace_root"; then
-            echo "✓ Marketplace hooks configured"
-        else
-            echo "✗ Marketplace hooks setup failed"
-            ERRORS+=("Marketplace hooks setup failed (see BLOCKED_EXISTING_HOOKS_PATH above)")
-        fi
+    if grep -Eq 'source_type[[:space:]]*=[[:space:]]*"?local"?' <<<"$section" || \
+        grep -Eq "source_type[[:space:]]*=[[:space:]]*'?local'?" <<<"$section" || \
+        grep -Eq '^[[:space:]]*path[[:space:]]*=' <<<"$section"; then
+        echo "replace"
+        return
+    fi
+
+    if grep -Fq 'murakotaro4/devkit' <<<"$section"; then
+        echo "ok"
+    else
+        echo "replace"
     fi
 }
 
-# ============================================================
-# メイン処理
-# ============================================================
+run_codex_plugin_command() {
+    local description="$1"
+    shift
+
+    echo -n "$description... "
+    if "$@" </dev/null; then
+        echo "OK"
+        return 0
+    fi
+
+    local exit_code=$?
+    echo "ERROR"
+    ERRORS+=("$description failed (exit code $exit_code)")
+    return 1
+}
+
+codex_plugin_devkit_state() {
+    local output
+    if ! output="$(codex plugin list --json 2>/dev/null)"; then
+        echo "missing"
+        return 0
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        local parsed_state
+        if parsed_state="$(printf '%s\n' "$output" | python3 -c '
+import json
+import sys
+
+def disabled(value):
+    return value is False or value == 0 or (isinstance(value, str) and value.lower() == "false")
+
+def match_name(value):
+    for key in ("name", "id", "plugin", "slug"):
+        text = str(value.get(key, ""))
+        if text == "devkit" or text.startswith("devkit@"):
+            return True
+    return False
+
+def walk(value, available=False):
+    if isinstance(value, dict):
+        if match_name(value) and not available:
+            return "disabled" if disabled(value.get("enabled")) else "enabled"
+        states = [walk(item, available or key == "available") for key, item in value.items()]
+    elif isinstance(value, list):
+        states = [walk(item, available) for item in value]
+    elif isinstance(value, str):
+        if not available and (value == "devkit" or value.startswith("devkit@")):
+            return "enabled"
+        return "missing"
+    else:
+        return "missing"
+
+    if "enabled" in states:
+        return "enabled"
+    if "disabled" in states:
+        return "disabled"
+    return "missing"
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+print(walk(data))
+')"; then
+            printf '%s\n' "$parsed_state"
+            return 0
+        fi
+    fi
+
+    local scan devkit_entry
+    scan="$(printf '%s\n' "$output" | sed -E 's/"available"[[:space:]]*:[[:space:]]*\[[^]]*\]//g')"
+    if grep -Eq '"installed"[[:space:]]*:' <<<"$output"; then
+        scan="$(printf '%s\n' "$output" | sed -E 's/.*"installed"[[:space:]]*:[[:space:]]*\[//; s/\][[:space:]]*,[[:space:]]*"available".*//')"
+    fi
+    devkit_entry="$(
+        printf '%s\n' "$scan" |
+            tr '\n' ' ' |
+            sed -E 's/}[[:space:]]*,[[:space:]]*[{]/}\
+{/g' |
+            grep -E '"(name|id|plugin|slug)"[[:space:]]*:[[:space:]]*"devkit"|devkit@murakotaro4' |
+            head -n 1
+    )"
+
+    if [[ -z "$devkit_entry" ]]; then
+        echo "missing"
+    elif grep -Eq '"enabled"[[:space:]]*:[[:space:]]*(false|0|"false")' <<<"$devkit_entry"; then
+        echo "disabled"
+    else
+        echo "enabled"
+    fi
+}
+
+section_codex_plugin() {
+    echo ""
+    echo "=== [Codex Plugin] ==="
+
+    export PATH="$HOME/.local/bin:$PATH"
+    if ! command -v codex &>/dev/null; then
+        echo "SKIP Codex CLI is not available"
+        return 0
+    fi
+
+    local state
+    state="$(codex_marketplace_state)"
+    case "$state" in
+        missing)
+            run_codex_plugin_command \
+                "Adding DevKit marketplace" \
+                codex plugin marketplace add murakotaro4/devkit || return 1
+            ;;
+        replace)
+            run_codex_plugin_command \
+                "Removing non-git DevKit marketplace" \
+                codex plugin marketplace remove murakotaro4 || return 1
+            run_codex_plugin_command \
+                "Adding DevKit marketplace" \
+                codex plugin marketplace add murakotaro4/devkit || return 1
+            ;;
+        ok)
+            echo "OK DevKit marketplace already registered"
+            ;;
+    esac
+
+    run_codex_plugin_command \
+        "Upgrading DevKit marketplace" \
+        codex plugin marketplace upgrade murakotaro4 || return 1
+
+    run_codex_plugin_command \
+        "Installing DevKit plugin" \
+        codex plugin add devkit@murakotaro4 || return 1
+}
+
+section_prune_legacy_assets() {
+    echo ""
+    echo "=== [DevKit Migration] ==="
+
+    local repo_root
+    if ! repo_root="$(ensure_devkit_repo_root_cached)"; then
+        ERRORS+=("DevKit checkout: update failed")
+        return 1
+    fi
+
+    if prune_legacy_devkit_assets "$HOME" "$repo_root"; then
+        echo "OK legacy assets pruned"
+    else
+        ERRORS+=("DevKit migration: legacy asset prune failed")
+        return 1
+    fi
+}
+
 main() {
     if ! parse_args "$@"; then
         show_usage
@@ -771,8 +751,12 @@ main() {
         exit 0
     fi
 
-    echo "=== Claude Code, Codex CLI, opencode & DevKit ==="
+    echo "=== Claude Code, Codex CLI & DevKit ==="
     echo "Environment: $OS_TYPE"
+
+    if [[ "$CLI_ONLY" != true ]]; then
+        section_managed_copy
+    fi
 
     if [[ "$DEVKIT_ONLY" != true ]]; then
         section_prerequisites
@@ -781,16 +765,25 @@ main() {
     fi
 
     if [[ "$CLI_ONLY" != true ]]; then
-        section_devkit_sync
+        section_prune_legacy_assets
+        section_codex_plugin
     fi
 
     echo ""
 
-    # 結果サマリー
+    if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+        echo "Warnings:"
+        local warn
+        for warn in "${WARNINGS[@]}"; do
+            echo "  - $warn"
+        done
+    fi
+
     if [[ ${#ERRORS[@]} -eq 0 ]]; then
-        echo "✓ All done"
+        echo "OK All done"
     else
-        echo "⚠ Errors occurred:"
+        echo "Errors occurred:"
+        local err
         for err in "${ERRORS[@]}"; do
             echo "  - $err"
         done

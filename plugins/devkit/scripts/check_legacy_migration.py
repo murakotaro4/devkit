@@ -26,9 +26,25 @@ LEGACY_PATTERNS = [
     r"(?:skills/|/devkit:)decomposition\b",
     r"devkit-init\b",
     r"shared/workflow\.md",
+    r"auto-retro\b",
+    r"discord-rust-server-ops\b",
+    r"discord-rust-skill\b",
+    r"rust-minimal8\.json\b",
+    r"02_projects/streaming/discord-rust-server-ops\b",
     r"REVIEW_GATE_[A-Z]",
     r"team_shape\b",
     r"DIG_[A-Z]+_[A-Z]",
+    r"devkit-runtime-sync\b",
+    r"devkit-skill-update\b",
+    r"sync_devkit_(codex|opencode)_runtime\b",
+    r"(?:plugins/devkit/)?skills/(gpt-pro|deep-research|computer-use-chatgpt-pro|codex-search|discord-ops|discord-rust-server-ops|repo-maintainer|repo-maintainer-init)\b",
+    r"/devkit:(gpt-pro|deep-research|computer-use-chatgpt-pro|codex-search|discord-ops|discord-rust-server-ops|repo-maintainer|repo-maintainer-init)\b",
+    r"opencode-ai\b",
+    r"\bOpenCode\b",
+    r"\bopencode\b",
+    r"\.config/opencode/skills\b",
+    r"DevKitSkillsDailyUpdate\b",
+    r"(?<![A-Za-z0-9_])AskUserQuestionTool(?![A-Za-z0-9_])",
 ]
 TEXT_EXT = {
     ".md",
@@ -52,6 +68,10 @@ TEXT_EXT = {
     ".cfg",
     ".py",
 }
+PRUNE_IMPLEMENTATION_FILES = {
+    "plugins/devkit/scripts/devkit-lib.sh",
+    "plugins/devkit/scripts/devkit-lib.ps1",
+}
 
 
 def is_binary_buffer(buf: bytes) -> bool:
@@ -72,6 +92,8 @@ def collect_files(directory: Path) -> list[Path]:
 
 def is_allowed_exception(file_rel: str, line: str, in_migration_notice: bool) -> bool:
     if "migration-allow" in line:
+        return True
+    if file_rel in PRUNE_IMPLEMENTATION_FILES:
         return True
     name = file_rel.rsplit("/", 1)[-1]
     if name == "CHANGELOG.md":
@@ -123,13 +145,13 @@ def scan_dir(directory: Path) -> dict[str, list[dict[str, object]]]:
         "check_legacy_migration.py",
         "check_skill_surface.py",
         "check_plugin_version_bump.py",
-        "devkit-runtime-sync.sh",
-        "devkit-runtime-sync.ps1",
     }
 
     for file_path in collect_files(directory):
         rel = file_path.relative_to(directory).as_posix()
         if file_path.name in skip_names:
+            continue
+        if rel.startswith("plugins/devkit/tests/"):
             continue
 
         buf = file_path.read_bytes()

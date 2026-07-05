@@ -1,229 +1,106 @@
 # devkit/scripts
 
-補助スクリプト置き場。
+DevKit の setup / update / verification scripts を置くディレクトリです。v6 では marketplace 配布を正本にし、skill surface は `dig` と `improve-skill` だけを扱います。
 
-## Harness
+## Entry Points
 
-- 品質ゲートの標準入口は `uv` を使う。
-- repo ルートからの手動実行:
-  - `uv sync --project plugins/devkit --group dev`
-  - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast`
-  - `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full`
-- pytest テスト単独実行:
-  - `uv run --project plugins/devkit --group dev pytest plugins/devkit/tests/ -v`
-- devkit repo の Git hook 標準は `prek.toml`。
-- `prek`（pre-commit / pre-push）と CI は同じ Python ハーネスを呼び出す。
-- `check_utf8_bom.py` は `pre-commit` では staged docs/config、`verify-fast` / `verify-full` では repo 全体の UTF-8 BOM を弾く。
-- `verify-fast` は `check_utf8_bom.py` → `check_skill_surface.py` → `check_legacy_migration.py` → `pytest` の順で実行する。`verify-full` はこれに `check_plugin_version_bump.py` を加える。
-- `check_legacy_migration.py` は退役した旧スキル / 旧トークンが残っていないかを検証する（README の Migration Notice 内だけは旧トークンの言及を許可する）。
-- `node` / `npm` / `fnm` は外部 CLI 更新用にのみ残し、repo 内の check / hook は使わない。
+### update-devkit / update-ccx
 
-### push gate
+`update-devkit` が主名称です。`update-ccx` は互換 alias です。
 
-- `pre-push` gate は `origin/main` と同じ plugin version のままなら push を block する。
+- POSIX: `update-devkit.sh`, `update-ccx.sh`
+- Windows: `update-devkit.ps1`, `update-ccx.ps1`
+- cmd launcher: `update-devkit.cmd`, `update-ccx.cmd`
 
-## repo_maintainer.py
+主な責務:
 
-cross-repo nightly maintainer の共通 runner。
+- Claude Code / Codex CLI の install / update
+- managed script の配置更新
+- Codex marketplace `murakotaro4/devkit` の登録確認
+- Codex plugin `devkit@murakotaro4` の有効化確認
+- `codex plugin marketplace upgrade murakotaro4` による即時反映
+- v6 migration marker が無い場合の旧 DevKit 管理資産 prune
 
-### 役割
-
-- temp worktree で Codex を起動して repo 保全更新を行う
-- `.devkit/repo-maintainer.toml` を読んで lane / phase / allowed paths を強制する
-- AI review / local checks / GitHub PR / auto-merge を実行する
-- target repo の `logs/skills/` と `reviews/` を更新する
-
-### サブコマンド
+対応引数:
 
 ```bash
-python plugins/devkit/scripts/repo_maintainer.py init-scaffold --repo /path/to/repo
-python plugins/devkit/scripts/repo_maintainer.py run --repo /path/to/repo
-```
-
-`init-scaffold` が target repo に生成するもの:
-
-- `.devkit/repo-maintainer.toml`
-- `MEMORY.md`
-- `logs/skills/`
-- `reviews/daily/`
-- `reviews/weekly/`
-- `.devkit/bin/repo-maintainer.{ps1,sh}`
-- `.devkit/scheduler/` 配下の OS 別 template
-
-`run` の補足:
-
-- branch 名は `codex/maint/<yyyymmdd>-<lane>`
-- PR title は `[repo-maintainer] ...`
-- `review_commands` / `check_commands` 未通過時も PR までは作るが、auto-merge はしない
-
-## chrome_chatgpt_runner.py
-
-`gpt-pro` / `deep-research` の共通 runner。API-first にはせず、Chrome の通常 `Default` profile を正本にする。
-
-### 役割
-
-- Windows / macOS / Linux の Google Chrome 実体と Default profile path を検出する
-- CDP port、proxy bypass、profile 起動状態、ChatGPT 操作用 backend を診断する
-- 通常 Chrome が CDP 無効で起動中なら、許可された場合だけ Chrome を終了して Default profile を CDP 付きで再起動する
-- backend 優先順を `agent-browser`、Playwright `connectOverCDP`、runtime の Chrome 拡張経路に固定する
-- Deep Research の sandboxed iframe target を CDP `/json` から再取得し、`websockets` がある環境では結果抽出する
-
-### サブコマンド
-
-Windows PowerShell / cmd では `py -3`、macOS / Linux / WSL / Git Bash では `python3` を使う。
-
-```bash
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py diagnose
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome diagnose
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome gpt-pro "調査内容"
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome deep-research "調査内容"
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py wait-gpt-pro --timeout-minutes 60 --interval 30
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py extract-deep-research
-```
-
-### 注意点
-
-- `localhost,127.0.0.1,::1` は `NO_PROXY` / `no_proxy` に含める
-- Chrome 拡張経路は shell helper から直接呼べないため、agent-browser / Playwright が失敗した場合の runtime handoff として扱う
-- Chrome の `Default` profile を使う契約のため、専用 profile への自動 fallback はしない
-
-## update-devkit / update-ccx
-
-`update-devkit` が主名称。`update-ccx` は互換 alias。
-OpenSkills ベースの install / update は primary flow から外し、継続更新はこのコマンドを使う。
-
-### 対応範囲
-
-- Claude Code / Codex CLI / OpenCode の install / update
-- Codex / OpenCode の DevKit 管理 user-level assets の再同期
-- Codex / OpenCode の退役した DevKit 管理 skill link の掃除
-- project `AGENTS.md` / `CLAUDE.md` workflow sync は対象外
-
-### Shared DevKit source
-
-- DevKit source: その環境で使う DevKit checkout
-- この環境の例: `~/cursor/devkit`
-- Codex の公開 skill: `~/.agents/skills`
-- OpenCode の公開 skill: `~/.config/opencode/skills`
-
-skills / commands / helper / templates は、その環境で選ばれた DevKit source から同期する。
-Codex の公開 skill は `~/.agents/skills` へ、OpenCode の公開 skill は `~/.config/opencode/skills` へ同期する。
-Codex / OpenCode へ同期する top-level skill は公開入口に限定する。
-`DEVKIT_SOURCE_ROOT` を設定しない場合は、直接実行した checkout または保存済みの `source-root.txt` を優先して再利用する。
-
-### Windows (PowerShell / cmd)
-
-初回 bootstrap は Marketplace の `devkit-setup.ps1` を使う。
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\devkit-setup.ps1" -RegisterDailyTask
-```
-
-以降の更新:
-
-```powershell
 update-devkit
 update-devkit --version
-update-ccx
+update-devkit --cli-only
+update-devkit --devkit-only
 ```
 
-補足:
+### devkit-setup.ps1
 
-- 既存ユーザーは launcher 更新のために `devkit-setup.ps1` を 1 回再実行しておくと安全。
-- PowerShell / cmd 版は install 済み script から保存済みの DevKit source を参照して同期する。
+Windows の初回 bootstrap 用です。Marketplace 配下から実行し、PowerShell / cmd launcher と Windows 用 Codex config template を配置します。継続更新は `update-devkit` を使います。
 
-### それ以外のシェル
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\devkit-setup.ps1"
+```
 
-初回だけは checkout または Marketplace 配下の script を直接実行し、その後はインストール済みの `update-devkit` を使う。checkout からの初回実行ではその checkout を shared source として保存する。Marketplace bootstrap では `DEVKIT_SOURCE_ROOT` または環境の既定 clone 先へ clone してから進む。`update-ccx` でも同じ挙動を呼べる。
+### devkit-codex-config.ps1
+
+Windows の `~/.codex/config.toml` 合成専用です。
+
+- shared template と windows template を結合する
+- `~/.codex/config.local.toml` があれば結合する
+- Codex が書く marketplace / plugin runtime section を保持する
+- macOS / Linux / WSL では config 合成を行わない
+
+### devkit-lib.sh / devkit-lib.ps1
+
+update 系 script の共通 library です。
+
+- DevKit source root 解決
+- managed file 配置
+- command shim 作成
+- source-root state 保存
+- v6 migration marker と旧資産 prune
+
+## Checks
+
+`devkit_harness.py` が標準入口です。
 
 ```bash
-bash ./plugins/devkit/scripts/update-devkit.sh --devkit-only
-
-# 以降
-update-devkit
-update-devkit --version
+uv sync --project plugins/devkit --group dev
+uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast
+uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
 ```
 
-この初回実行で `~/.codex/bin` に managed script が配置され、`~/.local/bin/update-devkit` と `update-ccx` がそこを呼ぶ。clone / update に失敗した場合は snapshot へ fallback せず停止する。
+`verify-fast` の順序:
 
-### Windows の npm 自己修復
+1. `check_utf8_bom.py`
+2. `check_skill_surface.py`
+3. `check_legacy_migration.py`
+4. detect-secrets baseline 照合
+5. pytest
 
-PowerShell / cmd 版は、active/default の fnm 管理 Node から `npm` が消えている場合、更新前に同じ Node バージョンの自己修復を 1 回試す。
+`verify-full` は `verify-fast` に `check_plugin_version_bump.py` を加えます。
 
-流れ:
+### check_utf8_bom.py
 
-1. Setup で `npm` の欠落を検知
-1. `fnm install <current-version>` と `fnm default <current-version>` を実行
-1. まだ `npm` が戻らない場合は壊れた install root を `.update-ccx-broken.<timestamp>` として退避し、同じバージョンを再取得
-1. 失敗時は npm 系の更新を `SKIPPED` にし、診断エラーを 1 件だけ出す
+git 追跡下の text metadata file に UTF-8 BOM が混入していないかを検査します。
 
-補足:
+### check_skill_surface.py
 
-- 別の Node バージョンには自動切替しない
-- `other_npm_ready_versions=` は手動復旧候補
+v6 の配布面を検査します。
 
-### Windows の Codex 自動移行
+- `plugins/devkit/skills/` が `dig` / `improve-skill` と完全一致すること
+- 削除済み directory / script / duplicate manifest / scaffold が存在しないこと
+- ルート marketplace manifest の source directory が存在すること
+- fake Codex binary による marketplace add / remove / upgrade / plugin add smoke
+- legacy prune の symlink 削除と user directory 保持
+- marker 存在時の no-op
+- pwsh がある環境での Windows smoke
 
-PowerShell / cmd 版は、`%USERPROFILE%\.npmrc` に次の legacy prefix がある場合だけ Codex を自動移行する。
+### check_legacy_migration.py
 
-```text
-prefix=C:\Users\<username>\.npm-global
-```
+退役 token が docs / skills / scripts に残っていないことを検査します。README の `Migration Notice` と prune 実装だけは旧資産削除の説明に必要なため例外です。
 
-実行内容:
+### check_plugin_version_bump.py
 
-1. `~/.npmrc.update-ccx.bak.<timestamp>` を作成
-1. legacy prefix から `@openai/codex` を uninstall
-1. `.npmrc` から上記 `prefix=` 行だけ削除
-1. 現在の Windows npm global prefix (`npm config get prefix`) に `@openai/codex` を再 install
-1. その prefix が user PATH に無ければ先頭へ追加
+`plugins/devkit/**` または `.claude-plugin/**` に差分がある場合、`plugins/devkit/.claude-plugin/plugin.json` の version が `origin/main` より大きいことを検査します。
 
-注意点:
+## Removed Runners
 
-- 上記以外の custom prefix は自動書き換えしない。手動確認が必要というエラーで停止する
-- 既存の standalone `codex.exe` は削除しない
-- `where.exe codex` に複数候補が残る場合は warning を出す
-- Windows で実行中の `codex.exe` がロックされている場合、Codex CLI 自己更新は warning 付きで `SKIPPED` になる
-
-### 自動検出
-
-| ツール | 検出方針 | 更新コマンド |
-|--------|----------|--------------|
-| Claude Code (native) | `claude update --help` と配置パス | `claude update` |
-| Claude Code (npm) | npm / fnm 系パス | `npm update -g @anthropic-ai/claude-code` |
-| Codex CLI (npm) | `Get-Command codex` の優先結果 + `where.exe codex` | `npm install -g @openai/codex` |
-| opencode (npm) | npm / fnm 系パス | `npm install -g opencode-ai` |
-
-`--runtime codex|opencode` を使うと、その runtime の CLI と user-level assets だけを更新する。
-
-### トラブルシューティング
-
-#### `update-devkit` / `update-ccx` が見つからない
-
-- PATH を確認する
-- PowerShell / cmd は Marketplace の `devkit-setup.ps1` を再実行して launcher を再配置する
-- shell は初回 bootstrap を script 直接実行で 1 回済ませる
-
-#### Windows で Codex 移行が止まる
-
-- `%USERPROFILE%\.npmrc` に想定外の `prefix=` がないか確認する
-- 移行対象は `C:\Users\<username>\.npm-global` だけ
-- 失敗時は `~/.npmrc.update-ccx.bak.<timestamp>` から戻せる
-
-#### `BLOCKED_LEGACY_SKILLS_ROOT` で止まる
-
-- `~/.agent/skills` に DevKit 以外の custom skill が混在している
-- custom skill を退避してから `update-devkit --runtime opencode --devkit-only` を再実行する
-
-#### Windows で npm が見つからない
-
-- PowerShell / cmd 版は同じ Node バージョンの自己修復を 1 回試す
-- 失敗時は `install_root=` と `expected_npm=` を確認する
-- `other_npm_ready_versions=` は手動で `fnm default <version>` する際の候補
-- 自動で別バージョンへは切り替えない
-
-#### `where.exe codex` に複数候補が出る
-
-- `fnm` 管理の Codex と standalone `codex.exe` が混在している
-- `update-devkit` / `update-ccx` は standalone 側を削除しない
-- PATH の優先順位を見直して、fnm 管理側が先に解決されるようにする
+v6 では browser automation runner と cross-repo maintenance runner は配布しません。関連する skill / scaffold / tests も配布面から外しています。現在の scripts README に載っていない runner はサポート対象外です。

@@ -1,9 +1,0 @@
-{"type":"session.start","ts":"2026-01-30T05:22:55Z","state":"initialized","data":{"cc_session_id":"01902359-3d4e-47c4-bf9c-0e87486e1ad1"}}
-{"id":"event-000001","type":"session.resume","ts":"2026-01-30T05:22:55Z","state":"initialized"}
-{"id":"event-000002","type":"session.resume","ts":"2026-01-30T05:23:35Z","state":"initialized"}
-{"id":"event-000003","type":"tool.bash","ts":"2026-01-30T05:24:06Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/ | head -20"}}
-{"id":"event-000004","type":"tool.bash","ts":"2026-01-30T05:24:06Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/ 2>/dev/null || echo "Directory not found""}}
-{"id":"event-000005","type":"tool.bash","ts":"2026-01-30T05:24:16Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/"}}
-{"id":"event-000006","type":"tool.bash","ts":"2026-01-30T05:24:16Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/*/skills/ 2>/dev/null"}}
-{"id":"event-000007","type":"tool.skill","ts":"2026-01-30T05:24:21Z","state":"initialized"}
-{"id":"event-000008","type":"session.stop","ts":"2026-01-30T05:24:28Z","state":"stopped"}

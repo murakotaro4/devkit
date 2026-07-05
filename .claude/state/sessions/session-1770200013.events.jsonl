@@ -1,7 +1,0 @@
-{"type":"session.start","ts":"2026-02-04T10:13:33Z","state":"initialized","data":{"cc_session_id":"213b2a5d-faf9-47b5-91ff-8652b50b3e5c"}}
-{"id":"event-000001","type":"session.resume","ts":"2026-02-04T10:13:33Z","state":"initialized"}
-{"id":"event-000002","type":"session.resume","ts":"2026-02-13T06:35:19Z","state":"initialized"}
-{"id":"event-000003","type":"tool.task","ts":"2026-02-13T06:35:49Z","state":"initialized"}
-{"id":"event-000004","type":"tool.task","ts":"2026-02-13T06:36:02Z","state":"initialized"}
-{"id":"event-000005","type":"tool.task","ts":"2026-02-13T06:36:08Z","state":"initialized"}
-{"id":"event-000006","type":"session.stop","ts":"2026-02-13T06:36:25Z","state":"stopped"}

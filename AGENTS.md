@@ -5,6 +5,8 @@
 ## Repo Context
 
 - このリポジトリは DevKit のセットアップ/更新スクリプト、skills、templates を管理する
+- v6 の配布 skill は `plugins/devkit/skills/dig/` と `plugins/devkit/skills/improve-skill/` の 2 つだけとする
+- Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
 - ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
 
@@ -34,8 +36,9 @@
 
 - `README.md`: リポジトリ全体の導入・運用説明
 - `plugins/devkit/scripts/`: setup / update 系スクリプト
-- `plugins/devkit/skills/`: 配布する skill 定義
-- `plugins/devkit/templates/`: Codex / OpenCode 向けテンプレート
+- `plugins/devkit/skills/dig/SKILL.md`: 深掘り・計画・実装委譲 workflow の正本
+- `plugins/devkit/skills/improve-skill/SKILL.md`: skill 改善 workflow の正本
+- `plugins/devkit/templates/`: Codex 設定テンプレート
 
 ## Commit Rules
 
@@ -55,6 +58,7 @@
 ## Release Rules
 
 - この repo は Claude Code Marketplace plugin を含む
+- Codex 側も `murakotaro4/devkit` marketplace 登録を配布正本にする
 - `plugins/devkit/**` または `.claude-plugin/**` を変更した場合、push 前に `plugins/devkit/.claude-plugin/plugin.json` の version を上げる
 - pre-push gate は version が `origin/main` と同じなら push を block する
 - version の目安:

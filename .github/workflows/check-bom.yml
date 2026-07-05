@@ -1,12 +1,7 @@
 name: Check BOM
 on:
   push:
-    paths:
-      - '**/*.json'
-      - '**/*.md'
-      - '**/*.yaml'
-      - '**/*.yml'
-  pull_request:
+    branches: [main]
     paths:
       - '**/*.json'
       - '**/*.md'

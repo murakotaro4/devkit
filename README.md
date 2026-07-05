@@ -1,43 +1,118 @@
 # devkit
 
-Claude Code Marketplace 向けプラグイン + 共通スキル配布/更新の母体。
-初回 bootstrap は Marketplace の `devkit-setup.ps1`、継続更新は `update-devkit` を主入口にする。`update-ccx` は互換 alias。
-
-> **このREADMEについて**: 別PCでゼロから環境構築する場合も含め、前提ツールのインストールからスキル導入・運用まで一通り完了できる初心者向け完全ガイド。
+DevKit は Claude Code / Codex 向けの個人プラグインです。配布する skill は `dig` と `improve-skill` の 2 つに固定し、導入と更新は marketplace を正本にします。
 
 ## Migration Notice
 
-`v5.0.0` で dig 系スキルを全面刷新:
+v6.0.0 は配布面を整理する breaking release です。
 
-- 旧 dig 3層構造（`dig` 入口 → `dig-core` → runtime adapter `dig-claude` / `dig-codex` / `dig-cursor` / `dig-opencode`）を廃止
-- `codex-impl` / `decomposition` / `devkit-init` スキル、`shared/workflow.md`、runtime hook 群を廃止
-- 7フェーズ強制フロー・`REVIEW_GATE_*`・`team_shape`・workflow state token・fail-close 停止コード（`DIG_CODEX_*` / `DIG_CLAUDE_*`）といった旧運用契約も全廃
+- 削除 skill: `gpt-pro`, `deep-research`, `computer-use-chatgpt-pro`, `codex-search`, `discord-rust-server-ops`, `repo-maintainer`, `repo-maintainer-init`
+- 旧 alias / 表記: `/devkit:gpt-pro`, `/devkit:deep-research`, `/devkit:computer-use-chatgpt-pro`, `/devkit:codex-search`, `/devkit:discord-ops`, `/devkit:repo-maintainer`, `/devkit:repo-maintainer-init`
+- 削除 script / scaffold: `chrome_chatgpt_runner.py`, `repo_maintainer.py`, `devkit-runtime-sync.*`, `devkit-skill-update.ps1`, `.devkit/`
+- symlink 同期は廃止。旧 root 例: `~/.agents/skills`, `~/.agent/skills`, `~/.codex/skills`, `~/.config/opencode/skills`
+- OpenCode 配布、`opencode-ai` 更新、旧日次タスク `DevKitSkillsDailyUpdate` は廃止
+- 旧 dig adapter 名: `dig-core`, `dig-claude`, `dig-codex`, `dig-cursor`, `dig-opencode`, `codex-impl`, `decomposition`, `devkit-init`
+- 単独表記の `AskUserQuestionTool` はハーネス中立の質問手段へ置き換え
 
-置き換え先:
+v6 の置き換え先は marketplace 配布の `dig` と `improve-skill` です。`update-devkit` は移行時に旧 symlink / 旧 helper / 旧タスクを prune し、以後は Codex marketplace の git source と Claude Code plugin marketplace を正本にします。
 
-- 新しい `/dig` は Claude 専用のオーケストレーションスキル。深掘りインタビュー（未知を棚卸しし、影響が大きい未知のみ AskUserQuestion で質問）→ 調査・計画 → backend 選択（計画レビュー/実装/diff レビュー）→ 計画レビュー → 計画承認 → 実装委譲 → 親エージェントの diff 自レビュー + テスト → 修正ループ → 報告、という流れで動く
-- ユーザー確認ポイントは backend 選択（計画レビュー / 実装 / diff レビューの 3 役）と計画承認のみ
-- `/dig` は Claude plugin 専用スキル。Codex / OpenCode の runtime-sync 配布対象からは外れ、旧 dig の同期 link は update 時に掃除される
+## Skills
 
-`v1.0.0` で以下を破壊的変更として廃止:
+- `dig`: `/dig` として深掘り、計画、実装委譲、diff review、検証を扱うオーケストレーション skill
+- `improve-skill`: skill 改善の調査、設計、レビュー、更新を扱う skill
 
-- `devkit:codex`（旧）
-- `devkit:agent-orch-core`（旧）
-- `devkit:agent-orch-openai`（旧）
-- `devkit:agent-orch-anthropic`（旧）
-- `devkit:agent-orch-google`（旧）
+`dig` は Claude Code と Codex の両親ハーネスを想定します。Claude Code では既存の対話/承認ツールを使い、Codex では plan mode と組み込み plan / agent 機能へ読み替えます。
 
-置き換え先（当時。dig の 3 層構成は上記 `v5.0.0` で廃止済み）:
+## Install
 
-- dig の公開入口を `/dig`（Codex は `$dig`）に集約し、runtime adapter を shared source から内部参照する構成にした
+### Claude Code
 
-自動ゲート（推奨）:
+Claude Code 側は marketplace plugin として導入します。
 
-- ローカル: `prek` の `pre-commit` + `pre-push` で自動実行
-- CI: GitHub Actions（`pull_request` + `workflow_dispatch`）で `uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full` を実行
-- devkit 本体では Git hook の正規入口を `prek.toml` に固定し、旧 `.githooks` は stale clone を止めるための legacy shim だけ残す
+```bash
+claude plugin marketplace add murakotaro4/devkit
+claude plugin add devkit@murakotaro4
+```
 
-Harness-first の手動入口:
+Claude Code の plugin UI を使う環境では、`murakotaro4` marketplace から `devkit` を追加してください。
+
+### Codex
+
+Codex 側も marketplace を正本にします。
+
+```bash
+codex plugin marketplace add murakotaro4/devkit
+codex plugin add devkit@murakotaro4
+```
+
+登録済みか確認する場合:
+
+```bash
+codex plugin list --json
+```
+
+## Update
+
+Codex の git marketplace は Codex 起動時に自動アップグレードされます。すぐ反映したい場合だけ `update-devkit` を実行します。
+
+```bash
+update-devkit
+update-devkit --version
+```
+
+`update-ccx` は互換 alias です。
+
+```bash
+update-ccx
+update-ccx --version
+```
+
+`update-devkit` が行うこと:
+
+- Claude Code / Codex CLI の install / update
+- DevKit 管理 script の配置更新
+- Codex marketplace `murakotaro4/devkit` の登録確認
+- `devkit@murakotaro4` の有効化確認
+- `codex plugin marketplace upgrade murakotaro4` による即時反映
+- v6 移行 marker が無い場合の旧資産 prune
+
+`--cli-only` は CLI 更新のみ、`--devkit-only` は DevKit 管理ファイルと Codex plugin 登録のみを処理します。
+
+## Windows
+
+Windows の初回 bootstrap は marketplace 配下の `devkit-setup.ps1` を使います。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\devkit-setup.ps1"
+```
+
+Windows だけ `~/.codex/config.toml` の合成を行います。合成時は DevKit の shared / windows template と `config.local.toml` を結合し、Codex が管理する marketplace / plugin runtime section は保持します。
+
+macOS / Linux / WSL では config 合成を行いません。Codex plugin 登録を正本として扱います。
+
+## Manual Cleanup
+
+`update-devkit` は v6 marker により一度だけ旧資産を prune します。手動で残骸を掃除する場合は、DevKit 管理物だけを対象にしてください。
+
+確認例:
+
+```bash
+ls -la ~/.codex/bin
+ls -la ~/.codex/devkit
+find ~ -name '*.linkbak' -maxdepth 5 2>/dev/null
+```
+
+削除候補:
+
+- `*.linkbak`
+- 古い `~/.codex/bin` 配下の DevKit helper
+- stale な `~/.codex/devkit/source-root.txt`
+
+自作 skill や他 plugin の cache は削除対象にしません。
+
+## Development
+
+DevKit 自身の検証は `uv` ハーネスを正本にします。
 
 ```bash
 uv sync --project plugins/devkit --group dev
@@ -45,545 +120,45 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
 ```
 
-ローカルフックの有効化（標準）:
+`verify-fast` / `verify-full` は次を実行します。
+
+- UTF-8 BOM 検査
+- v6 skill surface / marketplace / smoke 検査
+- legacy migration token 検査
+- detect-secrets baseline 照合
+- pytest
+- plugin version bump gate (`verify-full` のみ)
+
+ローカル hook は `prek.toml` を正本にします。
 
 ```bash
-cargo install prek
-git config --unset core.hooksPath || true
 prek install --hook-type pre-commit --hook-type pre-push
-```
-
-手動チェック（デバッグ時）:
-
-```bash
-prek run --all-files --hook-stage pre-commit
 prek run --all-files --hook-stage pre-push
 ```
 
-CI チェック可視化（PR側の確認）:
+## Repository Layout
 
-```bash
-# PR のチェックを待機して確認
-gh pr checks <PR_NUMBER> --watch
+- `plugins/devkit/.claude-plugin/plugin.json`: plugin metadata
+- `.claude-plugin/marketplace.json`: marketplace manifest
+- `plugins/devkit/skills/dig/SKILL.md`: `dig` skill
+- `plugins/devkit/skills/improve-skill/SKILL.md`: `improve-skill` skill
+- `plugins/devkit/scripts/`: setup / update / check scripts
+- `plugins/devkit/templates/`: Windows Codex config templates
+- `plugins/devkit/tests/`: deterministic tests
 
-# Workflow 実行履歴を確認
-gh run list --workflow "DevKit Checks" --limit 10
+## Release Rule
 
-# 「チェックが出ない」を検知（最大5分待機）
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ci\assert-pr-checks.ps1 -PrNumber <PR_NUMBER>
-```
+この repo は Claude Code Marketplace plugin を含みます。
 
-補足:
-
-- 新規 workflow 追加直後は GitHub 側の登録タイミングによりチェック表示が遅れることがある。
-- その場合は上記コマンドで状態を確認し、必要に応じて `workflow_dispatch` で手動起動する。
-
-## Marketplace Plugin Release Rule
-
-この repo は Claude Code Marketplace plugin を含む。
-
-- plugin 実体: `plugins/devkit/.claude-plugin/plugin.json`
-- `plugins/devkit/**` または `.claude-plugin/**` を変更した場合、push 前に `plugin.json` の version を上げる
+- `plugins/devkit/**` または `.claude-plugin/**` を変更した場合、push 前に `plugins/devkit/.claude-plugin/plugin.json` の version を上げる
 - pre-push gate は `origin/main` と同じ version のままなら push を block する
 - version の目安:
   - `patch`: docs / bugfix only
   - `minor`: workflow contract / user-visible behavior 変更
   - `major`: breaking change
 
-## 前提条件
+## Review Policy
 
-### 必須ツール
+この repo でファイル変更を伴う作業は、親エージェントの diff 自レビューに加えて独立 review を 1 回以上実施します。指摘が出た場合は修正後に再 review し、追加 findings がなくなるまで繰り返します。
 
-| ツール | 用途 | インストール | 確認コマンド |
-|--------|------|-------------|-------------|
-| [Node.js](https://nodejs.org/) / npm | Claude/Codex/OpenCode の install/update 実行 | 公式サイトから LTS 版をインストール | `node -v && npm -v` |
-| [Git](https://git-scm.com/) | shared source checkout の更新 | 公式サイトからインストール | `git --version` |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | メインのAIコーディングCLI | `npm install -g @anthropic-ai/claude-code` | `claude --version` |
-| [prek](https://github.com/j178/prek) | Git hooks（pre-commit / pre-push）実行基盤 | Linux/WSL: `cargo install prek` / Windows: `scoop install prek` / macOS: `brew install prek` | `prek --version` |
-| [uv](https://docs.astral.sh/uv/) | Pythonベースのハーネス実行・依存同期 | 公式インストーラ / `pipx install uv` など | `uv --version` |
-
-補足:
-
-- `verify-fast` / `verify-full` の手動実行と依存同期は `uv` を正規入口とする
-- `prek`（pre-commit / pre-push）と CI も同じ `uv` ベースのハーネスを呼び出す
-
-### 推奨ツール（レビュー用）
-
-Codex CLI は任意。`/dig` の実装 backend、計画レビュー backend、および diff レビューのセカンドオピニオン（`codex -a never exec review --uncommitted`）に使える。
-未インストールでも作業は進められ、その場合は codex 系の選択肢を除外し、Claude サブエージェント等の他の選択肢でレビュー・実装を完結させる。
-詳細は「レビュー方針」セクション参照。
-
-| ツール | 用途 | インストール | 確認コマンド |
-|--------|------|-------------|-------------|
-| [Codex CLI](https://github.com/openai/codex) | `/dig` 実装 backend / 計画レビュー・diff レビューのセカンドオピニオン | `npm install -g @openai/codex` | `codex --version` |
-| [OpenCode](https://github.com/opencode-ai/opencode) | 追加AI IDE（任意） | `npm install -g opencode-ai` | `opencode --version` |
-| Google Chrome | ChatGPT Pro / Deep Research の Default profile 実行 | 公式サイトからインストール | Chrome を通常起動 |
-| agent-browser | ChatGPT UI の主操作 backend | `npm install -g agent-browser` | `agent-browser --version` |
-
-### Windows 環境の準備
-
-Windows で devkit を使用する場合、以下の追加設定が必要。
-
-#### 1. Marketplace bootstrap を使う
-
-PowerShell / cmd の初回セットアップは、Marketplace 配布の `devkit-setup.ps1` を bootstrap として使う。
-継続更新は bootstrap 後に `update-devkit` を使い、`update-ccx` は互換 alias として扱う。
-
-#### 2. パス形式の違い
-
-| 環境 | パス形式 | 例 |
-|------|---------|---|
-| Git Bash | `/c/Users/...` | `/c/Users/murak/cursor/devkit` |
-| WSL | `/mnt/c/Users/...` | `/mnt/c/Users/murak/cursor/devkit` |
-| cmd / PowerShell | `C:\Users\...` | `C:\Users\murak\cursor\devkit` |
-
-本READMEのコマンドは `$HOME` を使用しているため、Git Bash / WSL ではそのまま動作する。
-
-#### 3. npm グローバルパスの確認
-
-```bash
-npm config get prefix
-```
-
-Windows では npm / fnm の構成によって prefix が異なり得る。
-`update-devkit` / `update-ccx` は legacy な `C:\Users\<username>\.npm-global` だけを自動移行し、それ以外の custom prefix は手動確認が必要として停止する。
-
-PATH に含まれていない場合は、利用中の prefix を PATH に追加する。
-
-> **重要**: PATH 変更後はターミナルの再起動が必要。
-
-#### 4. fnm / nvm 利用時の注意（重要）
-
-Node.js バージョン管理ツール（fnm, nvm）を使用している場合、**シェル初期化で PATH が設定されないと npm グローバルインストールしたコマンド（codex, claude 等）が見つからない**。
-
-- **症状**: `codex: command not found` だがインストール済み
-- **原因**: `.bashrc` / `.zshrc` に fnm/nvm の初期化コマンドがない、またはシェルが初期化スクリプトを読み込まない環境（Claude Code の bash 等）
-- **確認**: バイナリの場所を特定
-  ```bash
-  # fnm の場合
-  find ~/AppData/Roaming/fnm -name "codex*" -type f 2>/dev/null
-  # nvm の場合
-  find ~/.nvm -name "codex*" -type f 2>/dev/null
-  ```
-- **対処**: フルパスで実行するか、PATH にバイナリのディレクトリを追加
-  ```bash
-  # 例: fnm の場合
-  export PATH="$HOME/AppData/Roaming/fnm/node-versions/$(fnm current)/installation:$PATH"
-  ```
-
-PowerShell / cmd で `update-devkit` / `update-ccx` を使う場合:
-
-- legacy な `~/.npm-global` は初回実行時に Codex だけ fnm 管理側へ移行する
-- `%USERPROFILE%\.npmrc` に別の custom prefix がある場合は自動変更しない
-- 既存の standalone `codex.exe` は削除しない
-
-## 構成
-
-- `plugins/devkit/.claude-plugin/`: Claude Code プラグイン定義
-- `plugins/devkit/skills/*/SKILL.md`: スキル本体（`repo-maintainer` / `repo-maintainer-init` を含む）
-- `plugins/devkit/scripts/`: 補助スクリプト（`devkit-setup.ps1`、`update-devkit` / `update-ccx`、`repo_maintainer.py`）
-- `plugins/devkit/templates/`: OpenCode テンプレートと Codex 設定テンプレート
-
-## 導入（初回）
-
-### 基本方針
-
-- OpenSkills ベースの install / update は primary flow から外した。
-- devkit 本体の local Git hook は `prek.toml` を正本にする。
-- PowerShell / cmd の初回 bootstrap は Marketplace 配布の `devkit-setup.ps1` を使う。
-- 継続更新はインストール済みの `update-devkit` を使う。`update-ccx` は互換 alias。
-- `update-devkit` / `update-ccx` は CLI 更新に加えて、Codex / OpenCode の DevKit 管理 user-level assets も同期する。
-- project 単位の `AGENTS.md` / `CLAUDE.md` workflow sync は `update-devkit` の対象外。
-
-### DevKit repo の hook 標準
-
-- `~/cursor/devkit` では `prek install --hook-type pre-commit --hook-type pre-push` を標準にする。
-- `pre-commit` では staged な `*.json`, `*.md`, `*.yaml`, `*.yml` の UTF-8 BOM 混入も検査する。
-- `verify-fast` / `verify-full` でも repo 全体の UTF-8 BOM を検査する。
-- 旧 `.githooks/pre-commit` は stale clone を fail-close にする legacy shim としてだけ残し、devkit 本体の正規ルートとしては使わない。
-- 他 repo の hook 方式整理は別フェーズに分ける。
-
-### Shared DevKit Source
-
-- 共通 DevKit source: その環境で使う DevKit checkout
-- この環境の例: `~/cursor/devkit`
-- Codex の global skill: `~/.agents/skills`
-- Codex の repo-local skill: `<repo>/.agents/skills`
-- Claude の repo-local skill: `<repo>/.claude/skills`
-- OpenCode の global skill: `~/.config/opencode/skills`
-
-Codex / OpenCode はその環境で選ばれた DevKit checkout を共通 source として使い、skills / commands / helper / templates をそこから同期する。Codex の project 専用 skill は各 repo の `.agents/skills` に置き、Claude の project 専用 skill は `.claude/skills` に置く。`~/.codex/skills` は user-managed skill root ではない。
-`DEVKIT_SOURCE_ROOT` を設定すれば source root を明示できる。未指定時は、直接実行している DevKit checkout、または直近 sync で保存された `source-root.txt` を優先して再利用する。
-
-### Windows (PowerShell / cmd) bootstrap
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\devkit-setup.ps1" -RegisterDailyTask
-```
-
-bootstrap 後の更新:
-
-```powershell
-update-devkit --version
-update-devkit
-```
-
-互換 alias:
-
-```powershell
-update-ccx --version
-update-ccx
-```
-
-補足:
-
-- 既存ユーザーは launcher 更新のために `devkit-setup.ps1` を 1 回再実行しておくと安全。
-- Codex 側の helper / template / config も bootstrap / update 時に再同期される。
-- OpenCode / Codex を起動中なら、更新後に再起動すると反映が確実。
-
-### macOS / Linux / WSL / Git Bash bootstrap
-
-初回だけは checkout または Marketplace 配下の script を直接実行する。checkout から実行した場合はその checkout を shared source として保存する。Marketplace bootstrap から実行した場合は、`DEVKIT_SOURCE_ROOT` か環境の既定 clone 先へ clone してから継続する。
-
-```bash
-# repo checkout から直接
-bash ./plugins/devkit/scripts/update-devkit.sh --devkit-only
-
-# または Marketplace 配置から直接
-bash "$HOME/.claude/plugins/marketplaces/murakotaro4/plugins/devkit/scripts/update-devkit.sh" --devkit-only
-```
-
-この初回実行で `~/.codex/bin` に managed script が配置され、`~/.local/bin/update-devkit` と `update-ccx` の launcher はそこを呼ぶ。以降は bare command を使う。clone / update に失敗した場合は snapshot へ fallback せず停止する。
-
-## 使い方（スラッシュ）
-
-- Claude Code: `/dig` `/devkit:gpt-pro` `/devkit:deep-research` `/devkit:improve-skill` `/devkit:codex-search` `/devkit:repo-maintainer` `/devkit:repo-maintainer-init`
-- OpenCode: 環境の標準手段でインストール済みスキルを呼び出し（`/devkit-*` はローカルで定義した場合のみ）
-- Codex CLI: `$gpt-pro` `$repo-maintainer` `$repo-maintainer-init`
-- Codex Desktop (macOS + Computer Use): `$computer-use-chatgpt-pro`
-
-Codex 連携の住み分け:
-
-- 深掘り + 実装委譲: `/dig`（親 Claude = 深掘りインタビュー・調査・計画・統括・報告。実装は `codex exec`（effort は medium/high/xhigh を選択）か Claude サブエージェント[Sonnet]、計画レビュー / diff レビューは codex / Opus サブエージェント / 親のみ・スキップから、いずれも計画承認前に選ぶ）
-- ウェブ検索: `/devkit:codex-search`
-
-ChatGPT Pro 相談の住み分け:
-
-- ブラウザ経由: `/devkit:gpt-pro` または `$gpt-pro`（Chrome Default profile + CDP 前提）
-- ChatGPT アプリ経由: `$computer-use-chatgpt-pro`
-
-ChatGPT ブラウザ経路の実行契約:
-
-- API-first にはせず、Chrome の通常 `Default` profile を正本にする
-- 通常 Chrome が CDP 無効で起動中なら、必要に応じて Chrome の再起動まで許可する
-- `localhost,127.0.0.1,::1` は proxy bypass 対象にする
-- backend 優先順は `agent-browser`、Playwright `connectOverCDP`、runtime の Chrome 拡張経路
-- 診断と実行の共通入口は `plugins/devkit/scripts/chrome_chatgpt_runner.py`
-- Windows PowerShell / cmd では `py -3`、macOS / Linux / WSL / Git Bash では `python3` を使う
-
-```bash
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py diagnose
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome gpt-pro "調査内容"
-py -3 plugins/devkit/scripts/chrome_chatgpt_runner.py --restart-chrome deep-research "調査内容"
-```
-
-補足（Codex の skill 配置）:
-
-- global/shared skill は `~/.agents/skills/<skill-name>` に置く
-- project 専用 skill は `<repo>/.agents/skills/<skill-name>` に置く
-- 例: `~/.agents/skills/gpt-pro`、`business-docs/.agents/skills/load-todo`
-- `~/.codex/skills` は user-managed skill の配置先としては使わない
-- SKILL.md は UTF-8 BOM なしであること（BOM があると frontmatter の `---` を解釈できず skill が読み込まれない）
-
-## Nightly Maintainer
-
-cross-repo の nightly maintenance 用に、共有 skill と共通 runner を追加した。
-
-- shared skill:
-  - `repo-maintainer`: nightly / drift / weekly lane の repo 保全更新
-  - `repo-maintainer-init`: 各 repo の scaffold 生成
-- 共通 runner: `plugins/devkit/scripts/repo_maintainer.py`
-- target repo 側の正本: `.devkit/repo-maintainer.toml`
-
-初期化:
-
-```bash
-python plugins/devkit/scripts/repo_maintainer.py init-scaffold --repo /path/to/target-repo
-```
-
-手動実行:
-
-```bash
-python plugins/devkit/scripts/repo_maintainer.py run --repo /path/to/target-repo
-```
-
-`init-scaffold` は target repo に次を生成する:
-
-- `.devkit/repo-maintainer.toml`
-- `MEMORY.md`
-- `logs/skills/`
-- `reviews/daily/`
-- `reviews/weekly/`
-- PowerShell / POSIX wrapper
-- Windows Task Scheduler / macOS `launchd` / Linux `systemd timer` / cron の template
-
-補足:
-
-- runner は temp worktree 上で Codex を実行し、branch / PR / auto-merge を処理する。
-- AI review は `review_commands`、ローカル checks は `check_commands` に寄せる。
-- auto-merge は `git.auto_merge=true` かつ review/check 通過時だけ有効。
-
-## 更新
-
-### 推奨コマンド
-
-```bash
-update-devkit
-update-devkit --version
-```
-
-互換 alias:
-
-```bash
-update-ccx
-update-ccx --version
-```
-
-更新内容:
-
-- Claude Code / Codex CLI / OpenCode の install / update
-- 保存済みの shared source checkout から Codex / OpenCode の DevKit 管理 user-level assets を再同期
-- Codex の公開 skill は `~/.agents/skills` に同期する
-- Codex / OpenCode の top-level skills は公開入口だけを再同期し、退役した DevKit 管理 skill の link は掃除する（Claude 専用化した `dig` の旧同期 link も掃除対象）
-- project `AGENTS.md` / `CLAUDE.md` の workflow sync は行わない
-- `--runtime codex|opencode` を付けた場合は、その runtime の CLI と user-level assets だけを更新する
-
-ハーネスだけ手動で回したい場合:
-
-```bash
-uv sync --project plugins/devkit --group dev
-uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-fast
-uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
-```
-
-補足:
-
-- `uv` は DevKit 自身の開発・検証の入口として使う
-- `node` / `npm` / `fnm` は外部 CLI の install/update 用にだけ使う
-- `mermaid-show` は Node 依存の optional skill だったため公開面から削除した
-
-必要なら OpenCode / Codex を再起動。
-
-更新時の config 挙動:
-
-- DevKit source が有効なら、helper / template を先に `~/.codex` 側へ再同期する
-- その後に `~/.codex/config.toml` を再生成する
-- `~/.codex/config.local.toml` があればそれも合成する
-- config 再生成だけ失敗した場合は直前の config を復元し、更新は警告終了する
-
-更新失敗時:
-
-- Codex 利用自体は継続可能（非ブロック運用）
-- 更新コマンドは非ゼロ終了コードで失敗を返す
-- `~/.codex/logs/devkit-skill-update-status.json` に成功/失敗の状態が記録される
-
-### Windows の npm 自己修復
-
-PowerShell / cmd 版の `update-devkit` / `update-ccx` は、active/default の fnm 管理 Node に `npm` が見つからない場合、更新処理に入る前に同じ Node バージョンの自己修復を 1 回試す。
-
-実行内容:
-
-1. `npm` の欠落を Setup フェーズで検知する
-1. `fnm install <current-version>` と `fnm default <current-version>` を実行する
-1. それでも `npm` が戻らない場合は壊れた install root を `.update-ccx-broken.<timestamp>` として退避し、同じバージョンを再取得する
-1. 修復できなければ npm ベースの更新を `SKIPPED` にし、Node version / install root / expected npm path を含む診断を 1 件だけ出す
-
-補足:
-
-- 別の Node バージョンへは自動で切り替えない
-- `other_npm_ready_versions=` は手動復旧候補として表示するだけで、自動 fallback には使わない
-
-### Windows の Codex 自動移行
-
-PowerShell / cmd 版の `update-devkit` / `update-ccx` は、`%USERPROFILE%\.npmrc` に legacy な `prefix=C:\Users\<username>\.npm-global` がある場合だけ Codex を自動移行する。
-
-実行内容:
-
-1. `~/.npmrc.update-ccx.bak.<timestamp>` を作成
-1. 旧 prefix から `@openai/codex` を uninstall
-1. `.npmrc` から上記 `prefix=` 行だけ削除
-1. 現在の Windows npm global prefix (`npm config get prefix`) に `@openai/codex` を再 install
-1. その prefix が user PATH に無ければ先頭へ追加
-
-補足:
-
-- それ以外の custom prefix は自動変更しない
-- 既存の standalone `codex.exe` は削除しない
-- `where.exe codex` に複数候補がある場合は warning を表示する
-- Windows で実行中の `codex.exe` がロックされている場合、Codex CLI 自己更新は warning 付きで `SKIPPED` になる
-
-### インストール方法の自動検出
-
-スクリプトは各ツールのインストール方法を自動検出し、適切な更新コマンドを実行する。
-
-| ツール | 検出方法 | 更新コマンド |
-|--------|---------|-------------|
-| Claude Code (native) | `claude update --help` の存在 | `claude update` |
-| Claude Code (homebrew-cask) | `brew list --cask claude` | `brew upgrade --cask claude` |
-| Claude Code (npm) | node_modules パス | `npm update -g @anthropic-ai/claude-code` |
-| Codex CLI (npm) | `Get-Command codex` / `where.exe codex` / Windows npm global prefix | `npm install -g @openai/codex` |
-| Codex CLI (brew) | `brew list codex` | `brew upgrade codex` |
-| opencode (npm) | `npm list -g opencode-ai` | `npm install -g opencode-ai` |
-| opencode (brew) | `brew list opencode` | `brew upgrade opencode` |
-
-### 出力例
-
-```
-=== Claude Code, Codex CLI, opencode & DevKit ===
-Environment: wsl
-
-[Before]
-claude:   1.0.57 (native)
-codex:    0.1.2505301636 (npm)
-opencode: 0.3.5 (npm)
-
-Updating Claude Code (native)... ✓
-Updating Codex CLI (npm)... ✓
-Updating opencode (npm)... ✓
-✓ Codex runtime synced
-✓ OpenCode runtime synced
-
-[After]
-claude:   1.0.58
-codex:    0.1.2505301636
-opencode: 0.3.5
-
-✓ Update completed
-```
-
-## ロールバック
-
-- `update-devkit` は project `AGENTS.md` / `CLAUDE.md` を変更しないため、ロールバック対象は CLI と user-level assets に限られる。
-- Codex を外す場合は `~/.agents/skills` と `~/.codex` 配下の DevKit helper / template / config assets を削除する。
-- OpenCode を外す場合は `~/.config/opencode` 配下の DevKit 管理 assets を削除する。
-- project 単位で workflow sync 済みの `AGENTS.md` / `CLAUDE.md` は別途手動で管理する。
-
-## レビュー方針
-
-devkit のレビューは、変更を出した親エージェント自身による diff 自レビューと、プロジェクトのテスト / リンタ / ハーネス実行を基本にする。専用のレビューゲート契約（強制フェーズや停止コード）は持たない。
-
-- `git diff` を全文読み、計画（`/dig` の場合は承認済み計画）と突き合わせる
-- プロジェクトのテスト・リンタ・ハーネス（`verify-fast` / `verify-full`）を実行する
-- `/dig` では計画承認前に選択した diff レビュー backend（`codex -a never exec review --uncommitted` / Claude サブエージェント[Opus]）でセカンドオピニオンを取る（「親のみ・スキップ」はこの repo では独立レビュー必須のため diff レビューの選択肢に含めない）
-- Codex CLI が無い環境では、Claude サブエージェント等の代替 backend で独立レビューを完結させる
-
-### CLI の確認方法
-
-セカンドオピニオン用の CLI が正しくインストール・PATH 設定されているか確認:
-
-```bash
-# Unix / WSL / Git Bash
-which codex && codex --version
-which claude && claude --version
-```
-
-```powershell
-# Windows (PowerShell)
-Get-Command codex
-Get-Command claude
-```
-
-```cmd
-# Windows (cmd)
-where.exe codex
-where.exe claude
-```
-
-codex が使えない場合はレビュー選択肢から codex を除外し、Claude サブエージェント等の他の選択肢を提示する。
-
-## トラブルシュート
-
-### OpenCode / Codex で補完が出ない
-
-- アプリ再起動
-- global/shared source の確認:
-  ```bash
-  cat ~/.codex/devkit/source-root.txt 2>/dev/null || cat ~/.config/opencode/devkit/source-root.txt
-  ls -la ~/.agents/skills
-  ```
-- project 専用 skill を使う場合は repo root でも確認:
-  ```bash
-  ls -la ./.agents/skills
-  ```
-- `update-devkit --devkit-only` を再実行して user-level assets を再同期する
-
-### `BLOCKED_LEGACY_SKILLS_ROOT` で止まる
-
-- 旧 OpenSkills 方式で `~/.config/opencode/skills -> ~/.agent/skills` を使っていて、`~/.agent/skills` に DevKit 以外の custom skill が混在している
-- custom skill を `~/.agent/skills` から退避してから `update-devkit --runtime opencode --devkit-only` を再実行する
-
-### `update-devkit` / `update-ccx`: command not found
-
-PATH が正しく設定されているか確認:
-
-```bash
-echo $PATH | tr ':' '\n' | grep devkit
-```
-
-PowerShell / cmd の場合は、Marketplace の `devkit-setup.ps1` を再実行して launcher を再配置する。
-
-### npm update が失敗する
-
-npm のグローバルディレクトリの権限を確認:
-
-```bash
-npm config get prefix
-ls -la $(npm config get prefix)/lib/node_modules/
-```
-
-### Windows: npm グローバルコマンドが見つからない
-
-- PowerShell / cmd 版は、active/default の fnm 管理 Node から `npm` が欠けていると同じ Node バージョンの自己修復を 1 回試す
-- 失敗時はエラー内の `install_root=` と `expected_npm=` を確認する
-- `other_npm_ready_versions=` が出ている場合、必要なら `fnm default <version>` で手動切替する
-- **別バージョンへの自動切替は行わない**
-- PATH 変更後はターミナルの再起動が必要
-
-### Windows: Codex migration stopped on unexpected prefix
-
-- `%USERPROFILE%\.npmrc` の `prefix=` を確認する
-- `update-devkit` / `update-ccx` が自動移行するのは `C:\Users\<username>\.npm-global` だけ
-- 失敗時は `~/.npmrc.update-ccx.bak.<timestamp>` から元に戻せる
-
-### Windows: `where.exe codex` に複数候補がある
-
-- fnm 管理の Codex と standalone `codex.exe` が混在している
-- `update-devkit` / `update-ccx` は standalone 側を削除しない
-- PATH の優先順位を見直して、fnm 管理側が先に解決されるようにする
-
-### fnm / nvm: CLI コマンドが見つからない（★よくある問題）
-
-`codex: command not found` や `claude: command not found` だがインストール済みの場合、fnm / nvm のシェル初期化が読み込まれていない可能性が高い。
-
-1. バイナリの場所を特定:
-
-   ```bash
-   # fnm（Windows ネイティブ）
-   find ~/AppData/Roaming/fnm -name "codex*" -type f 2>/dev/null
-   # fnm（WSL / macOS / Linux）
-   find ~/.local/share/fnm -name "codex*" -type f 2>/dev/null
-   # nvm
-   find ~/.nvm -name "codex*" -type f 2>/dev/null
-   ```
-
-1. フルパスで実行するか、PATH にバイナリのディレクトリを追加:
-
-   ```bash
-   # fnm の例（Windows ネイティブ）
-   export PATH="$HOME/AppData/Roaming/fnm/node-versions/$(fnm current)/installation:$PATH"
-   # fnm の例（WSL / macOS / Linux）
-   eval "$(fnm env)"
-   ```
-
-1. `.bashrc` / `.zshrc` に fnm / nvm の初期化コマンドが含まれているか確認。
-   Claude Code の bash 等、初期化スクリプトを読み込まない環境では手動で PATH を設定する必要がある。
+`dig` を使う場合は、計画レビュー・実装・diff review の backend を計画承認前に選びます。通常の手作業でも `verify-full` を最終 gate として扱います。

@@ -100,7 +100,7 @@ def build_description(session: dict[str, Any], skill_name: str) -> str:
     top_req = reqs[0] if reqs else "現在セッションの要件"
     return (
         f"現在セッションの要件を基に {skill_name} を作成する。"
-        f"AskUserQuestionToolで深掘りし、{top_req} を満たす構成を提案する。"
+        f"選択肢付き質問で深掘りし、{top_req} を満たす構成を提案する。"
     )
 
 
@@ -120,7 +120,7 @@ def build_result(
         {
             "target": f"{skill_path}/SKILL.md",
             "reason": "質問駆動ルールがないと意図確定に失敗する",
-            "expected": "AskUserQuestionTool の必須手順を明記する",
+            "expected": "選択肢付き質問の必須手順を明記する",
         },
         {
             "target": f"{skill_path}/SKILL.md",

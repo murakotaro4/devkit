@@ -1,9 +1,0 @@
-{"type":"session.start","ts":"2026-01-29T11:31:29Z","state":"initialized","data":{"cc_session_id":"ce1de067-1d47-4da1-ac9e-f0139101ff2a"}}
-{"id":"event-000001","type":"session.start","ts":"2026-01-29T11:31:29Z","state":"initialized"}
-{"id":"event-000002","type":"session.stop","ts":"2026-01-29T11:31:57Z","state":"stopped"}
-{"type":"session.resume","ts":"2026-01-29T11:42:19Z","state":"initialized","data":{"cc_session_id":"ce1de067-1d47-4da1-ac9e-f0139101ff2a","method":"latest"}}
-{"id":"event-000001","type":"session.start","ts":"2026-01-29T11:42:19Z","state":"initialized"}
-{"id":"event-000002","type":"session.resume","ts":"2026-01-29T11:44:07Z","state":"initialized"}
-{"id":"event-000003","type":"tool.write","ts":"2026-01-29T14:33:38Z","state":"initialized","data":{"file_path":"/Users/murakotaro/.claude/plans/typed-giggling-cascade.md"}}
-{"id":"event-000004","type":"tool.write","ts":"2026-01-29T14:34:36Z","state":"initialized","data":{"file_path":"/Users/murakotaro/PycharmProjects/devkit/plugins/devkit/skills/dig/SKILL.md"}}
-{"id":"event-000005","type":"session.stop","ts":"2026-01-29T14:34:48Z","state":"stopped"}

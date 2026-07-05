@@ -1,7 +1,0 @@
-[Unit]
-Description=Nightly repo maintainer for devkit
-
-[Service]
-Type=oneshot
-WorkingDirectory=C:/Users/murak/repos/devkit
-ExecStart=C:/Users/murak/repos/devkit/.devkit/bin/repo-maintainer.sh

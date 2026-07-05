@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 
@@ -28,6 +30,7 @@ def test_agents_md_core_rules():
     assert "Conventional Commits" in text, "AGENTS.md にコミット規約がない"
     assert "Codex Exec 相談ルール" in text, "AGENTS.md に codex exec 相談ルールがない"
     assert "version" in text, "AGENTS.md に version bump ルールがない"
+    assert "dig" in text and "improve-skill" in text, "AGENTS.md に v6 の配布 skill がない"
 
 
 # ── 3. AGENTS.md に旧ワークフロー契約が残っていない ────────────────
@@ -43,3 +46,42 @@ def test_agents_md_no_legacy_contract():
         "devkit:workflow:start",
     ):
         assert legacy not in text, f"AGENTS.md に旧ワークフロー契約が残っている: {legacy}"
+
+
+# ── 4. marketplace description は plugin.json と一致している ───────
+
+
+def test_marketplace_descriptions_match_plugin_json():
+    plugin = json.loads(_read("plugins/devkit/.claude-plugin/plugin.json"))
+    expected = plugin["description"]
+    market = json.loads(_read(".claude-plugin/marketplace.json"))
+    assert market["plugins"][0]["description"] == expected, "ルート marketplace の description が不一致"
+    assert not (REPO_ROOT / "plugins/devkit/.claude-plugin/marketplace.json").exists(), (
+        "重複 marketplace manifest が残っている"
+    )
+
+
+# ── 5. pyproject の pythonpath は存在するディレクトリだけを指す ─────
+
+
+def test_pyproject_pythonpath_entries_exist():
+    text = _read("plugins/devkit/pyproject.toml")
+    match = re.search(r"^pythonpath\s*=\s*\[(.*?)\]", text, re.MULTILINE)
+    assert match, "pyproject.toml に pythonpath がない"
+    entries = re.findall(r'"([^"]+)"', match.group(1))
+    for entry in entries:
+        assert (REPO_ROOT / "plugins" / "devkit" / entry).is_dir(), f"pythonpath が不存在: {entry}"
+
+
+# ── 6. skill frontmatter name はディレクトリ名と一致する ─────────────
+
+
+def test_skill_frontmatter_name_matches_directory():
+    skills_dir = REPO_ROOT / "plugins" / "devkit" / "skills"
+    for skill_path in sorted(skills_dir.glob("*/SKILL.md")):
+        text = skill_path.read_text(encoding="utf-8")
+        match = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+        assert match, f"{skill_path} に frontmatter がない"
+        name_match = re.search(r'^name:\s*"([^"]+)"\s*$', match.group(1), re.MULTILINE)
+        assert name_match, f"{skill_path} に name がない"
+        assert name_match.group(1) == skill_path.parent.name, f"{skill_path} の name とディレクトリ名が不一致"

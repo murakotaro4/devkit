@@ -1,5 +1,0 @@
-{"type":"session.start","ts":"2026-01-30T05:26:01Z","state":"initialized","data":{"cc_session_id":"c5e3403d-a8a4-4c2a-a07d-838bfb1b4147"}}
-{"id":"event-000001","type":"session.start","ts":"2026-01-30T05:26:01Z","state":"initialized"}
-{"id":"event-000002","type":"tool.bash","ts":"2026-01-30T05:26:22Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/ 2>/dev/null || echo "Cache directory not found""}}
-{"id":"event-000003","type":"tool.bash","ts":"2026-01-30T05:27:32Z","state":"initialized","data":{"command":"rm -rf ~/.claude/plugins/cache/murakotaro4/devkit/0.2.5 && echo "Cache cleared successfully""}}
-{"id":"event-000004","type":"session.stop","ts":"2026-01-30T05:27:37Z","state":"stopped"}

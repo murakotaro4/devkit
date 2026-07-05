@@ -1,4 +1,0 @@
-{"type":"session.start","ts":"2026-02-03T14:14:16Z","state":"initialized","data":{"cc_session_id":"2d24f9da-2b31-47b1-89e9-6b74dfe1509c"}}
-{"id":"event-000001","type":"session.resume","ts":"2026-02-03T14:14:16Z","state":"initialized"}
-{"id":"event-000002","type":"tool.skill","ts":"2026-02-03T14:15:20Z","state":"initialized"}
-{"id":"event-000003","type":"session.stop","ts":"2026-02-03T14:16:43Z","state":"stopped"}

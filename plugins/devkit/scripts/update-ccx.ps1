@@ -14,9 +14,70 @@ $Script:NpmRepairAttempted = $false
 $Script:NpmUnavailableReported = $false
 $Script:CliOnly = $false
 $Script:DevKitOnly = $false
-$Script:RuntimeSelection = "all"
 
-. (Join-Path $PSScriptRoot "devkit-runtime-sync.ps1")
+function Import-DevKitLibForUpdate {
+  $libPath = Join-Path $PSScriptRoot "devkit-lib.ps1"
+  if (Test-Path -LiteralPath $libPath) {
+    $normalRoot = $null
+    $checkoutCandidate = Join-Path $PSScriptRoot "..\..\..\plugins\devkit\scripts\devkit-lib.ps1"
+    if (Test-Path -LiteralPath $checkoutCandidate) {
+      $normalRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
+    } elseif (Test-Path -LiteralPath (Join-Path $env:USERPROFILE "cursor\devkit\plugins\devkit\scripts\devkit-lib.ps1")) {
+      $normalRoot = Join-Path $env:USERPROFILE "cursor\devkit"
+    } else {
+      $stateFile = Join-Path (Join-Path $env:USERPROFILE ".codex\devkit") "source-root.txt"
+      if (Test-Path -LiteralPath $stateFile) {
+        $normalRoot = (Get-Content -LiteralPath $stateFile -TotalCount 1 -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if ($null -ne $normalRoot) {
+          $normalRoot = $normalRoot.Trim()
+        }
+      }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($normalRoot)) {
+      $env:DEVKIT_SOURCE_ROOT = $normalRoot
+    }
+    . $libPath
+    return
+  }
+
+  $repoCandidates = New-Object System.Collections.Generic.List[string]
+  $checkoutCandidate = Join-Path $PSScriptRoot "..\..\..\plugins\devkit\scripts\devkit-lib.ps1"
+  if (Test-Path -LiteralPath $checkoutCandidate) {
+    $repoCandidates.Add([IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))) | Out-Null
+  }
+  $repoCandidates.Add((Join-Path $env:USERPROFILE "cursor\devkit")) | Out-Null
+
+  $stateFile = Join-Path (Join-Path $env:USERPROFILE ".codex\devkit") "source-root.txt"
+  if (Test-Path -LiteralPath $stateFile) {
+    $repoRoot = (Get-Content -LiteralPath $stateFile -TotalCount 1 -ErrorAction SilentlyContinue | Select-Object -First 1)
+    if ($null -ne $repoRoot) {
+      $repoRoot = $repoRoot.Trim()
+      if (-not [string]::IsNullOrWhiteSpace($repoRoot)) {
+        $repoCandidates.Add($repoRoot) | Out-Null
+      }
+    }
+  }
+
+  foreach ($repoRoot in $repoCandidates) {
+    if ([string]::IsNullOrWhiteSpace($repoRoot)) {
+      continue
+    }
+    $repoLib = Join-Path $repoRoot "plugins\devkit\scripts\devkit-lib.ps1"
+    if (Test-Path -LiteralPath $repoLib) {
+      # v5 -> v6 one-time rebootstrap: old installed updaters do not know devkit-lib.ps1.
+      $codexBin = Join-Path (Join-Path $env:USERPROFILE ".codex") "bin"
+      New-Item -ItemType Directory -Path $codexBin -Force | Out-Null
+      Copy-Item -LiteralPath $repoLib -Destination (Join-Path $codexBin "devkit-lib.ps1") -Force
+      $env:DEVKIT_SOURCE_ROOT = $repoRoot
+      . (Join-Path $codexBin "devkit-lib.ps1")
+      return
+    }
+  }
+
+  throw "MISSING_SOURCE_FILE: $libPath"
+}
+
+Import-DevKitLibForUpdate
 
 function Add-ResultError([string]$Message) {
   if (-not $Script:Errors.Contains($Message)) {
@@ -712,24 +773,10 @@ function Detect-CodexInstall {
   return [pscustomobject]@{ Method = "external"; Source = $source; Candidates = $candidates }
 }
 
-function Detect-OpencodeInstall {
-  $source = Get-CommandSource "opencode"
-  if ([string]::IsNullOrWhiteSpace($source)) {
-    return [pscustomobject]@{ Method = "not_found"; Source = $null }
-  }
-
-  if (Test-PathContains -Path $source -Fragments @("\node_modules\", "\.npm\", "\.npm-global\", "\appdata\roaming\npm\", "\appdata\roaming\fnm\", "\appdata\local\fnm_multishells\")) {
-    return [pscustomobject]@{ Method = "npm"; Source = $source }
-  }
-
-  return [pscustomobject]@{ Method = "external"; Source = $source }
-}
-
 function Show-Versions {
   Write-Host "Environment: windows"
   Write-Host ("Claude Code: {0}" -f (Get-VersionFromCommand "claude"))
   Write-Host ("Codex CLI:   {0}" -f (Get-VersionFromCommand "codex"))
-  Write-Host ("opencode:    {0}" -f (Get-VersionFromCommand "opencode"))
 }
 
 function Section-Prerequisites {
@@ -974,35 +1021,6 @@ function Ensure-Codex {
   }
 }
 
-function Ensure-Opencode {
-  if (Test-CommandAvailable "opencode") {
-    Write-Host ("OK: opencode already installed ({0})" -f (Get-VersionFromCommand "opencode"))
-    return
-  }
-
-  $npmRuntime = Get-ReadyNpmRuntime -AttemptRepair -ReportError
-  $npmCommand = $npmRuntime.NpmCommand
-  if (-not $npmRuntime.NpmReady) {
-    return
-  }
-
-  Write-Host -NoNewline "Installing opencode... "
-  $result = Invoke-Tool -Command $npmCommand -Arguments @("install", "-g", "opencode-ai")
-  if ($result.ExitCode -ne 0) {
-    Write-Host "FAILED"
-    Add-ResultError ("opencode: npm install failed (exit code {0})" -f $result.ExitCode)
-    return
-  }
-
-  Refresh-FnmEnvironment
-  if (Test-CommandAvailable "opencode") {
-    Write-Host "OK"
-  } else {
-    Write-Host "FAILED"
-    Add-ResultError "opencode: install completed but opencode is still not on PATH."
-  }
-}
-
 function Section-Setup {
   Write-Host ""
   Write-Host "=== [Setup] ==="
@@ -1010,7 +1028,6 @@ function Section-Setup {
   Ensure-NodeJs
   Ensure-Claude
   Ensure-Codex
-  Ensure-Opencode
 }
 
 function Update-Claude([string]$Method) {
@@ -1084,54 +1101,12 @@ function Update-Codex([string]$Method) {
   }
 }
 
-function Update-Opencode([string]$Method) {
-  Write-Host -NoNewline ("Updating opencode ({0})... " -f $Method)
-
-  switch ($Method) {
-    "npm" {
-      $npmRuntime = Get-ReadyNpmRuntime -AttemptRepair -ReportError
-      if (-not $npmRuntime.NpmReady) {
-        Write-Host "SKIPPED"
-        return
-      }
-
-      $npmCommand = $npmRuntime.NpmCommand
-      $result = Invoke-Tool -Command $npmCommand -Arguments @("install", "-g", "opencode-ai") -CaptureOutput
-      if ($result.ExitCode -eq 0) {
-        Refresh-FnmEnvironment
-        Write-Host "OK"
-        return
-      }
-
-      $outputText = ($result.Output -join "`n")
-      if ($outputText -match "Could not find package") {
-        $reinstall = Invoke-Tool -Command $npmCommand -Arguments @("install", "-g", "opencode-ai")
-        if ($reinstall.ExitCode -eq 0) {
-          Refresh-FnmEnvironment
-          Write-Host "OK (reinstalled)"
-        } else {
-          Write-Host "FAILED"
-          Add-ResultError ("opencode: reinstall failed (exit code {0})" -f $reinstall.ExitCode)
-        }
-      } else {
-        Write-Host "FAILED"
-        Add-ResultError ("opencode: npm install failed (exit code {0})" -f $result.ExitCode)
-      }
-    }
-    "external" {
-      Write-Host "SKIPPED"
-      Add-ResultWarning "opencode: resolved command is an external installation. update-devkit only updates npm-based installs."
-    }
-  }
-}
-
 function Section-Update {
   Write-Host ""
   Write-Host "=== [Update] ==="
 
   $claudeInfo = Detect-ClaudeInstall
   $codexInfo = Detect-CodexInstall
-  $opencodeInfo = Detect-OpencodeInstall
 
   if ($codexInfo.Candidates.Count -gt 1) {
     $warning = Get-CodexDuplicateWarning -Candidates $codexInfo.Candidates
@@ -1142,7 +1117,6 @@ function Section-Update {
 
   $claudeMethod = $claudeInfo.Method
   $codexMethod = $codexInfo.Method
-  $opencodeMethod = $opencodeInfo.Method
 
   if ($claudeMethod -eq "not_found") {
     Write-Host "WARN: Claude Code not installed, skipping update"
@@ -1152,79 +1126,285 @@ function Section-Update {
     Write-Host "WARN: Codex CLI not installed, skipping update"
     $codexMethod = "skip"
   }
-  if ($opencodeMethod -eq "not_found") {
-    Write-Host "WARN: opencode not installed, skipping update"
-    $opencodeMethod = "skip"
-  }
 
-  Write-Host ("[Before] claude: {0} ({1}) / codex: {2} ({3}) / opencode: {4} ({5})" -f `
+  Write-Host ("[Before] claude: {0} ({1}) / codex: {2} ({3})" -f `
     (Get-VersionFromCommand "claude"), $claudeMethod, `
-    (Get-VersionFromCommand "codex"), $codexMethod, `
-    (Get-VersionFromCommand "opencode"), $opencodeMethod)
+    (Get-VersionFromCommand "codex"), $codexMethod)
 
-  $updateClaude = $Script:RuntimeSelection -eq "all"
-  $updateCodex = $Script:RuntimeSelection -in @("all", "codex")
-  $updateOpencode = $Script:RuntimeSelection -in @("all", "opencode")
-
-  if ($claudeMethod -ne "skip" -and $updateClaude) {
+  if ($claudeMethod -ne "skip") {
     Update-Claude -Method $claudeMethod
   }
-  if ($codexMethod -ne "skip" -and $updateCodex) {
+  if ($codexMethod -ne "skip") {
     Update-Codex -Method $codexMethod
   }
-  if ($opencodeMethod -ne "skip" -and $updateOpencode) {
-    Update-Opencode -Method $opencodeMethod
-  }
 
-  Write-Host ("[After]  claude: {0} / codex: {1} / opencode: {2}" -f `
+  Write-Host ("[After]  claude: {0} / codex: {1}" -f `
     (Get-VersionFromCommand "claude"), `
-    (Get-VersionFromCommand "codex"), `
-    (Get-VersionFromCommand "opencode"))
+    (Get-VersionFromCommand "codex"))
 }
 
-function Section-DevKitSync {
+function Get-DevKitTomlValue([string]$Line, [string]$Key) {
+  $pattern = '^\s*' + [regex]::Escape($Key) + '\s*=\s*(?<value>.+?)\s*(?:#.*)?$'
+  if ($Line -notmatch $pattern) {
+    return $null
+  }
+
+  $value = $Matches.value.Trim()
+  if (
+    ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+    ($value.StartsWith("'") -and $value.EndsWith("'"))
+  ) {
+    return $value.Substring(1, $value.Length - 2)
+  }
+
+  return $value
+}
+
+function Get-DevKitCodexMarketplaceState([string]$ConfigPath) {
+  $exists = $false
+  $sourceType = $null
+  $source = $null
+  $inSection = $false
+
+  if (Test-Path -LiteralPath $ConfigPath) {
+    foreach ($rawLine in (Get-Content -LiteralPath $ConfigPath -Encoding UTF8)) {
+      $trimmed = $rawLine.Trim()
+      if ($trimmed -match '^\[(?<section>[^\]]+)\]\s*(?:#.*)?$') {
+        $section = $Matches.section
+        $inSection = ($section -eq "marketplaces.murakotaro4")
+        if ($inSection) {
+          $exists = $true
+        }
+        continue
+      }
+
+      if (-not $inSection) {
+        continue
+      }
+
+      $parsedSourceType = Get-DevKitTomlValue -Line $rawLine -Key "source_type"
+      if ($null -ne $parsedSourceType) {
+        $sourceType = $parsedSourceType
+        continue
+      }
+
+      $parsedSource = Get-DevKitTomlValue -Line $rawLine -Key "source"
+      if ($null -ne $parsedSource) {
+        $source = $parsedSource
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    Exists = $exists
+    SourceType = $sourceType
+    Source = $source
+  }
+}
+
+function Test-DevKitCodexMarketplaceExpected([pscustomobject]$State) {
+  if (-not $State.Exists) {
+    return $false
+  }
+
+  if ($State.SourceType -and $State.SourceType.ToString().ToLowerInvariant() -eq "local") {
+    return $false
+  }
+
+  if ([string]::IsNullOrWhiteSpace($State.Source)) {
+    return $false
+  }
+
+  return $State.Source.ToString().ToLowerInvariant().Contains("murakotaro4/devkit")
+}
+
+function Test-DevKitCodexPluginIdentity([object]$Plugin) {
+  if ($null -eq $Plugin) {
+    return $false
+  }
+
+  $identityValues = New-Object System.Collections.Generic.List[string]
+  foreach ($propertyName in @("id", "name", "plugin", "plugin_id", "qualified_name", "key")) {
+    $property = $Plugin.PSObject.Properties[$propertyName]
+    if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+      $identityValues.Add(([string]$property.Value).ToLowerInvariant()) | Out-Null
+    }
+  }
+
+  $marketplaceValues = New-Object System.Collections.Generic.List[string]
+  foreach ($propertyName in @("marketplace", "marketplace_id", "source", "source_id", "namespace", "owner")) {
+    $property = $Plugin.PSObject.Properties[$propertyName]
+    if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+      $marketplaceValues.Add(([string]$property.Value).ToLowerInvariant()) | Out-Null
+    }
+  }
+
+  $identityText = $identityValues.ToArray() -join " "
+  $marketplaceText = $marketplaceValues.ToArray() -join " "
+  $hasDevKit = ($identityValues -contains "devkit") -or $identityText.Contains("devkit@murakotaro4")
+  $hasMarketplace = $identityText.Contains("@murakotaro4") -or $marketplaceText.Contains("murakotaro4")
+  return ($hasDevKit -and $hasMarketplace)
+}
+
+function Test-DevKitCodexPluginObjectEnabled([object]$Plugin) {
+  $property = $Plugin.PSObject.Properties["enabled"]
+  if ($null -eq $property) {
+    return $true
+  }
+
+  if ($property.Value -is [bool]) {
+    return [bool]$property.Value
+  }
+
+  return ([string]$property.Value).ToLowerInvariant() -eq "true"
+}
+
+function Get-DevKitCodexInstalledPluginCandidates([object]$Json) {
+  if ($null -eq $Json) {
+    return @()
+  }
+
+  if ($Json -is [array]) {
+    return @($Json)
+  }
+
+  foreach ($propertyName in @("installed", "installed_plugins", "enabled", "plugins")) {
+    $property = $Json.PSObject.Properties[$propertyName]
+    if ($null -ne $property -and $null -ne $property.Value) {
+      return @($property.Value)
+    }
+  }
+
+  return @()
+}
+
+function Convert-DevKitJsonFromToolOutput([string[]]$Output) {
+  $lines = @($Output)
+  if ($lines.Count -eq 0) {
+    return $null
+  }
+
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    $candidate = ($lines[$i..($lines.Count - 1)] -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+      continue
+    }
+
+    try {
+      return ($candidate | ConvertFrom-Json)
+    } catch {
+      continue
+    }
+  }
+
+  return $null
+}
+
+function Test-DevKitCodexPluginEnabled {
+  $result = Invoke-Tool -Command "codex" -Arguments @("plugin", "list", "--json") -CaptureOutput
+  if ($result.ExitCode -ne 0) {
+    return $false
+  }
+
+  $json = Convert-DevKitJsonFromToolOutput -Output $result.Output
+  if ($null -eq $json) {
+    return $false
+  }
+
+  foreach ($plugin in (Get-DevKitCodexInstalledPluginCandidates -Json $json)) {
+    if ((Test-DevKitCodexPluginIdentity -Plugin $plugin) -and (Test-DevKitCodexPluginObjectEnabled -Plugin $plugin)) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Invoke-DevKitCodexCommand([string[]]$Arguments, [string]$FailureMessage) {
+  $result = Invoke-Tool -Command "codex" -Arguments $Arguments -CaptureOutput
+  if ($result.ExitCode -eq 0) {
+    return $true
+  }
+
+  $detail = ($result.Output -join "`n").Trim()
+  if ([string]::IsNullOrWhiteSpace($detail)) {
+    Add-ResultError ("{0} (exit code {1})" -f $FailureMessage, $result.ExitCode)
+  } else {
+    Add-ResultError ("{0} (exit code {1}): {2}" -f $FailureMessage, $result.ExitCode, $detail)
+  }
+  return $false
+}
+
+function Update-DevKitCodexPlugin {
   Write-Host ""
-  Write-Host "=== [DevKit Sync] ==="
+  Write-Host "=== [Codex Plugin] ==="
+
+  if (-not (Test-CommandAvailable "codex")) {
+    Write-Host "SKIPPED: Codex CLI not found"
+    return
+  }
+
+  $configPath = Join-Path $env:USERPROFILE ".codex\config.toml"
+  $state = Get-DevKitCodexMarketplaceState -ConfigPath $configPath
+  if (-not (Test-DevKitCodexMarketplaceExpected -State $state)) {
+    if ($state.Exists) {
+      Write-Host "Re-registering Codex plugin marketplace murakotaro4..."
+      if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "marketplace", "remove", "murakotaro4") -FailureMessage "Codex plugin marketplace remove failed")) {
+        return
+      }
+    } else {
+      Write-Host "Registering Codex plugin marketplace murakotaro4..."
+    }
+
+    if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "marketplace", "add", "murakotaro4/devkit") -FailureMessage "Codex plugin marketplace add failed")) {
+      return
+    }
+  } else {
+    Write-Host "OK: Codex plugin marketplace murakotaro4 already registered"
+  }
+
+  Write-Host "Upgrading Codex plugin marketplace murakotaro4..."
+  if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "marketplace", "upgrade", "murakotaro4") -FailureMessage "Codex plugin marketplace upgrade failed")) {
+    return
+  }
+  Write-Host "OK: Codex plugin marketplace upgraded"
+
+  Write-Host "Installing devkit plugin for Codex..."
+  if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "add", "devkit@murakotaro4") -FailureMessage "Codex plugin add failed")) {
+    return
+  }
+}
+
+function Section-DevKit {
+  Write-Host ""
+  Write-Host "=== [DevKit] ==="
 
   $logger = {
     param($Message)
     Write-Host ("INFO: {0}" -f $Message)
   }
 
-  if ($Script:RuntimeSelection -in @("all", "codex")) {
-    try {
-      $codexResult = Sync-DevKitCodexRuntime -UserHome $env:USERPROFILE -Logger $logger -RefreshConfig
-      Write-Host ("OK: Codex runtime synced from {0}" -f $codexResult.SourceRoot)
-      if ($codexResult.ConfigResult.BootstrappedLocalOverlay) {
-        Add-ResultWarning "Codex config.local.toml was bootstrapped from the existing config."
-      }
-    } catch {
-      Write-Host "FAILED: Codex runtime sync"
-      Add-ResultError ("Codex runtime sync failed: {0}" -f $_.Exception.Message)
+  try {
+    $repoRoot = Get-DevKitRepoRoot -UserHome $env:USERPROFILE -Logger $logger
+    $managed = Install-DevKitManagedFiles -RepoRoot $repoRoot -UserHome $env:USERPROFILE
+    Remove-DevKitLegacyAssets -UserHome $env:USERPROFILE -SourceRoot $repoRoot -Logger $logger
+
+    . (Join-Path $managed.CodexBin "devkit-codex-config.ps1")
+    $configResult = Install-DevKitCodexConfig -UserHome $env:USERPROFILE -OsName "windows"
+    if ($configResult.BootstrappedLocalOverlay) {
+      Add-ResultWarning "Codex config.local.toml was bootstrapped from the existing config."
     }
+    if ($configResult.BackupPath) {
+      Write-Host ("Codex config backup saved to: {0}" -f $configResult.BackupPath)
+    }
+    Write-Host ("OK: DevKit managed files refreshed from {0}" -f $repoRoot)
+  } catch {
+    Write-Host "FAILED: DevKit refresh"
+    Add-ResultError ("DevKit refresh failed: {0}" -f $_.Exception.Message)
+    return
   }
 
-  if ($Script:RuntimeSelection -in @("all", "opencode")) {
-    try {
-      $opencodeResult = Sync-DevKitOpenCodeRuntime -UserHome $env:USERPROFILE -Logger $logger
-      Write-Host ("OK: OpenCode runtime synced from {0}" -f $opencodeResult.SourceRoot)
-    } catch {
-      Write-Host "FAILED: OpenCode runtime sync"
-      Add-ResultError ("OpenCode runtime sync failed: {0}" -f $_.Exception.Message)
-    }
-  }
-
-  # marketplace repo の hook を設定
-  $marketplaceRoot = Join-Path $env:USERPROFILE ".claude\plugins\marketplaces\murakotaro4"
-  if (Test-Path (Join-Path $marketplaceRoot ".git") -PathType Container) {
-    try {
-      Ensure-DevKitHooks -GitRoot $marketplaceRoot
-      Write-Host "✓ Marketplace hooks configured"
-    } catch {
-      Write-Host "FAILED: Marketplace hooks setup"
-      Add-ResultError ("Marketplace hooks setup failed: {0}" -f $_.Exception.Message)
-    }
-  }
+  Update-DevKitCodexPlugin
 }
 
 function Parse-CliArgs {
@@ -1249,18 +1429,6 @@ function Parse-CliArgs {
       "--devkit-only" {
         $Script:DevKitOnly = $true
       }
-      "--runtime" {
-        if ($i + 1 -ge $CliArgs.Count) {
-          throw "INVALID_ARGS: --runtime requires codex, opencode, or all"
-        }
-
-        $i++
-        $value = $CliArgs[$i].ToLowerInvariant()
-        if ($value -notin @("codex", "opencode", "all")) {
-          throw "INVALID_ARGS: --runtime requires codex, opencode, or all"
-        }
-        $Script:RuntimeSelection = $value
-      }
       default {
         throw "INVALID_ARGS: unknown argument '$arg'"
       }
@@ -1276,13 +1444,11 @@ function Parse-CliArgs {
 
 function Show-Usage {
   Write-Host "Usage:"
-  Write-Host "  update-devkit.cmd                    # preferred name: update tools and DevKit runtimes"
+  Write-Host "  update-devkit.cmd                    # preferred name: update tools and DevKit"
   Write-Host "  update-ccx.cmd                       # compatibility alias"
   Write-Host "  update-devkit.cmd --version          # show current versions"
-  Write-Host "  update-devkit.cmd --cli-only         # update Claude/Codex/OpenCode only"
-  Write-Host "  update-devkit.cmd --devkit-only      # sync DevKit-managed Codex/OpenCode assets only"
-  Write-Host "  update-devkit.cmd --runtime codex    # update only Codex CLI + Codex-managed assets"
-  Write-Host "  update-devkit.cmd --runtime opencode # update only OpenCode CLI + OpenCode-managed assets"
+  Write-Host "  update-devkit.cmd --cli-only         # update Claude/Codex only"
+  Write-Host "  update-devkit.cmd --devkit-only      # refresh DevKit managed files and Codex plugin only"
 }
 
 function Main {
@@ -1299,7 +1465,7 @@ function Main {
     exit 0
   }
 
-  Write-Host "=== Claude Code, Codex CLI, opencode & DevKit ==="
+  Write-Host "=== Claude Code, Codex CLI & DevKit ==="
   Write-Host "Environment: windows"
 
   if (-not $Script:DevKitOnly) {
@@ -1309,7 +1475,7 @@ function Main {
   }
 
   if (-not $Script:CliOnly) {
-    Section-DevKitSync
+    Section-DevKit
   }
 
   if ($Script:Warnings.Count -gt 0) {

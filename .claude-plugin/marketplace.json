@@ -8,7 +8,7 @@
     {
       "name": "devkit",
       "source": "./plugins/devkit",
-      "description": "Personal development toolkit with deep-dive and implementation delegation (/dig) and ChatGPT Pro integration skills",
+      "description": "Deep-dive and implementation delegation (/dig) and skill improvement, dual-harness (Claude Code / Codex).",
       "strict": true
     }
   ]

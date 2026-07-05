@@ -1,7 +1,0 @@
-{"type":"session.start","ts":"2026-01-29T17:04:05Z","state":"initialized","data":{"cc_session_id":"24fae2ad-c01b-4b5f-baa4-845ca1a6ed4f"}}
-{"id":"event-000001","type":"session.start","ts":"2026-01-29T17:04:05Z","state":"initialized"}
-{"id":"event-000002","type":"tool.bash","ts":"2026-01-29T17:05:11Z","state":"initialized","data":{"command":"ls -la ~/.claude/plugins/cache/murakotaro4/devkit/ 2>/dev/null || echo "No devkit cache found""}}
-{"id":"event-000003","type":"tool.bash","ts":"2026-01-29T17:05:19Z","state":"initialized","data":{"command":"find ~/.claude/plugins/cache/murakotaro4/devkit/0.2.2 -type f -name "*.md" -o -name "*.json" 2>/dev/null | head -20"}}
-{"id":"event-000004","type":"tool.bash","ts":"2026-01-29T17:05:19Z","state":"initialized","data":{"command":"ls -laR ~/.claude/plugins/cache/murakotaro4/devkit/0.2.2/"}}
-{"id":"event-000005","type":"tool.bash","ts":"2026-01-29T17:05:26Z","state":"initialized","data":{"command":"ls ~/.claude/plugins/cache/claude-code-harness-marketplace/claude-code-harness/2.14.9/skills/ | head -10"}}
-{"id":"event-000006","type":"session.stop","ts":"2026-01-29T17:06:03Z","state":"stopped"}

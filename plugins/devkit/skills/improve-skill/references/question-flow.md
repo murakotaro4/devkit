@@ -1,12 +1,12 @@
 # Improve Skill Question Flow
 
-`improve-skill` のデフォルト動作は `auto-retro`（セッション振り返り自動修正）。
-`--refresh` または `--create` を明示した場合のみ、以下の質問フローに入る。
+`improve-skill` は手動起動専用。引数なしでは `retro`（セッション振り返り修正）を実行する。
+他スキルからの自動起動契約は存在しない。
 
 ## Step 1: モード確定（--refresh / --create 時のみ）
 
 `--refresh` または `--create` で呼び出された場合、対応するモードで進める。
-引数なし（デフォルト）の場合はこのフローに入らず、auto-retro が実行される。
+引数なしの場合はこのフローに入らず、`retro` が実行される。
 
 ## Step 2: 共通深掘り（必須）
 

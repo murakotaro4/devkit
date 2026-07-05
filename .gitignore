@@ -1,0 +1,11 @@
+# Claude Code local runtime state (machine-local, not shared)
+.claude/logs/
+.claude/memory/
+.claude/plans/
+.claude/sessions/
+.claude/state/
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/

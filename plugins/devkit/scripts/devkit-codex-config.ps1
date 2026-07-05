@@ -166,6 +166,54 @@ function Ensure-DevKitLocalOverlay([string]$TargetPath, [string]$LocalOverlayPat
   return $true
 }
 
+function Test-DevKitCodexRuntimeSectionName([string]$Section) {
+  return (
+    $Section -match '^marketplaces\.[A-Za-z0-9_.-]+$' -or
+    $Section -match '^plugins\.(?:"[^"]+@[^"]+"|''[^'']+@[^'']+'')$'
+  )
+}
+
+function Get-DevKitCodexRuntimeSections([string]$ConfigPath) {
+  if ([string]::IsNullOrWhiteSpace($ConfigPath) -or -not (Test-Path -LiteralPath $ConfigPath)) {
+    return ""
+  }
+
+  $sections = New-Object System.Collections.Generic.List[string]
+  $currentLines = New-Object System.Collections.Generic.List[string]
+  $inRuntimeSection = $false
+
+  foreach ($rawLine in (Get-Content -LiteralPath $ConfigPath -Encoding UTF8)) {
+    $trimmed = $rawLine.Trim()
+    if ($trimmed -match '^\[(?<section>[^\]]+)\]\s*(?:#.*)?$') {
+      if ($inRuntimeSection -and $currentLines.Count -gt 0) {
+        $sections.Add((($currentLines.ToArray() -join "`n").Trim())) | Out-Null
+      }
+
+      $currentLines.Clear()
+      $section = $matches.section
+      $inRuntimeSection = Test-DevKitCodexRuntimeSectionName -Section $section
+      if ($inRuntimeSection) {
+        $currentLines.Add($rawLine) | Out-Null
+      }
+      continue
+    }
+
+    if ($inRuntimeSection) {
+      $currentLines.Add($rawLine) | Out-Null
+    }
+  }
+
+  if ($inRuntimeSection -and $currentLines.Count -gt 0) {
+    $sections.Add((($currentLines.ToArray() -join "`n").Trim())) | Out-Null
+  }
+
+  if ($sections.Count -eq 0) {
+    return ""
+  }
+
+  return (($sections.ToArray() -join "`n`n") + "`n")
+}
+
 function Join-DevKitTomlFragments([string[]]$Fragments) {
   $normalized = @()
   foreach ($fragment in $Fragments) {
@@ -182,17 +230,18 @@ function Join-DevKitTomlFragments([string[]]$Fragments) {
   return (($normalized -join "`n`n") + "`n")
 }
 
-function Get-DevKitCodexConfigContent([string]$SharedTemplatePath, [string]$OsTemplatePath, [string]$LocalOverlayPath) {
+function Get-DevKitCodexConfigContent([string]$SharedTemplatePath, [string]$OsTemplatePath, [string]$LocalOverlayPath, [string]$ExistingConfigPath = $null) {
   $sharedContent = Read-DevKitTextFile -Path $SharedTemplatePath
   $osContent = Read-DevKitTextFile -Path $OsTemplatePath
   $overlayContent = ""
+  $runtimeSections = Get-DevKitCodexRuntimeSections -ConfigPath $ExistingConfigPath
 
   if (Test-Path -LiteralPath $LocalOverlayPath) {
     $overlayContent = Read-DevKitTextFile -Path $LocalOverlayPath
     Assert-ValidDevKitLocalOverlay -OverlayPath $LocalOverlayPath -Content $overlayContent
   }
 
-  return Join-DevKitTomlFragments -Fragments @($sharedContent, $osContent, $overlayContent)
+  return Join-DevKitTomlFragments -Fragments @($sharedContent, $osContent, $overlayContent, $runtimeSections)
 }
 
 function Backup-DevKitCodexConfig([string]$TargetPath, [string]$BackupDir) {
@@ -228,7 +277,8 @@ function Install-DevKitCodexConfig([string]$UserHome, [string]$OsName = "windows
   $content = Get-DevKitCodexConfigContent `
     -SharedTemplatePath $paths.SharedTemplatePath `
     -OsTemplatePath $osTemplatePath `
-    -LocalOverlayPath $paths.LocalOverlayPath
+    -LocalOverlayPath $paths.LocalOverlayPath `
+    -ExistingConfigPath $paths.TargetPath
 
   $backupPath = Backup-DevKitCodexConfig -TargetPath $paths.TargetPath -BackupDir $paths.BackupDir
   $tempPath = Join-Path $paths.CodexRoot ("config.toml.tmp." + [guid]::NewGuid().ToString("N"))

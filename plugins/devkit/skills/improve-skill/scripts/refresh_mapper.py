@@ -115,12 +115,14 @@ def build_checklist(
             "利用条件が分かる description に更新する",
         )
 
-    if not includes_any(skill_text, ["askuserquestion", "request_user_input"]):
+    if not includes_any(
+        skill_text, ["選択肢付き質問", "askuserquestion", "request_user_input"]
+    ):
         add_item(
             mandatory,
             skill_md_rel,
             "質問フローがないと mode と対象を確定できない",
-            "AskUserQuestionTool を使う手順を追加する",
+            "選択肢付き質問の手順を追加する",
         )
 
     if not includes_any(
@@ -176,8 +178,10 @@ def build_checklist(
     session_lines = "\n".join(
         session.get("requirements", []) + session.get("constraints", [])
     )
-    if includes_any(session_lines, ["質問", "askuserquestion"]) and not includes_any(
-        skill_text, ["askuserquestion", "request_user_input"]
+    if includes_any(
+        session_lines, ["質問", "選択肢付き質問", "askuserquestion"]
+    ) and not includes_any(
+        skill_text, ["選択肢付き質問", "askuserquestion", "request_user_input"]
     ):
         add_item(
             mandatory,
