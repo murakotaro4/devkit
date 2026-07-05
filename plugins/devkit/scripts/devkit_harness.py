@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 import shutil
 import subprocess
 import sys
@@ -15,7 +13,6 @@ from tempfile import TemporaryDirectory
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
 SECRETS_BASELINE = SCRIPT_DIR.parent / ".secrets.baseline"
-VERSION_BASE_REF = os.environ.get("DEVKIT_VERSION_BASE_REF", "origin/main")
 WORKTREE_SNAPSHOT_PREFIX = ".devkit-worktree"
 
 
@@ -171,146 +168,6 @@ def run_detect_secrets_check() -> int:
     return 0
 
 
-def git_output(*args: str, check: bool = True) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=REPO_ROOT,
-        check=check,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
-
-
-def changed_files_for_version_gate() -> dict[str, set[str]]:
-    changed: set[str] = set()
-    groups: dict[str, set[str]] = {"committed": set(), "staged": set(), "worktree": set(), "untracked": set()}
-
-    merge_base = git_output("merge-base", "HEAD", VERSION_BASE_REF, check=False)
-    if merge_base:
-        groups["committed"].update(
-            line.strip()
-            for line in git_output("diff", "--name-only", f"{merge_base}...HEAD").splitlines()
-            if line.strip()
-        )
-
-    groups["worktree"].update(line.strip() for line in git_output("diff", "--name-only").splitlines() if line.strip())
-    groups["staged"].update(line.strip() for line in git_output("diff", "--cached", "--name-only").splitlines() if line.strip())
-    groups["untracked"].update(
-        line.strip() for line in git_output("ls-files", "--others", "--exclude-standard").splitlines() if line.strip()
-    )
-
-    for paths in groups.values():
-        changed.update(paths)
-    groups["all"] = changed
-    return groups
-
-
-def requires_version_gate(changed_files: set[str]) -> bool:
-    return any(
-        changed.startswith("plugins/devkit/") or changed.startswith(".claude-plugin/")
-        for changed in changed_files
-    )
-
-
-def parse_semver(version: str) -> tuple[int, int, int] | None:
-    match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$", version)
-    if not match:
-        return None
-    return tuple(int(match.group(index)) for index in range(1, 4))
-
-
-def plugin_version_from_text(raw: str, label: str) -> str:
-    data = json.loads(raw.lstrip("\ufeff"))
-    version = data.get("version")
-    if not isinstance(version, str) or not version.strip():
-        raise RuntimeError(f"version missing in {label}")
-    return version.strip()
-
-
-def plugin_version_from_git(refspec: str, label: str) -> str | None:
-    try:
-        raw = git_output("show", refspec)
-    except subprocess.CalledProcessError:
-        return None
-    return plugin_version_from_text(raw, label)
-
-
-def check_version_variant(label: str, version: str | None, base_version: str) -> dict[str, str] | None:
-    parsed_base = parse_semver(base_version)
-    parsed_version = parse_semver(version) if version else None
-    if not parsed_base or not parsed_version:
-        return {
-            "variant": label,
-            "reason": "plugin version must be semver",
-            "version": version or "",
-            "baseVersion": base_version,
-        }
-    if parsed_version <= parsed_base:
-        return {
-            "variant": label,
-            "reason": "plugin changes require a version bump",
-            "required": f">{base_version}",
-            "version": version,
-            "baseVersion": base_version,
-        }
-    return None
-
-
-def run_worktree_version_check() -> int:
-    changed = changed_files_for_version_gate()
-    if not requires_version_gate(changed["all"]):
-        return 0
-
-    plugin_rel = "plugins/devkit/.claude-plugin/plugin.json"
-    try:
-        base_raw = git_output("show", f"{VERSION_BASE_REF}:{plugin_rel}")
-    except subprocess.CalledProcessError:
-        return 0
-    base_version = plugin_version_from_text(base_raw, f"{plugin_rel} ({VERSION_BASE_REF})")
-
-    failures: list[dict[str, str]] = []
-    if requires_version_gate(changed["committed"]):
-        failures.extend(
-            failure
-            for failure in [check_version_variant("HEAD", plugin_version_from_git(f"HEAD:{plugin_rel}", plugin_rel), base_version)]
-            if failure
-        )
-    worktree_version = plugin_version_from_text((REPO_ROOT / plugin_rel).read_text(encoding="utf-8"), plugin_rel)
-    if requires_version_gate(changed["staged"]):
-        failures.extend(
-            failure
-            for failure in [check_version_variant("index", plugin_version_from_git(f":{plugin_rel}", plugin_rel), base_version)]
-            if failure
-        )
-    if requires_version_gate(changed["worktree"] | changed["untracked"]):
-        failures.extend(
-            failure
-            for failure in [check_version_variant("worktree", worktree_version, base_version)]
-            if failure
-        )
-
-    if plugin_rel in changed["worktree"] and check_version_variant("worktree", worktree_version, base_version) is None:
-        failures = [failure for failure in failures if failure.get("variant") != "index"]
-
-    if failures:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "reason": "plugin version gate failed",
-                    "baseRef": VERSION_BASE_REF,
-                    "failures": failures,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            file=sys.stderr,
-        )
-        return 2
-    return 0
-
-
 CHECKS_FAST: list[list[str]] = [
     [sys.executable, script("check_utf8_bom.py")],
     [sys.executable, script("check_skill_surface.py"), "--phase=B"],
@@ -341,9 +198,6 @@ def main() -> int:
         return run_detect_secrets_check()
     if args.command == "verify-fast":
         return run_steps(CHECKS_FAST)
-    version_code = run_worktree_version_check()
-    if version_code != 0:
-        return version_code
     return run_steps(CHECKS_FULL)
 
 

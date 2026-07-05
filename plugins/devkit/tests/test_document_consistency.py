@@ -115,3 +115,44 @@ def test_agents_codex_stdin_guard():
         if "codex -a never exec" in line and "< /dev/null" not in line
     ]
     assert not offenders, f"stdin 閉鎖(< /dev/null)がない codex コマンド行: {offenders}"
+
+
+# ── 8. Release Rules の正本は AGENTS.md、README は参照 ─────────────
+
+
+def test_release_rules_canonical_in_agents_md():
+    agents = _read("AGENTS.md")
+    readme = _read("README.md")
+    assert "この節が version 運用ルールの正本" in agents, "AGENTS.md に Release Rules の正本宣言がない"
+    assert "正本は `AGENTS.md` の「Release Rules」" in readme, "README が Release Rules の正本を参照していない"
+    for doc_name, text in (("AGENTS.md", agents), ("README.md", readme)):
+        assert "以下なら push を block" in text, (
+            f"{doc_name} の pre-push gate 文言が実装(compare_semver <= 0 で block)と不一致"
+        )
+
+
+# ── 9. スキル共通契約・採用基準の正本化と参照 ──────────────────────
+
+
+def test_shared_skill_contract_canonical_and_referenced():
+    agents = _read("AGENTS.md")
+    assert "## スキル共通契約" in agents, "AGENTS.md にスキル共通契約の節がない"
+    assert "## スキル採用基準" in agents, "AGENTS.md にスキル採用基準の節がない"
+
+    for skill_name in DISTRIBUTED_SKILLS:
+        text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
+        assert "スキル共通契約" in text, f"{skill_name} の SKILL.md が共通契約を参照していない"
+
+
+def test_no_hardcoded_codex_model_in_contracts():
+    # モデルは config 既定に従い、契約・ルールへ焼き込まない(dig の設計原則)。
+    documents = ["AGENTS.md"] + [
+        f"plugins/devkit/skills/{skill_name}/SKILL.md" for skill_name in DISTRIBUTED_SKILLS
+    ]
+    for relpath in documents:
+        text = _read(relpath)
+        offenders = [
+            line for line in text.splitlines()
+            if re.search(r"codex[^\n]*\s-m\s+\S+", line, re.IGNORECASE) or "gpt-5.3-codex-spark" in line
+        ]
+        assert not offenders, f"{relpath} に codex モデルの焼き込みがある: {offenders}"

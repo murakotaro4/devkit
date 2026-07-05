@@ -100,7 +100,7 @@ v7 の配布面を検査します。
 
 ### check_plugin_version_bump.py
 
-`plugins/devkit/**` または `.claude-plugin/**` に差分がある場合、`plugins/devkit/.claude-plugin/plugin.json` の version が `origin/main` より大きいことを検査します。
+`plugins/devkit/**` または `.claude-plugin/**` にコミット済み差分（`origin/main` との merge-base から `HEAD` まで）がある場合、HEAD の `plugins/devkit/.claude-plugin/plugin.json` の version が `origin/main` より大きいことを検査します。未コミットの worktree 差分は対象外です（pre-push 意味論。push されるのは HEAD のため）。
 
 ## Removed Runners
 

@@ -1,4 +1,5 @@
 # Claude Code local runtime state (machine-local, not shared)
+.claude-plugin/CLAUDE.md
 .claude/logs/
 .claude/memory/
 .claude/plans/

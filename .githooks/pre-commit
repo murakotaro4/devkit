@@ -5,7 +5,7 @@ cat >&2 <<'EOF'
 ERROR: devkit repo hooks are now managed by prek, not core.hooksPath=.githooks.
 
 Run:
-  cargo install prek
+  uv tool install prek
   git config --unset core.hooksPath
   prek install --hook-type pre-commit --hook-type pre-push
 EOF

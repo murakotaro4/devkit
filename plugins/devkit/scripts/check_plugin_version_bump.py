@@ -84,10 +84,15 @@ def requires_version_gate(changed_files: list[str]) -> bool:
 
 
 def read_head_version(plugin_json_rel: str) -> str:
-    abs_path = ROOT / plugin_json_rel
-    if not abs_path.exists():
-        raise RuntimeError(f"missing file: {plugin_json_rel}")
-    return parse_version(abs_path.read_text(encoding="utf-8"), f"{plugin_json_rel} (HEAD)")
+    # gate は merge_base...HEAD のコミット済み差分で発火するため、version も
+    # worktree ではなく push 対象の HEAD から読む(pre-push 意味論に一致させる)。
+    try:
+        raw = run_git("show", f"HEAD:{plugin_json_rel}")
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"cannot read {plugin_json_rel} from HEAD: {exc.stderr.strip()}"
+        ) from exc
+    return parse_version(raw, f"{plugin_json_rel} (HEAD)")
 
 
 def read_base_version(ref: str, plugin_json_rel: str) -> str:
