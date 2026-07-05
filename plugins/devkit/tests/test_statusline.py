@@ -109,7 +109,7 @@ def test_statusline_node_smoke_with_stdin_rates(tmp_path):
     result = subprocess.run(
         ["node", str(STATUSLINE)],
         input=json.dumps(fixture),
-        text=True,
+        text=True, encoding="utf-8",
         capture_output=True,
         env=env,
         cwd=REPO_ROOT,
@@ -135,7 +135,7 @@ def test_statusline_empty_or_broken_stdin_exits_zero(tmp_path, stdin):
     result = subprocess.run(
         ["node", str(STATUSLINE)],
         input=stdin,
-        text=True,
+        text=True, encoding="utf-8",
         capture_output=True,
         env=env,
         cwd=REPO_ROOT,
@@ -150,10 +150,10 @@ def test_statusline_empty_or_broken_stdin_exits_zero(tmp_path, stdin):
 def test_install_is_idempotent_and_writes_managed_command(tmp_path):
     env = _node_env(tmp_path)
 
-    first = subprocess.run(["node", str(INSTALL)], text=True, capture_output=True, env=env, check=False)
+    first = subprocess.run(["node", str(INSTALL)], text=True, encoding="utf-8", capture_output=True, env=env, check=False)
     settings_path = tmp_path / "home" / ".claude" / "settings.json"
     first_bytes = settings_path.read_bytes()
-    second = subprocess.run(["node", str(INSTALL)], text=True, capture_output=True, env=env, check=False)
+    second = subprocess.run(["node", str(INSTALL)], text=True, encoding="utf-8", capture_output=True, env=env, check=False)
     second_bytes = settings_path.read_bytes()
 
     assert first.returncode == 0
@@ -167,7 +167,7 @@ def test_install_is_idempotent_and_writes_managed_command(tmp_path):
     assert "\\" not in command
     copied = tmp_path / "home" / ".claude" / "devkit-statusline.js"
     assert copied.read_text(encoding="utf-8") == STATUSLINE.read_text(encoding="utf-8")
-    check = subprocess.run(["node", str(INSTALL), "--check"], text=True, capture_output=True, env=env, check=False)
+    check = subprocess.run(["node", str(INSTALL), "--check"], text=True, encoding="utf-8", capture_output=True, env=env, check=False)
     assert check.returncode == 0
     assert json.loads(check.stdout)["state"] == "managed"
 
@@ -176,7 +176,7 @@ def test_install_is_idempotent_and_writes_managed_command(tmp_path):
 def test_install_check_reports_state_without_changes(tmp_path):
     env = _node_env(tmp_path)
 
-    result = subprocess.run(["node", str(INSTALL), "--check"], text=True, capture_output=True, env=env, check=False)
+    result = subprocess.run(["node", str(INSTALL), "--check"], text=True, encoding="utf-8", capture_output=True, env=env, check=False)
 
     assert result.returncode == 0
     assert json.loads(result.stdout)["state"] == "not-installed"
@@ -197,8 +197,8 @@ def test_install_foreign_statusline_requires_force(tmp_path):
     )
     before = settings_path.read_text(encoding="utf-8")
 
-    check = subprocess.run(["node", str(INSTALL), "--check"], text=True, capture_output=True, env=env, check=False)
-    blocked = subprocess.run(["node", str(INSTALL)], text=True, capture_output=True, env=env, check=False)
+    check = subprocess.run(["node", str(INSTALL), "--check"], text=True, encoding="utf-8", capture_output=True, env=env, check=False)
+    blocked = subprocess.run(["node", str(INSTALL)], text=True, encoding="utf-8", capture_output=True, env=env, check=False)
 
     assert check.returncode == 0
     assert json.loads(check.stdout)["state"] == "foreign"
@@ -206,7 +206,7 @@ def test_install_foreign_statusline_requires_force(tmp_path):
     assert blocked.returncode == 3
     assert settings_path.read_text(encoding="utf-8") == before
     assert "devkit-statusline.js" in blocked.stderr
-    forced = subprocess.run(["node", str(INSTALL), "--force"], text=True, capture_output=True, env=env, check=False)
+    forced = subprocess.run(["node", str(INSTALL), "--force"], text=True, encoding="utf-8", capture_output=True, env=env, check=False)
     assert forced.returncode == 0
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     assert settings["theme"] == "dark"

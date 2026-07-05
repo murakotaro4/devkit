@@ -12,6 +12,13 @@ ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "plugins" / "devkit" / "scripts"
 
 
+def bash_path() -> str:
+    bash = shutil.which("bash")
+    if not bash:
+        raise AssertionError("bash が見つからない: PATH で bash を解決できません")
+    return str(Path(bash).resolve())
+
+
 def test_update_ccx_sh_bootstraps_missing_lib_from_persisted_source_root(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
@@ -25,11 +32,12 @@ def test_update_ccx_sh_bootstraps_missing_lib_from_persisted_source_root(tmp_pat
     env["HOME"] = str(home)
 
     result = subprocess.run(
-        ["bash", str(codex_bin / "update-ccx.sh"), "--version"],
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -49,11 +57,12 @@ def test_update_ccx_sh_bootstraps_missing_lib_from_default_checkout(tmp_path):
     env["HOME"] = str(home)
 
     result = subprocess.run(
-        ["bash", str(codex_bin / "update-ccx.sh"), "--version"],
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -76,11 +85,12 @@ def test_update_ccx_sh_ignores_stale_persisted_source_root(tmp_path):
     env["HOME"] = str(home)
 
     result = subprocess.run(
-        ["bash", str(codex_bin / "update-ccx.sh"), "--version"],
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
@@ -107,17 +117,22 @@ def test_update_ccx_sh_prefers_default_checkout_over_existing_stale_persisted_ro
     env["HOME"] = str(home)
 
     result = subprocess.run(
-        ["bash", str(codex_bin / "update-ccx.sh"), "--version"],
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert (codex_bin / "devkit-lib.sh").read_text(encoding="utf-8") != "return 42\n"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
+)
 def test_update_ccx_sh_exports_bootstrap_source_root_before_sourcing_lib(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
@@ -135,17 +150,22 @@ def test_update_ccx_sh_exports_bootstrap_source_root_before_sourcing_lib(tmp_pat
     env["HOME"] = str(home)
 
     result = subprocess.run(
-        ["bash", str(codex_bin / "update-ccx.sh"), "--version"],
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{default_checkout}\n"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
+)
 def test_update_ccx_sh_exports_normal_source_root_before_sourcing_existing_lib(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
@@ -164,11 +184,12 @@ def test_update_ccx_sh_exports_normal_source_root_before_sourcing_existing_lib(t
     env["HOME"] = str(home)
 
     result = subprocess.run(
-        ["bash", str(codex_bin / "update-ccx.sh"), "--version"],
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr + result.stdout

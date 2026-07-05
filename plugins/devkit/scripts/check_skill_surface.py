@@ -101,8 +101,16 @@ def run_checked(cmd: list[str], *, env: dict[str, str] | None = None) -> subproc
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env or os.environ.copy(),
     )
+
+
+def resolve_bash() -> str:
+    bash = shutil.which("bash")
+    if not bash:
+        raise AssertionError("bash が見つからない: PATH で bash を解決できません")
+    return bash
 
 
 def assert_skill_surface(problems: list[str]) -> None:
@@ -253,7 +261,7 @@ def run_update_devkit_smoke(
             }
         )
         result = run_checked(
-            ["bash", str(PLUGIN_DIR / "scripts/update-ccx.sh"), "--devkit-only"],
+            [resolve_bash(), (PLUGIN_DIR / "scripts/update-ccx.sh").as_posix(), "--devkit-only"],
             env=env,
         )
         return UpdateSmokeResult(call_log.read_text(encoding="utf-8").splitlines(), result.stdout)
@@ -450,7 +458,7 @@ def run_prune_smoke_checks() -> None:
                 f"prune_legacy_devkit_assets {shell_path(home_path)} {shell_path(ROOT)}",
             ]
         )
-        run_checked(["bash", "-lc", script], env=env)
+        run_checked([resolve_bash(), "-lc", script], env=env)
 
         for root in (
             ".agents/skills",
@@ -487,7 +495,7 @@ def run_prune_smoke_checks() -> None:
                 f"prune_legacy_devkit_assets {shell_path(home_path)} {shell_path(ROOT)}",
             ]
         )
-        run_checked(["bash", "-lc", script], env=env)
+        run_checked([resolve_bash(), "-lc", script], env=env)
         if not (skills_root / "dig").is_symlink():
             raise AssertionError("marker no-op should leave legacy links untouched")
 
