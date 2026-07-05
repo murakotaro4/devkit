@@ -15,18 +15,16 @@ $ARGUMENTS
 
 ## ハーネス判定
 
-この SKILL.md は Claude 親 / Codex 親の二層構成で実行する。フロー開始前に、利用可能な Claude 固有ツールで親ハーネスを判定する。`request_user_input` は plan mode 依存で不安定なため、一次判定キーに使わず、Codex 親での質問手段選択だけに使う。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。この SKILL.md は Claude 親 / Codex 親の二層構成で実行する。要点:
 
-- `AskUserQuestion` / `Skill` が使える -> Claude 親。
-- Claude 固有ツールがなく、`request_user_input` が使える -> Codex 親 plan mode。
-- どちらでもない -> Codex 親通常 mode または判定不能として扱い、選択肢を箇条書きで提示して自由文回答を求める。
+- `AskUserQuestion` が使える -> Claude 親。
+- なければ `spawn_agent` が使える -> Codex 親。
+- どちらでもない -> 判定不能として扱い、選択肢を箇条書きで提示して自由文回答を求める。
+- `request_user_input` は plan mode 依存で不安定なため、判定キーに使わない(Codex 親 plan mode の質問手段としてのみ使う)。
 
 ## タスクリスト連動
 
-refactor 開始時に step 1-5 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する。
-
-- Claude 親: TaskCreate / TaskUpdate が利用可能なら使う。利用不可なら省略してよい。
-- Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示を行う。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > タスクリスト連動」。refactor 開始時に step 1-5 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する(Claude 親: TaskCreate / TaskUpdate、利用不可なら省略可。Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示)。
 
 ## read-only 契約
 

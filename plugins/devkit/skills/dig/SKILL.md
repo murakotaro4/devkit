@@ -15,18 +15,16 @@ $ARGUMENTS
 
 ## ハーネス判定
 
-フロー開始前に、利用可能なツール名で親ハーネスを判定する。`request_user_input` は plan mode 依存で不安定なため、判定キーに使わない。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。フロー開始前に、利用可能なツール名で親ハーネスを判定する。要点:
 
-- `AskUserQuestion` / `ExitPlanMode` / `Agent` が使える → Claude 親。
-- `spawn_agent` / `wait_agent` が使える → Codex 親。
-- どちらでもない → Claude 親の手順を基本にし、選択肢付き質問は自由文の箇条書きで代替する。
+- `AskUserQuestion` が使える → Claude 親。
+- なければ `spawn_agent` が使える → Codex 親。
+- どちらでもない → 判定不能。Claude 親の手順を基本にし、選択肢付き質問は自由文の箇条書きで代替する。
+- `request_user_input` は plan mode 依存で不安定なため、判定キーに使わない(Codex 親 plan mode の質問手段としてのみ使う)。
 
 ## タスクリスト連動
 
-dig 開始時に step 1-9 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する。
-
-- Claude 親: TaskCreate / TaskUpdate が利用可能なら使う。利用不可なら省略してよい。
-- Codex 親: 組み込み plan 機能で同等の進捗提示を行う。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > タスクリスト連動」。dig 開始時に step 1-9 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する(Claude 親: TaskCreate / TaskUpdate、利用不可なら省略可。Codex 親: 組み込み plan 機能で同等の進捗提示)。
 
 ## フロー
 

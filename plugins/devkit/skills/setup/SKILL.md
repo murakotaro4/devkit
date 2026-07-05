@@ -7,7 +7,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit", "AskUserQuestio
 
 # /setup
 
-対象リポジトリに DevKit 標準ルールを冪等同期し、Claude 親では statusline などの Claude Code 向け環境設定も必要に応じて適用する。
+対象リポジトリに DevKit 標準ルールを冪等同期し、ユーザー環境へ思想 DB（thought-db）への参照を同期し、Claude 親では statusline などの Claude Code 向け環境設定も必要に応じて適用する。
 
 ## トピック ($ARGUMENTS)
 
@@ -15,19 +15,21 @@ $ARGUMENTS
 
 ## ハーネス判定
 
-この SKILL.md は Claude Code / OpenAI Codex のどちらの親ハーネスでも自己完結して実行する。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。要点:
 
-- `AskUserQuestion` と `TaskCreate` / `TaskUpdate` が使える場合は Claude 親として扱う。
-- `request_user_input` のみ使える場合は Codex 親の plan mode として扱う。
-- どちらの質問ツールも使えない場合は Codex 親の通常 mode として扱い、選択肢を箇条書きで提示して自由文回答を求める。
+- `AskUserQuestion` が使える場合は Claude 親として扱う。
+- なければ `spawn_agent` が使える場合は Codex 親として扱う。
+- どちらでもない場合は判定不能として扱い、選択肢を箇条書きで提示して自由文回答を求める。
+- `request_user_input` は plan mode 依存で不安定なため、判定キーに使わない(Codex 親 plan mode の質問手段としてのみ使う)。
 
-statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う。Codex 親ではルール同期のみを実行し、statusline は対象外として報告する。
+statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う。Codex 親ではルール同期と thought-db 接続同期を実行し、statusline は対象外として報告する。
 
 ## 同期対象
 
 - `AGENTS.md`: `<!-- devkit:rules:start -->` / `<!-- devkit:rules:end -->` 区間へ DevKit 標準ルールを同期する。
 - `CLAUDE.md`: `@./AGENTS.md` 参照入口を整備する。既に同じ参照行がある場合は重複させない。
 - `.claude/devkit-rules.json`: 同期 version、同期時刻、テンプレート SHA-256 を記録する。
+- `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`(ユーザーレベル): `<!-- devkit:thought-db:start -->` / `<!-- devkit:thought-db:end -->` 区間へ、思想 DB(`~/repos/thought-db`)への参照ブロックを同期する。thought-db が存在しない環境では skip として報告する。
 - Claude 親のみ: plugin 同梱の `statusline/install.js` で Claude Code の statusline 設定を確認し、ユーザー承認後に適用する。
 
 ## 実行ルール
@@ -55,9 +57,22 @@ python3 "$SKILL_DIR/scripts/sync_rules.py" \
 
 結果 JSON の `changed` / `skipped` / `actions` を確認し、実際に同期した内容を報告する。2 回目以降は、テンプレートと対象ファイルが最新なら no-op になる。テンプレートが更新された場合は、マーカー区間だけを最新化し、マーカー外のプロジェクト固有記述は保持する。
 
-### 3. statusline 適用
+### 3. thought-db 接続同期(ユーザー環境)
 
-Claude 親のみ実行する。Codex 親ではこの step をスキップし、「statusline は Claude Code 固有機能のため対象外。ルール同期のみ実施」と報告する。
+対象 repo に依存しないユーザー環境の同期で、Claude 親 / Codex 親のどちらでも実行する。
+
+```bash
+SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
+python3 "$SKILL_DIR/scripts/sync_thought_db.py" \
+  --template "$SKILL_DIR/../../templates/rules/thought-db-user.md" \
+  --format json
+```
+
+結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。冪等で、マーカー区間が最新なら no-op になる。マーカー外のユーザー記述は保持し、既存ファイルを書き換える場合は同ディレクトリの `devkit-thought-db-backup/` へ退避してから置換する。`~/repos/thought-db` が存在しない環境では skip になるため、「thought-db 未配置。使う場合は private リモートから `~/repos/thought-db` へ clone 後に /setup を再実行」と案内する。`~/.codex/AGENTS.md` は Codex 未導入環境でも作成する(後から Codex を導入した場合に配線済みにするための意図的な設計)。
+
+### 4. statusline 適用
+
+Claude 親のみ実行する。Codex 親ではこの step をスキップし、「statusline は Claude Code 固有機能のため対象外。ルール同期と thought-db 接続同期のみ実施」と報告する。
 
 Claude 親では plugin 同梱の installer を確認する。
 
@@ -73,20 +88,22 @@ node "$STATUSLINE_INSTALL" --check
 - 他の statusline 設定を検出した場合: 既存設定を上書きするかを追加確認し、承認された場合だけ `node "$STATUSLINE_INSTALL" --force` を実行する。
 - ユーザーがスキップを選んだ場合: ルール同期結果だけを報告する。
 
-### 4. 検証とレポート
+### 5. 検証とレポート
 
 1. `AGENTS.md` に `devkit:rules` の start/end マーカーが 1 組あることを確認する。
 2. `CLAUDE.md` に `@./AGENTS.md` が 1 行だけあることを確認する。
 3. `.claude/devkit-rules.json` の `template_sha256` がテンプレートの SHA-256 と一致することを確認する。
-4. statusline を適用した場合は installer の結果 JSON を報告する。
-5. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。
+4. thought-db 同期を実行した場合は、`~/.claude/CLAUDE.md` と `~/.codex/AGENTS.md` に `devkit:thought-db` の start/end マーカーが 1 組ずつあることを確認する。skip の場合はその旨を報告する。
+5. statusline を適用した場合は installer の結果 JSON を報告する。
+6. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。
 
 ## 再実行時の動作
 
-DevKit 更新後に `/setup` を再実行すると、ルールと statusline の両方を最新へ同期する。ルール同期は冪等で、テンプレート・マーカー区間・参照入口・同期メタデータが最新なら no-op になる。テンプレートが変わった場合は `AGENTS.md` のマーカー区間だけを置換し、マーカー外の記述は保持する。Claude 親で statusline 適用を選ぶと、同梱最新版を管理先へ再コピーして設定を更新する。
+DevKit 更新後に `/setup` を再実行すると、ルール・thought-db 参照・statusline を最新へ同期する。ルール同期と thought-db 同期は冪等で、テンプレート・マーカー区間・参照入口・同期メタデータが最新なら no-op になる。テンプレートが変わった場合はマーカー区間だけを置換し、マーカー外の記述は保持する。Claude 親で statusline 適用を選ぶと、同梱最新版を管理先へ再コピーして設定を更新する。
 
 ## 注意
 
+- ルール同期のマーカー区間書き込みは設計上、差分承認ゲートなしで実行する(冪等同期が本務のため)。承認ゲートがあるのは statusline 適用のみで、この非対称は意図的なもの。
 - マーカー内の手動編集は次回 `/setup` 実行時に上書きされる。
 - プロジェクト固有ルールはマーカー外に書く。
 - DevKit repo 自身には実行しない。

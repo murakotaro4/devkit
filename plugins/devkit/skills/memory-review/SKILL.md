@@ -15,18 +15,16 @@ $ARGUMENTS
 
 ## ハーネス判定
 
-この SKILL.md は Claude 親 / Codex 親の二層構成で実行する。フロー開始前に、利用可能な Claude 固有ツールで親ハーネスを判定する。`request_user_input` は plan mode 依存で不安定なため、一次判定キーに使わず、Codex 親での質問手段選択だけに使う。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。この SKILL.md は Claude 親 / Codex 親の二層構成で実行する。要点:
 
-- `AskUserQuestion` / `Skill` が使える -> Claude 親。
-- Claude 固有ツールがなく、`request_user_input` が使える -> Codex 親 plan mode。
-- どちらでもない -> Codex 親通常 mode または判定不能として扱い、選択肢を箇条書きで提示して自由文回答を求める。
+- `AskUserQuestion` が使える -> Claude 親。
+- なければ `spawn_agent` が使える -> Codex 親。
+- どちらでもない -> 判定不能として扱い、選択肢を箇条書きで提示して自由文回答を求める。
+- `request_user_input` は plan mode 依存で不安定なため、判定キーに使わない(Codex 親 plan mode の質問手段としてのみ使う)。
 
 ## タスクリスト連動
 
-memory-review 開始時に step 1-7 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する。
-
-- Claude 親: TaskCreate / TaskUpdate が利用可能なら使う。利用不可なら省略してよい。
-- Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示を行う。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > タスクリスト連動」。memory-review 開始時に step 1-7 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する(Claude 親: TaskCreate / TaskUpdate、利用不可なら省略可。Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示)。
 
 ## 監査対象と除外
 
@@ -42,6 +40,7 @@ memory-review 開始時に step 1-7 をタスクリストへ登録し、各 step
 
 - Claude auto-memory: 対象 repo の絶対パスの `/` を `-` に置換した slug で `~/.claude/projects/<slug>/memory/` を探す。例: `/Users/x/repos/foo` -> `~/.claude/projects/-Users-x-repos-foo/memory/` の `MEMORY.md` と個別メモリ。存在しなければ「auto-memory なし」としてレポートに記録する。
 - Codex メモリ: `~/.codex/memories/MEMORY.md` と `~/.codex/AGENTS.md` が存在する場合に確認する。対象 repo に言及している記述だけを監査対象とし、他プロジェクトの記述には触れない。
+- 思想 DB: `~/repos/thought-db/` が存在する場合、`overview.md`(総論)・`topics/`(個別 DB)・`changelog.md`(更新履歴) を監査対象に含める(古い前提・矛盾・更新履歴とのペア漏れの検出)。存在しなければ「思想 DB なし」として記録する。思想 DB は非公開前提のため、内容をレポートへ転記するときは公開範囲に注意する。
 
 除外(既定で除外し、ユーザーが明示的に指定した場合のみ対象に加える):
 

@@ -4,6 +4,8 @@
 
 Accepted
 
+2026-07-05 注記: 本 ADR の判断は実施済み。`amazon-search`（browser DOM 上で eval する JavaScript を含む skill）は削除済みで、v6/v7 の配布面に browser 実行の JavaScript を持つ skill は存在しない。以下の Decision / Consequences は決定当時の記述として保持する。なお v7 同梱の statusline は Node 実装であり、browser eval を対象とした本方針の例外条項には該当しない。
+
 ## Context
 
 DevKit は複数 runtime へ配布する workflow / skill の母体であり、品質をプロンプト運用だけに依存させると再現性が落ちる。

@@ -7,15 +7,14 @@ allowed-tools: ["Read", "Edit", "Write", "Grep", "Glob", "Bash", "AskUserQuestio
 # /improve-skill - Session-Aware Skill Improver
 
 現在セッションを根拠に、スキル改善を提案または適用する。
-`refresh` / `create` では提案チェックリストのみ返す。`retro` ではユーザー承認後に修正適用→レビュー→コミットまで実行する。
+`refresh` / `create` では提案チェックリストのみ返す。`retro` ではユーザー承認後に修正適用→レビューまで実行する（コミットはユーザーが明示した場合のみ）。
 
 ## トピック
 $ARGUMENTS
 
 ## ハーネス判定と質問手段
 
-この SKILL.md は Claude Code / OpenAI Codex のどちらの親ハーネスでも自己完結して実行する。選択肢付き質問は、Claude 親では AskUserQuestion、Codex 親の plan mode では `request_user_input`、Codex 親の通常 mode では選択肢を箇条書きにして自由文回答を求める。
-親ハーネスが判定できない場合も、選択肢を箇条書きで提示して自由文回答を求める。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。要点: `AskUserQuestion` が使える → Claude 親、なければ `spawn_agent` が使える → Codex 親。`request_user_input` は判定キーに使わず、Codex 親 plan mode の質問手段としてのみ使う。質問手段は Claude 親 = AskUserQuestion、Codex 親 plan mode = `request_user_input`、Codex 親通常 mode / 判定不能 = 選択肢を箇条書きで提示して自由文回答を求める。
 
 ## 目的
 
@@ -52,7 +51,7 @@ $ARGUMENTS
 4. 修正案をユーザーに提示し、選択肢付き質問で承認確認する。ユーザーが「スキップ」を選べば即終了
 5. 修正対象は**エラーが発生した、またはユーザーフィードバックが関連するスキルのSKILL.md / CLAUDE.mdのみ**（他スキルや scripts 本体への変更は禁止。読み込みは許可）
 6. retro 自体が失敗した場合は警告のみ出力して終了
-7. Plan モード中の場合、Step 3（編集適用・レビュー・コミット）は実行せず、修正提案の提示のみ行う。Step 0-2 は通常通り実行する
+7. Plan モード中の場合、Step 3（編集適用・レビュー）は実行せず、修正提案の提示のみ行う。Step 0-2 は通常通り実行する
 
 ## モード別フロー
 
@@ -108,7 +107,8 @@ python3 "$SKILL_DIR/scripts/create_blueprint.py" \
   --format markdown
 ```
 
-3. 生成結果を日本語で提示する（チェックリストのみ）。
+3. 新規スキル案を devkit `AGENTS.md`「スキル採用基準」に照合し、判定を提案に含める。要点: demand-pull（観測された反復する痛みが起点か）/ 証拠テスト（2 つ以上の repo・セッションで観測したか）/ 最小手段の梯子（ルール 1 行・check スクリプト・既存スキルへの 1 観点追加で足りないか）/ 5 テスト（反復性・即興リスク・ハーネス非重複・監査可能性・撤退性）。基準を満たさない場合は、満たさない理由と代替手段（梯子のどの段で足りるか）を明記する。
+4. 生成結果を日本語で提示する（チェックリストのみ）。
 
 ### retro: セッション振り返り修正
 
@@ -151,13 +151,17 @@ python3 "$SKILL_DIR/scripts/create_blueprint.py" \
 - 全修正案をユーザーに提示
 - 選択肢付き質問で承認確認
 
-#### Step 3: 適用・レビュー・コミット
+#### Step 3: 適用・レビュー
 
 - 対象ファイルに編集適用
-- 変更ファイルをすべてステージング
-- Claude 親: Codexレビューを `codex exec` で実行する（CLAUDE.mdルール準拠）
+- Claude 親: Codex レビューを実行する（実行形の正本は devkit `AGENTS.md`「スキル共通契約 > codex exec 実行形」）:
+
+```bash
+codex -a never exec -c model_reasoning_effort="medium" "<レビュー依頼内容>" < /dev/null
+```
+
 - Codex 親: `spawn_agent`(explorer) に read-only 指示を明記してレビューを依頼する
-- コミット: `fix(skills): セッション振り返り - <skill-name> <原因要約>`
+- コミットはユーザーが明示した場合のみ行う。ステージングは Step 3 で編集したファイルに限定する。メッセージ例: `fix(skills): セッション振り返り - <skill-name> <原因要約>`
 
 ## チェックリスト出力フォーマット（refresh/create用・固定）
 
@@ -188,7 +192,7 @@ python3 "$SKILL_DIR/scripts/create_blueprint.py" \
 ## 重要
 
 - `refresh` / `create` / `retro` の3モード構成
-- `retro` のみファイル編集・コミットを行う。`refresh/create` は引き続き提案のみ
+- `retro` のみファイル編集を行う。`refresh/create` は引き続き提案のみ。コミットはどのモードでもユーザーが明示した場合のみ
 - 他スキルの最終ステップから自動起動される契約は存在しない
 - 現在セッション以外（履歴ファイル等）を勝手に参照しない
 - ユーザー回答が不足したまま推測で出力しない（refresh/create時）

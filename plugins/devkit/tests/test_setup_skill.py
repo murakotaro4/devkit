@@ -15,6 +15,8 @@ SKILL_PATH = REPO_ROOT / "plugins/devkit/skills/setup/SKILL.md"
 OPENAI_PATH = REPO_ROOT / "plugins/devkit/skills/setup/agents/openai.yaml"
 SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_rules.py"
 TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/agents-rules.md"
+THOUGHT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_thought_db.py"
+THOUGHT_TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/thought-db-user.md"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -206,6 +208,165 @@ def test_sync_rules_rejects_duplicate_agents_markers(tmp_path):
 
     assert result.returncode != 0
     assert "zero or one devkit rules marker pair" in result.stderr
+
+
+def _run_thought_sync_raw(
+    thought_db: Path,
+    claude_file: Path,
+    codex_file: Path,
+    template: Path,
+    *extra_args: str,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(THOUGHT_SCRIPT_PATH),
+            "--thought-db",
+            str(thought_db),
+            "--claude-file",
+            str(claude_file),
+            "--codex-file",
+            str(codex_file),
+            "--template",
+            str(template),
+            *extra_args,
+            "--format",
+            "json",
+        ],
+        check=check,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _run_thought_sync(
+    thought_db: Path,
+    claude_file: Path,
+    codex_file: Path,
+    template: Path,
+    *extra_args: str,
+) -> dict[str, object]:
+    return json.loads(_run_thought_sync_raw(thought_db, claude_file, codex_file, template, *extra_args).stdout)
+
+
+def test_skill_contract_mentions_thought_db_sync():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "devkit:thought-db:start" in text
+    assert "devkit:thought-db:end" in text
+    assert "sync_thought_db.py" in text
+    assert "thought-db-user.md" in text
+
+
+def test_thought_db_template_contract():
+    text = THOUGHT_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+    assert "このセクションは devkit の /setup により自動管理される" in text
+    assert "overview.md" in text
+    assert "topics/" in text
+    assert "changelog.md" in text
+    assert "非公開" in text
+
+
+def test_sync_thought_db_creates_blocks_and_is_idempotent(tmp_path):
+    thought_db = tmp_path / "thought-db"
+    thought_db.mkdir()
+    claude_file = tmp_path / "claude/CLAUDE.md"
+    codex_file = tmp_path / "codex/AGENTS.md"
+    claude_file.parent.mkdir()
+    claude_file.write_text("# ユーザーレベル指示\n\nKeep this user line.\n", encoding="utf-8")
+    template = tmp_path / "thought-db-user.md"
+    template.write_text("Reference block v1\n", encoding="utf-8")
+
+    first = _run_thought_sync(thought_db, claude_file, codex_file, template)
+
+    assert first["changed"] is True
+    assert sorted(first["actions"]) == [
+        "append_claude_user_block",
+        "backup_claude_user",
+        "create_codex_user",
+    ]
+    for path in (claude_file, codex_file):
+        text = path.read_text(encoding="utf-8")
+        assert "<!-- devkit:thought-db:start -->" in text
+        assert "<!-- devkit:thought-db:end -->" in text
+        assert "Reference block v1" in text
+    assert "Keep this user line." in claude_file.read_text(encoding="utf-8")
+    backup = claude_file.parent / "devkit-thought-db-backup/CLAUDE.md.bak"
+    assert backup.read_text(encoding="utf-8") == "# ユーザーレベル指示\n\nKeep this user line.\n"
+
+    second = _run_thought_sync(thought_db, claude_file, codex_file, template)
+
+    assert second == {"actions": [], "changed": False, "skipped": True}
+
+    template.write_text("Reference block v2\n", encoding="utf-8")
+
+    third = _run_thought_sync(thought_db, claude_file, codex_file, template)
+
+    assert third["changed"] is True
+    assert sorted(third["actions"]) == [
+        "backup_claude_user",
+        "backup_codex_user",
+        "update_claude_user_block",
+        "update_codex_user_block",
+    ]
+    updated = claude_file.read_text(encoding="utf-8")
+    assert "Reference block v2" in updated
+    assert "Reference block v1" not in updated
+    assert "Keep this user line." in updated
+    assert "Reference block v1" in backup.read_text(encoding="utf-8")
+
+
+def test_sync_thought_db_rejects_duplicate_markers(tmp_path):
+    thought_db = tmp_path / "thought-db"
+    thought_db.mkdir()
+    claude_file = tmp_path / "claude/CLAUDE.md"
+    claude_file.parent.mkdir()
+    claude_file.write_text(
+        "<!-- devkit:thought-db:start -->\na\n<!-- devkit:thought-db:end -->\n"
+        "<!-- devkit:thought-db:start -->\nb\n<!-- devkit:thought-db:end -->\n",
+        encoding="utf-8",
+    )
+    codex_file = tmp_path / "codex/AGENTS.md"
+    template = tmp_path / "thought-db-user.md"
+    template.write_text("Reference block\n", encoding="utf-8")
+
+    result = _run_thought_sync_raw(thought_db, claude_file, codex_file, template, check=False)
+
+    assert result.returncode != 0
+    assert "zero or one devkit thought-db marker pair" in result.stderr
+    assert not codex_file.exists()
+
+
+def test_sync_thought_db_skips_when_thought_db_missing(tmp_path):
+    claude_file = tmp_path / "claude/CLAUDE.md"
+    codex_file = tmp_path / "codex/AGENTS.md"
+    template = tmp_path / "thought-db-user.md"
+    template.write_text("Reference block\n", encoding="utf-8")
+
+    result = _run_thought_sync(tmp_path / "missing-thought-db", claude_file, codex_file, template)
+
+    assert result["skipped"] is True
+    assert result["changed"] is False
+    assert "thought-db not found" in str(result["reason"])
+    assert not claude_file.exists()
+    assert not codex_file.exists()
+
+
+def test_sync_thought_db_dry_run_does_not_write(tmp_path):
+    thought_db = tmp_path / "thought-db"
+    thought_db.mkdir()
+    claude_file = tmp_path / "claude/CLAUDE.md"
+    codex_file = tmp_path / "codex/AGENTS.md"
+    template = tmp_path / "thought-db-user.md"
+    template.write_text("Reference block\n", encoding="utf-8")
+
+    result = _run_thought_sync(thought_db, claude_file, codex_file, template, "--dry-run")
+
+    assert result["changed"] is True
+    assert not claude_file.exists()
+    assert not codex_file.exists()
 
 
 def test_sync_rules_rejects_devkit_repository_itself(tmp_path):
