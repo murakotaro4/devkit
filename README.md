@@ -90,6 +90,32 @@ Windows だけ `~/.codex/config.toml` の合成を行います。合成時は De
 
 macOS / Linux / WSL では config 合成を行いません。Codex plugin 登録を正本として扱います。
 
+### Windows: v5 からの移行
+
+事前条件はありません。旧 updater のままで問題ありません。v6 の `update-ccx.ps1` は `devkit-lib` 欠落時に一回きり self-heal します。
+
+`update-devkit` を 1 回実行すると、次を自動で処理します。
+
+- repo pull
+- managed copy 更新
+- 旧 symlink / 旧配布物の prune
+- 旧日次タスク `DevKitSkillsDailyUpdate` の解除 <!-- migration-allow -->
+- Codex marketplace 登録と `devkit@murakotaro4` の plugin add
+- `config.toml` 合成。Codex が管理する runtime section は保持します
+
+確認:
+
+- `codex plugin list` に `devkit@murakotaro4` が installed / enabled として表示される
+- 新しい Codex セッションで `$dig` が見える
+
+`RepoNightlyMaintainer-*` 系の旧タスクが残っている場合は、v6 で廃止した repo-maintainer の残骸です。必要に応じて手動で解除してください。
+
+```powershell
+Get-ScheduledTask -TaskName "RepoNightlyMaintainer-*" | Unregister-ScheduledTask -Confirm:$false
+```
+
+`%USERPROFILE%` 配下に `*.linkbak` が残っている場合は、手動で削除してください。
+
 ## Manual Cleanup
 
 `update-devkit` は v6 marker により一度だけ旧資産を prune します。手動で残骸を掃除する場合は、DevKit 管理物だけを対象にしてください。
