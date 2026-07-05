@@ -38,6 +38,12 @@ node <plugin>/statusline/install.js
 
 `install.js` は `~/.claude/settings.json` の `statusLine` キーへ冪等マージし、他の設定キーは保持します。設定に焼き込む実行対象は plugin cache ではなく DevKit 管理コピーの `~/.claude/devkit-statusline.js` です。macOS / Linux / WSL / Windows で同じ Node 実装を使います。
 
+表示は 2 行構成です。1 行目に `dir | model | branch` の識別情報を出し、2 行目に context window、5hr、weekly、scoped usage、セッションコストを並べます。表示できる使用率やコストが無い場合は 1 行目だけを出力します。
+
+セッションコストは Claude Code から渡される `cost.total_cost_usd` を使います。`https://open.er-api.com/v6/latest/USD` の `rates.JPY` が取得できる場合は円換算して整数の `¥` 表示にし、取得できない場合は `$8.23` のように USD 表示へフォールバックします。為替レートは statusline cache directory に 24 時間キャッシュします。
+
+weekly usage は reset 時刻が分かる場合、`wk 20% (残り 2d4h)` のようにリセットまでの残り時間を併記します。`DEVKIT_STATUSLINE_NO_FETCH=1` を指定すると、usage API に加えて FX もネットワーク取得せず、有効なキャッシュだけを参照します。FX の有効キャッシュが無い場合は USD 表示のままにします。
+
 ## Install
 
 ### Claude Code
