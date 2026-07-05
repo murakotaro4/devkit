@@ -1,0 +1,4 @@
+interface:
+  display_name: "Setup"
+  short_description: "Sync DevKit rules and setup supported environment settings"
+  default_prompt: "Use $setup to sync DevKit rules into AGENTS.md and CLAUDE.md, then apply supported setup steps."

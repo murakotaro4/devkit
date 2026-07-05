@@ -5,7 +5,8 @@
 ## Repo Context
 
 - このリポジトリは DevKit のセットアップ/更新スクリプト、skills、templates を管理する
-- v6 の配布 skill は `plugins/devkit/skills/dig/` と `plugins/devkit/skills/improve-skill/` の 2 つだけとする
+- v7 の配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/` の 4 つとする
+- statusline 配布物は `plugins/devkit/statusline/` に同梱し、適用は setup workflow から行う
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
 - ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
@@ -38,6 +39,9 @@
 - `plugins/devkit/scripts/`: setup / update 系スクリプト
 - `plugins/devkit/skills/dig/SKILL.md`: 深掘り・計画・実装委譲 workflow の正本
 - `plugins/devkit/skills/improve-skill/SKILL.md`: skill 改善 workflow の正本
+- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期と statusline 適用 workflow の正本
+- `plugins/devkit/skills/refactor/SKILL.md`: 負債棚卸し・優先順位付け・計画作成 workflow の正本
+- `plugins/devkit/statusline/`: plugin 同梱 statusline 実装と適用スクリプト
 - `plugins/devkit/templates/`: Codex 設定テンプレート
 
 ## Commit Rules

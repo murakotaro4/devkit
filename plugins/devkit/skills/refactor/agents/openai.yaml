@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refactor"
+  short_description: "Inventory technical debt and plan refactors"
+  default_prompt: "Use $refactor to inventory technical debt, rank refactoring candidates, and hand the approved plan to $dig for implementation."

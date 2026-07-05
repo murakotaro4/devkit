@@ -30,7 +30,8 @@ def test_agents_md_core_rules():
     assert "Conventional Commits" in text, "AGENTS.md にコミット規約がない"
     assert "Codex Exec 相談ルール" in text, "AGENTS.md に codex exec 相談ルールがない"
     assert "version" in text, "AGENTS.md に version bump ルールがない"
-    assert "dig" in text and "improve-skill" in text, "AGENTS.md に v6 の配布 skill がない"
+    for skill_name in ("dig", "improve-skill", "setup", "refactor"):
+        assert skill_name in text, f"AGENTS.md に v7 の配布 skill がない: {skill_name}"
 
 
 # ── 3. AGENTS.md に旧ワークフロー契約が残っていない ────────────────

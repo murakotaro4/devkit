@@ -14,7 +14,11 @@ from typing import NamedTuple
 
 ROOT = Path.cwd()
 PLUGIN_DIR = ROOT / "plugins/devkit"
-EXPECTED_SKILLS = {"dig", "improve-skill"}
+EXPECTED_SKILLS = {"dig", "improve-skill", "setup", "refactor"}
+REQUIRED_PATHS = {
+    "plugins/devkit/statusline/install.js",
+    "plugins/devkit/statusline/statusline.js",
+}
 REMOVED_SKILL_DIRS = {
     "codex-search",
     "computer-use-chatgpt-pro",
@@ -34,7 +38,7 @@ REMOVED_PATHS = {
     "plugins/devkit/.claude-plugin/marketplace.json",
     ".devkit",
 }
-MIN_PLUGIN_VERSION = (6, 0, 0)
+MIN_PLUGIN_VERSION = (7, 0, 0)
 SEMVER_PRERELEASE_IDENT = r"(?:0|[1-9]\d*|[A-Za-z-][0-9A-Za-z-]*)"
 SEMVER_BUILD_IDENT = r"(?:[0-9A-Za-z-]+)"
 SEMVER_RE = re.compile(
@@ -118,6 +122,10 @@ def assert_skill_surface(problems: list[str]) -> None:
     for rel in sorted(REMOVED_PATHS):
         if (ROOT / rel).exists():
             problems.append(f"removed path still exists: {rel}")
+
+    for rel in sorted(REQUIRED_PATHS):
+        if not (ROOT / rel).is_file():
+            problems.append(f"required distribution file missing: {rel}")
 
 
 def assert_marketplace_manifest(problems: list[str]) -> None:
@@ -566,7 +574,7 @@ def main() -> int:
         if version_ok is None:
             problems.append("plugin.json version must be a valid semantic version")
         elif not version_ok:
-            problems.append("plugin.json version must be >= 6.0.0")
+            problems.append("plugin.json version must be >= 7.0.0")
         description = plugin.get("description")
         if not isinstance(description, str) or not description.strip():
             problems.append("plugin.json description missing")

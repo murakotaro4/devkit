@@ -12,7 +12,19 @@ def test_expected_skill_surface_matches_repository():
     skills_dir = REPO_ROOT / "plugins" / "devkit" / "skills"
     actual = {path.name for path in skills_dir.iterdir() if path.is_dir()}
 
-    assert actual == check_skill_surface.EXPECTED_SKILLS == {"dig", "improve-skill"}
+    assert actual == check_skill_surface.EXPECTED_SKILLS == {
+        "dig",
+        "improve-skill",
+        "setup",
+        "refactor",
+    }
+
+
+def test_required_statusline_artifacts_are_part_of_surface_contract():
+    assert {
+        "plugins/devkit/statusline/statusline.js",
+        "plugins/devkit/statusline/install.js",
+    }.issubset(check_skill_surface.REQUIRED_PATHS)
 
 
 def test_removed_surface_contract_covers_v6_retirements():
@@ -41,6 +53,9 @@ def test_root_marketplace_source_points_to_existing_plugin_dir():
 
 
 def test_plugin_version_semver_floor_parser():
+    minimum = check_skill_surface.MIN_PLUGIN_VERSION
+
+    assert minimum == (7, 0, 0)
     assert check_skill_surface.parse_semver_tuple("6.0.0") == (6, 0, 0)
     assert check_skill_surface.parse_semver_tuple("6.0.0-alpha") == (6, 0, 0)
     assert check_skill_surface.parse_semver_tuple("6.0.1") == (6, 0, 1)
@@ -49,10 +64,11 @@ def test_plugin_version_semver_floor_parser():
     assert check_skill_surface.parse_semver_tuple("6.0") is None
     assert check_skill_surface.parse_semver_tuple("not-a-version") is None
     assert check_skill_surface.parse_semver_tuple("06.0.0") is None
-    assert check_skill_surface.semver_at_least("6.0.0", (6, 0, 0)) is True
-    assert check_skill_surface.semver_at_least("6.0.0+build.1", (6, 0, 0)) is True
-    assert check_skill_surface.semver_at_least("6.0.0-alpha", (6, 0, 0)) is False
-    assert check_skill_surface.semver_at_least("6.0", (6, 0, 0)) is None
+    assert check_skill_surface.semver_at_least("7.0.0", minimum) is True
+    assert check_skill_surface.semver_at_least("7.0.0+build.1", minimum) is True
+    assert check_skill_surface.semver_at_least("7.0.0-alpha", minimum) is False
+    assert check_skill_surface.semver_at_least("6.1.0", minimum) is False
+    assert check_skill_surface.semver_at_least("7.0", minimum) is None
 
 
 def test_ordered_subset_accepts_interleaved_commands():

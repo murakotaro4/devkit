@@ -1,5 +1,5 @@
 {
   "name": "devkit",
-  "description": "Deep-dive and implementation delegation (/dig) and skill improvement, dual-harness (Claude Code / Codex).",
-  "version": "6.1.0"
+  "description": "DevKit の /dig 実装オーケストレーション、skill 改善、リポジトリ setup、refactor 計画化を提供し、Node statusline を同梱します。",
+  "version": "7.0.0"
 }
