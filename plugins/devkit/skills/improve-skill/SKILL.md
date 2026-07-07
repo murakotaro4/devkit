@@ -1,7 +1,7 @@
 ---
 name: "improve-skill"
 description: "既存スキルの改善提案（refresh）・新規スキル作成提案（create）・セッション振り返り修正（retro）。手動起動専用。「スキルを改善して」「セッションを振り返って直して」「/improve-skill」で起動。"
-allowed-tools: ["Read", "Edit", "Write", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user_input", "spawn_agent", "wait_agent"]
+allowed-tools: ["Read", "Edit", "Write", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user_input", "spawn_agent", "wait_agent", "TaskCreate", "TaskUpdate", "TaskOutput"]
 ---
 
 # /improve-skill - Session-Aware Skill Improver
@@ -159,6 +159,8 @@ python3 "$SKILL_DIR/scripts/create_blueprint.py" \
 ```bash
 codex -a never exec -c model_reasoning_effort="medium" "<レビュー依頼内容>" < /dev/null
 ```
+
+Claude 親のレビュー委譲は Bash `run_in_background` で起動し、完了自動通知で回収する。タスクリスト(TaskCreate / TaskUpdate)が使える場合は 1 委譲 = 1 タスクで登録する。待機中の出力増分確認は TaskOutput で行い、長時間増分がない場合のみ停滞状況を報告する。正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。
 
 - Codex 親: `spawn_agent`(explorer) に read-only 指示を明記してレビューを依頼する
 - コミットはユーザーが明示した場合のみ行う。ステージングは Step 3 で編集したファイルに限定する。メッセージ例: `fix(skills): セッション振り返り - <skill-name> <原因要約>`

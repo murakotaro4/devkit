@@ -173,8 +173,9 @@ def test_execution_contract_is_confirmation_gated_and_bounded():
     assert "--sandbox workspace-write" in text
     assert "$JOB_DIR/codex.log" in text
     assert "--sandbox read-only" in text
-    assert "60-120 秒ハートビート" in text
-    assert "時刻・経過・ログ増分" in text
+    assert "完了自動通知駆動" in text
+    assert "増分ゼロが続く場合のみ" in text
+    assert "停滞の継続時間と推定原因" in text
     assert "停止条件が機能したか" in text
     assert "loop` スキル不在時の fallback" in text
     assert "ループはセッションが開いている間だけ動く" in text
