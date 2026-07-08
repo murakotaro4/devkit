@@ -8,7 +8,7 @@
     {
       "name": "devkit",
       "source": "./plugins/devkit",
-      "description": "DevKit の /dig 実装オーケストレーション、skill 改善、リポジトリ setup、refactor 計画化、memory-review メモリ監査、goal-prompt ゴールプロンプト作成を提供し、Node statusline を同梱します。",
+      "description": "DevKit の /dig 実装オーケストレーション、skill 改善、リポジトリ setup、refactor 計画化、memory-review メモリ監査、goal-prompt ゴールプロンプト作成、handoff 引継ぎ書き出しを提供し、Node statusline を同梱します。",
       "strict": true
     }
   ]

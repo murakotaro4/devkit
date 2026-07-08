@@ -14,7 +14,15 @@ from typing import NamedTuple
 
 ROOT = Path.cwd()
 PLUGIN_DIR = ROOT / "plugins/devkit"
-EXPECTED_SKILLS = {"dig", "improve-skill", "setup", "refactor", "memory-review", "goal-prompt"}
+EXPECTED_SKILLS = {
+    "dig",
+    "improve-skill",
+    "setup",
+    "refactor",
+    "memory-review",
+    "goal-prompt",
+    "handoff",
+}
 REQUIRED_PATHS = {
     "plugins/devkit/statusline/install.js",
     "plugins/devkit/statusline/statusline.js",

@@ -1,6 +1,6 @@
 # devkit/scripts
 
-DevKit の setup / update / verification scripts を置くディレクトリです。v7 では marketplace 配布を正本にし、skill surface は `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` を扱います。
+DevKit の setup / update / verification scripts を置くディレクトリです。v7 では marketplace 配布を正本にし、skill surface は `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` を扱います。
 
 ## Entry Points
 
@@ -85,7 +85,7 @@ git 追跡下の text metadata file に UTF-8 BOM が混入していないかを
 
 v7 の配布面を検査します。
 
-- `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` と完全一致すること
+- `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` と完全一致すること
 - `plugins/devkit/statusline/statusline.js` と `plugins/devkit/statusline/install.js` が存在すること
 - 削除済み directory / script / duplicate manifest / scaffold が存在しないこと
 - ルート marketplace manifest の source directory が存在すること

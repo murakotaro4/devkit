@@ -8,8 +8,24 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DISTRIBUTED_SKILLS = ("dig", "improve-skill", "setup", "refactor", "memory-review", "goal-prompt")
-PLUGIN_DESCRIPTION_SURFACES = ("/dig", "skill 改善", "setup", "refactor", "memory-review", "goal-prompt")
+DISTRIBUTED_SKILLS = (
+    "dig",
+    "improve-skill",
+    "setup",
+    "refactor",
+    "memory-review",
+    "goal-prompt",
+    "handoff",
+)
+PLUGIN_DESCRIPTION_SURFACES = (
+    "/dig",
+    "skill 改善",
+    "setup",
+    "refactor",
+    "memory-review",
+    "goal-prompt",
+    "handoff",
+)
 
 
 def _read(relpath: str) -> str:

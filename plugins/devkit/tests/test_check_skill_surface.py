@@ -19,6 +19,7 @@ def test_expected_skill_surface_matches_repository():
         "refactor",
         "memory-review",
         "goal-prompt",
+        "handoff",
     }
 
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Handoff"
+  short_description: "Write a session handoff document"
+  default_prompt: "Use $handoff to inventory the current session and repository state, then write a handoff markdown to .claude/handoff/ in the target repo so the next session can resume by reading that file."
