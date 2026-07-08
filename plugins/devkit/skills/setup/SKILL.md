@@ -42,7 +42,31 @@ statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う
 4. 対象が git repo であることを `git -C "$TARGET_REPO" rev-parse --show-toplevel` で確認し、得られた repo root を対象にする。
 5. repo root に `plugins/devkit/.claude-plugin/plugin.json` が存在する場合は DevKit repo 自身とみなし、対象外として停止する。
 
-### 2. `scripts/sync_rules.py` による冪等同期
+### 2. 環境前提チェック
+
+対象 repo に依存しないユーザー環境の確認で、Claude 親 / Codex 親のどちらでも実行する。DevKit スキル群が前提にする CLI の存在を確認し、不足を報告する。
+
+```bash
+for cmd in claude codex cursor-agent node python3; do
+  if command -v "$cmd" >/dev/null 2>&1; then echo "OK $cmd"; else echo "MISSING $cmd"; fi
+done
+```
+
+| コマンド | 用途 | 不足時の影響と案内 |
+|---------|------|--------------------|
+| claude | Claude Code 親ハーネス。goal-prompt の `claude --bg` 起動プロンプト候補 | Claude 系の起動プロンプトを実行するユーザー側環境が不足する |
+| codex | dig の実装・レビュー backend。goal-prompt の独立レビュー候補 | codex 系 backend と goal-prompt の codex レビュー候補が使えない |
+| cursor-agent | dig の高速レーン(任意) | dig で cursor-agent の選択肢を提示しないだけ。導入は任意 |
+| node | statusline 適用 | statusline 適用が実行不可 |
+| python3 | ルール同期・thought-db 同期スクリプト | ルール同期・thought-db 同期が実行不可(必須) |
+
+結果は OK / MISSING の一覧で報告し、MISSING には上表の影響と導入コマンドを添える。インストール自体はこのスキルでは行わない。
+
+- `python3` が `MISSING` の場合: step 3-4 のルール同期・thought-db 同期は実行不能のため、この時点で停止し、step 3 以降は実行しない。macOS/Homebrew 例として `brew install python` を案内し、`python3` 導入後に `/setup` を再実行するよう伝える。
+- `node` が `MISSING` の場合: step 5 の statusline 適用だけをスキップし、step 3-4 と step 6 は続行する。macOS/Homebrew 例として `brew install node` を案内し、statusline を適用したい場合は `node` 導入後に `/setup` を再実行するよう伝える。
+- `claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみで、ルール同期・thought-db 同期・statusline 適用の制御条件にはしない。
+
+### 3. `scripts/sync_rules.py` による冪等同期
 
 スクリプトは、この SKILL.md があるディレクトリを基準にした絶対パスで実行する。
 
@@ -57,7 +81,7 @@ python3 "$SKILL_DIR/scripts/sync_rules.py" \
 
 結果 JSON の `changed` / `skipped` / `actions` を確認し、実際に同期した内容を報告する。2 回目以降は、テンプレートと対象ファイルが最新なら no-op になる。テンプレートが更新された場合は、マーカー区間だけを最新化し、マーカー外のプロジェクト固有記述は保持する。
 
-### 3. thought-db 接続同期(ユーザー環境)
+### 4. thought-db 接続同期(ユーザー環境)
 
 対象 repo に依存しないユーザー環境の同期で、Claude 親 / Codex 親のどちらでも実行する。
 
@@ -70,9 +94,9 @@ python3 "$SKILL_DIR/scripts/sync_thought_db.py" \
 
 結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。冪等で、マーカー区間が最新なら no-op になる。マーカー外のユーザー記述は保持し、既存ファイルを書き換える場合は同ディレクトリの `devkit-thought-db-backup/` へ退避してから置換する。`~/repos/thought-db` が存在しない環境では skip になるため、「thought-db 未配置。使う場合は private リモートから `~/repos/thought-db` へ clone 後に /setup を再実行」と案内する。`~/.codex/AGENTS.md` は Codex 未導入環境でも作成する(後から Codex を導入した場合に配線済みにするための意図的な設計)。
 
-### 4. statusline 適用
+### 5. statusline 適用
 
-Claude 親のみ実行する。Codex 親ではこの step をスキップし、「statusline は Claude Code 固有機能のため対象外。ルール同期と thought-db 接続同期のみ実施」と報告する。
+Claude 親のみ実行する。Codex 親ではこの step をスキップし、「statusline は Claude Code 固有機能のため対象外。ルール同期と thought-db 接続同期のみ実施」と報告する。step 2 で `node` が `MISSING` だった場合もこの step はスキップし、`node` 導入後の `/setup` 再実行を案内する。
 
 Claude 親では plugin 同梱の installer を確認する。
 
@@ -88,14 +112,14 @@ node "$STATUSLINE_INSTALL" --check
 - 他の statusline 設定を検出した場合: 既存設定を上書きするかを追加確認し、承認された場合だけ `node "$STATUSLINE_INSTALL" --force` を実行する。
 - ユーザーがスキップを選んだ場合: ルール同期結果だけを報告する。
 
-### 5. 検証とレポート
+### 6. 検証とレポート
 
 1. `AGENTS.md` に `devkit:rules` の start/end マーカーが 1 組あることを確認する。
 2. `CLAUDE.md` に `@./AGENTS.md` が 1 行だけあることを確認する。
 3. `.claude/devkit-rules.json` の `template_sha256` がテンプレートの SHA-256 と一致することを確認する。
 4. thought-db 同期を実行した場合は、`~/.claude/CLAUDE.md` と `~/.codex/AGENTS.md` に `devkit:thought-db` の start/end マーカーが 1 組ずつあることを確認する。skip の場合はその旨を報告する。
 5. statusline を適用した場合は installer の結果 JSON を報告する。
-6. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。
+6. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。環境前提チェックで MISSING があった場合は、影響と導入コマンドを報告に含める。
 
 ## 再実行時の動作
 

@@ -82,6 +82,27 @@ def test_skill_contract_mentions_markers_idempotency_and_harness():
     assert "Codex 親" in text
 
 
+def test_skill_contract_mentions_environment_prerequisites():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "### 2. 環境前提チェック" in text
+    assert "command -v" in text
+    for cmd in ("claude", "codex", "cursor-agent", "node", "python3"):
+        assert cmd in text, f"環境前提チェックに {cmd} がない"
+    assert "tmux" not in text
+    assert "goal-prompt の `claude --bg` 起動プロンプト候補" in text
+    assert "goal-prompt の独立レビュー候補" in text
+    assert "インストール自体はこのスキルでは行わない" in text
+    assert "`python3` が `MISSING` の場合" in text
+    assert "この時点で停止し、step 3 以降は実行しない" in text
+    assert "`brew install python`" in text
+    assert "`node` が `MISSING` の場合" in text
+    assert "step 5 の statusline 適用だけをスキップ" in text
+    assert "`brew install node`" in text
+    assert "`claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみ" in text
+    assert "MISSING があった場合は、影響と導入コマンドを報告に含める" in text
+
+
 def test_openai_agent_metadata_exists():
     text = OPENAI_PATH.read_text(encoding="utf-8")
 

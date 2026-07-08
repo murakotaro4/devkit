@@ -212,3 +212,18 @@ def test_no_hardcoded_codex_model_in_contracts():
             if re.search(r"codex[^\n]*\s-m\s+\S+", line, re.IGNORECASE) or "gpt-5.3-codex-spark" in line
         ]
         assert not offenders, f"{relpath} に codex モデルの焼き込みがある: {offenders}"
+
+
+def test_dig_goal_prompt_switching_terms_stay_in_sync():
+    documents = {
+        "AGENTS.md": _read("AGENTS.md"),
+        "README.md": _read("README.md"),
+        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
+        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
+            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        ),
+    }
+    for doc_name, text in documents.items():
+        assert "自律度" in text, f"{doc_name} に使い分け軸(自律度)がない"
+        assert "ゴール化" in text, f"{doc_name} に dig 連携語(ゴール化)がない"
+        assert "起動プロンプト" in text, f"{doc_name} に goal-prompt 境界語(起動プロンプト)がない"

@@ -35,6 +35,7 @@ def test_skill_frontmatter():
     assert "allowed-tools:" in frontmatter and '"Bash"' in frontmatter
     assert '"AskUserQuestion"' in frontmatter, "深掘りに必要な AskUserQuestion がない"
     assert '"ExitPlanMode"' in frontmatter, "計画承認に必要な ExitPlanMode がない"
+    assert '"Skill"' in frontmatter, "goal-prompt 引き継ぎに必要な Skill がない"
 
 
 # ── 3. 深掘りインタビューと計画承認の契約 ─────────────────────────
@@ -45,6 +46,9 @@ def test_interview_and_approval_contract():
     assert "AskUserQuestion" in text, "深掘りインタビューの記述がない"
     assert "ExitPlanMode" in text, "plan mode での計画承認の記述がない"
     assert "承認なしで実装に進まない" in text, "計画承認ゲートの記述がない"
+    assert "通常実装では計画レビュー / 実装 / diff レビューの 3 役を明記" in text
+    assert "実装 backend が「ゴール化して自律実行」の場合は diff レビュー backend を明記せず" in text
+    assert "goal-prompt のゴール本文に実装後レビュー要件を焼き込む" in text
 
 
 # ── 4. backend 選択の契約 ─────────────────────────────────────────
@@ -56,6 +60,9 @@ def test_backend_selection_contract():
     assert "effort high" in text, "codex の effort high 選択肢がない"
     assert "effort medium" in text, "codex の effort medium 選択肢がない"
     assert "sonnet" in text.lower(), "Claude サブエージェント(Sonnet)の選択肢がない"
+    assert "ゴール化して自律実行" in text, "goal-prompt へ引き継ぐ実装 backend 選択肢がない"
+    assert "レビュー済みゴールファイル + 起動プロンプト" in text
+    assert "diff レビュー backend の質問を出さない" in text
     assert "haiku" not in text.lower(), "Haiku が選択肢として残っている(v5.1.0 で廃止済み)"
     assert "command -v codex" in text, "codex 不在時のフォールバック判定がない"
 
@@ -95,6 +102,8 @@ def test_three_role_backend_selection_contract():
     text = SKILL_PATH.read_text(encoding="utf-8")
     assert "計画レビュー" in text, "計画レビュー役の記述がない"
     assert "backend 選択" in text, "backend 選択 step の記述がない"
+    assert "実装 backend で「ゴール化して自律実行」を選ぶ場合" in text
+    assert "実装後レビューは goal-prompt が作るゴール本文の要件が担う" in text
     assert "model=opus" in text, "diff レビュー用 Claude サブエージェント(Opus)の記述がない"
     assert "model=sonnet" in text, "実装用 Claude サブエージェント(Sonnet)の記述がない"
 
@@ -153,3 +162,24 @@ def test_codex_stdin_guard():
     ]
     assert not offenders, f"stdin 閉鎖(< /dev/null)がない codex コマンド行: {offenders}"
     assert "< /dev/null" in text, "codex exec の stdin 閉鎖(< /dev/null)の記述がない"
+
+
+def test_goal_handoff_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "## dig / goal-prompt 使い分け" in text
+    assert "自律度" in text
+    assert "ゴール化して自律実行" in text
+    assert "ゴール化引き継ぎ" in text
+    assert 'Skill(skill: "devkit:goal-prompt"' in text
+    assert "commit・push 禁止 / 実装後の独立レビュー要件" in text
+    assert "目的 / write_scope / 受け入れ条件 / 検証コマンド / 非対象" in text
+    assert "commit / push 禁止" in text
+    assert "実装後の独立レビュー要件" in text
+    assert "レビュー済みゴールファイル + 起動プロンプトを作成" in text
+    assert "dig もそこで終了し、step 7-9 は実行しない" in text
+    assert "diff レビュー backend の質問を出さない" in text
+    assert "実装と別系統の独立レビュー(codex review 等)を実施し指摘ゼロ" in text
+    assert "commit / push 禁止と合わせて転記必須項目" in text
+    assert "監視または引き渡し" not in text
+    assert "step 7(自レビュー)以降を続行" not in text
+    assert ".claude/worktrees/" not in text

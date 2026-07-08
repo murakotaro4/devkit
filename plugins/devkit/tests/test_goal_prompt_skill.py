@@ -24,6 +24,15 @@ def _frontmatter() -> str:
     return match.group(1)
 
 
+def _section(text: str, heading: str) -> str:
+    start = text.index(heading)
+    heading_level = len(heading) - len(heading.lstrip("#"))
+    following = re.search(rf"\n#{{1,{heading_level}}}\s", text[start + len(heading):])
+    if not following:
+        return text[start:]
+    return text[start:start + len(heading) + following.start()]
+
+
 def test_skill_exists():
     assert SKILL_PATH.exists(), "goal-prompt の SKILL.md が存在しない"
 
@@ -49,10 +58,13 @@ def test_skill_frontmatter_contract():
         "Bash",
         "AskUserQuestion",
         "request_user_input",
+        "spawn_agent",
+        "wait_agent",
         "TaskCreate",
         "TaskUpdate",
         "Write",
         "Skill",
+        "Agent",
     ]
     actual_tools = re.findall(r'"([^"]+)"', allowed_tools)
     assert actual_tools == expected_tools
@@ -74,14 +86,20 @@ def test_harness_and_task_list_contract():
 
 def test_write_contract_limits_writes_and_execution():
     text = _skill_text()
-    assert "step 1-7 は read-only" in text
-    assert "step 8 は、ユーザーがファイル保存を選択した場合に Write で新規保存" in text
+    assert "step 1-8 は対象 repo に対して read-only" in text
+    assert "step 7 の独立レビュー運用" in text
+    assert "`JOB_DIR` の作成とレビューログ書き込みは可" in text
+    assert "対象 repo への書き込みは不可" in text
+    assert "step 9 は、ユーザーが保存を選択した場合に Write" in text
     assert "docs/goals/YYYY-MM-DD-<slug>.md" in text
     assert "同名ファイルは上書きせず" in text
-    assert "step 9 は、ユーザーが実行を選択した場合のみ実行" in text
+    assert "この skill は起動プロンプトを提示して終了する" in text
+    assert "実行開始" in text and "行わない" in text
     assert "cron 登録" in text
     assert "`/schedule` 登録" in text
     assert "commit、push" in text
+    assert "step 9 は、ユーザーが実行を選択した場合のみ実行" not in text
+    assert "実行できる経路" not in text
 
 
 def test_interview_rounds_are_present():
@@ -90,17 +108,21 @@ def test_interview_rounds_are_present():
         "Round 1: 実行形態と対象",
         "Round 2: ゴール定義",
         "Round 3: 境界と停止条件",
-        "Round 4: 運用",
+        "Round 4: 運用と実行戦略",
     ):
         assert heading in text
 
     for required in (
-        "形態(`/goal` / `/loop` / `/schedule` / headless / codex exec / 通常セッション)",
+        "形態(現セッション `/goal` / 別ターミナル `claude --bg` / `/loop` / `/schedule`)",
+        "タスク型(実装 / 調査 / 状態確認 / 文書化 / 整理)",
         "完了状態、検証方法、検証コマンド、品質バー",
         "非対象、上限停止の種類と値、行き詰まり時の扱い、破壊的操作の可否",
-        "進捗の残し方、権限、途中中断と再開、完了報告の形式",
+        "実装系のみ委譲先・並列方針・effort 帯・トークン効率方針",
     ):
         assert required in text
+
+    assert "エンジン選択" not in text
+    assert "実行エンジン" not in text
 
 
 def test_failure_modes_and_stop_conditions():
@@ -124,7 +146,9 @@ def test_prompt_template_and_self_check_contract():
         "## 検証コマンド",
         "## 制約・非対象",
         "## 停止条件(3 種)",
-        "## 進捗報告",
+        "## 実行戦略(実装系のみ)",
+        "## 進捗管理",
+        "## 実装後レビュー",
         "## 実行前提",
     ):
         assert section in text
@@ -135,26 +159,58 @@ def test_prompt_template_and_self_check_contract():
         "非対象・破壊的操作明記",
         "実行形態との無矛盾",
         "秘密情報なし",
-        "機構の長さ・受け渡し制約への適合",
+        "受け渡し制約への適合",
+        "実装系ゴール",
     ):
         assert check in text
 
+    self_check = _section(text, "## セルフチェック")
+    assert len(re.findall(r"^\d+\. ", self_check, re.MULTILINE)) == 7
+    assert "`実行戦略(実装系のみ)` と `実装後レビュー`" in text
+    assert "逸脱時ログ記録の 1 行" in text
+    assert "戦略から逸脱が必要なら理由を進捗ログに記録して保守的に判断する" in text
+    assert "TaskCreate / TaskUpdate" in text
     assert "/goal` 条件文 4,000 字上限" in text
     assert "長い本文はファイル参照" in text
-    assert "CLI 引数は短い起動指示だけ" in text
+    assert "起動プロンプトは短い条件文だけ" in text
 
 
 def test_launch_command_table_and_codex_stdin_guard():
     text = _skill_text()
-    assert "## 起動コマンド決定表" in text
-    for surface in ("/goal", "/loop", "/schedule", "claude -p", "codex exec", "通常セッション"):
-        assert surface in text
+    assert "## 起動プロンプトの手引き" in text
+    launch_guide = _section(text, "## 起動プロンプトの手引き")
+    for surface in ("現セッション `/goal`", "別ターミナル `claude --bg`", "`/loop`", "`/schedule`"):
+        assert surface in launch_guide
+    assert launch_guide.count("提示のみ") >= 4
+    assert (
+        'cd "<対象repo>" && claude --bg --permission-mode acceptEdits --allowedTools "..." '
+        '"/goal <保存したゴールファイルの絶対パス> '
+        "の成功条件を満たす or stop after <N> turns。まず "
+        '<保存したゴールファイルの絶対パス> を読め" < /dev/null'
+    ) in launch_guide
+    assert '--allowedTools "..."' in launch_guide
+    assert "背景セッションは別 worktree で動く場合があるため、ファイル参照は必ず絶対パスにする" in launch_guide
+    assert "未コミットの新規ファイルは相対パスだと読めない" in launch_guide
+    assert "絶対パス" in launch_guide
+    assert "Bash(codex:*)" in launch_guide
+    assert "or stop after <N> turns" in launch_guide
+    assert "4,000 字以内" in launch_guide
+    assert "登録はユーザーの 1 アクション" in launch_guide
+    assert "codex exec" not in launch_guide
+    assert "claude -p" not in launch_guide
 
     offenders = [
         line for line in text.splitlines()
         if "codex -a never exec" in line and "< /dev/null" not in line
     ]
     assert not offenders, f"stdin 閉鎖(< /dev/null)がない codex コマンド行: {offenders}"
+
+    codex_goal_offenders = [
+        line for line in text.splitlines()
+        if "codex -a never exec" in line
+        and re.search(r"(?<![A-Za-z0-9_.-])/goal\b", line)
+    ]
+    assert not codex_goal_offenders, f"codex exec コマンド行に /goal が含まれている: {codex_goal_offenders}"
 
     model_offenders = [
         line for line in text.splitlines()
@@ -163,26 +219,90 @@ def test_launch_command_table_and_codex_stdin_guard():
     assert not model_offenders, f"codex モデル焼き込みがある: {model_offenders}"
 
 
-def test_execution_contract_is_confirmation_gated_and_bounded():
+def test_authoring_only_contract():
     text = _skill_text()
-    assert "必ず「実行しますか？」と確認" in text
-    assert "Codex 親は常に生成 + コマンド提示まで" in text
-    assert "JOB_DIR=$(mktemp -d" in text
-    assert 'echo "JOB_DIR=' in text
-    assert "-C \"<対象repo>\"" in text
-    assert "--sandbox workspace-write" in text
-    assert "$JOB_DIR/codex.log" in text
-    assert "--sandbox read-only" in text
-    assert "完了自動通知駆動" in text
-    assert "増分ゼロが続く場合のみ" in text
-    assert "停滞の継続時間と推定原因" in text
-    assert "停止条件が機能したか" in text
-    assert "loop` スキル不在時の fallback" in text
-    assert "ループはセッションが開いている間だけ動く" in text
-    assert "通常セッションのルール" in text
-    assert "$dig" in text
-    assert "`/goal` はユーザータイプ専用" in text
-    assert "`/schedule` は登録しない" in text
+    for retired in (
+        "tmux",
+        "pipe-pane",
+        "capture-pane",
+        "Goal achieved",
+        "claude agents",
+        "エンジン選択",
+        "codex exec 投入",
+        "headless claude -p",
+        "headless `claude -p`",
+        "実行メカニズム一覧",
+        "起動コマンド決定表",
+        "必ず「実行しますか？」と確認",
+        "実行(オプション",
+        "監視または引き渡し",
+        "監視 or 引き渡し",
+        "引き渡し",
+    ):
+        assert retired not in text
+
+    assert "### 7. ゴールプロンプト独立レビュー" in text
+    step7 = _section(text, "### 7. ゴールプロンプト独立レビュー")
+    assert '-C "<対象repo>"' in step7
+    assert "--sandbox read-only" in step7
+    assert "< /dev/null" in step7
+    assert "JOB_DIR=<echo された記録済みのパス>" in step7
+    assert "シェル変数はツール呼び出し間で失われるため" in step7
+    assert "run_in_background" in step7
+    assert "完了通知後に記録済み `JOB_DIR` の `review.log` を必ず読み" in step7
+    assert "指摘ゼロを確認してから step 8 へ進む" in step7
+    assert "指摘があれば step 6 に戻る" in step7
+    assert "Agent(Claude サブエージェント)" in step7
+    assert "`spawn_agent`(explorer)" in step7
+    assert "`wait_agent`" in step7
+    assert "step 8 へ進まない" in step7
+    assert "保存はせず" in step7
+    assert "再実行を案内して停止" in step7
+
+    step9 = _section(text, "### 9. 保存 + 起動プロンプト提示")
+    assert "Write でゴールファイルを新規保存" in step9
+    assert "起動プロンプトを提示して終了" in step9
+    assert "保存しない場合は、通常セッション貼付け用の本文だけを提示して終了する" in step9
+    assert "ファイル参照型の起動プロンプトは保存済みファイルが前提のため提示しない" in step9
+    assert "起動" in step9 and "実行" not in step9
+
+    assert "/goal` を付けるのは Claude 系の起動プロンプトだけ" in text
+    assert "委譲先 codex exec には素の実装指示" in text
+
+
+def test_dig_handoff_mode_contract():
+    text = _skill_text()
+    assert "## dig 引き継ぎモード" in text
+    assert "計画にない項目だけの差分確認 1 ラウンド" in text
+    assert "目的 / write_scope / 受け入れ条件 / 検証コマンド / 非対象は承認済み計画から転記" in text
+    assert "起動プロンプト形態" in text
+    assert "上限停止値" in text
+    assert "行き詰まり停止の扱い" in text
+    assert "破壊的操作の可否" in text
+    assert "権限、進捗管理、実装戦略" in text
+    assert "commit / push 禁止" in text
+    assert "実装後レビュー要件は転記必須項目" in text
+    assert "組み立て + セルフチェック、独立レビュー、最終確認、保存 + 起動プロンプト提示" in text
+    assert "セルフチェック 7 項目" in text
+
+
+def test_retired_goal_prompt_phrases_are_absent():
+    text = _skill_text()
+    for retired in (
+        "`/goal` は" + "ユーザー" + "タイプ専用",
+        "ユーザー" + "タイプ専用",
+        "入れ子 " + "`claude -p`" + " は" + "非" + "公式",
+        "非" + "公式の入れ子実行",
+        "tmux",
+        "pipe-pane",
+        "capture-pane",
+        "Goal achieved",
+        "kill-session",
+        "claude agents",
+        "監視 or 引き渡し",
+        "codex exec 投入",
+    ):
+        assert retired not in text
 
 
 def test_agents_openai_yaml_exists_and_mentions_goal_prompt_and_dig():

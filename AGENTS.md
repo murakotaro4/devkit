@@ -23,6 +23,16 @@
 6. 修正ループ: 指摘が解消するまで修正を繰り返す
 7. 報告とコミット: 変更サマリーを報告し、コミット・プッシュはユーザー指示に従う
 
+## dig / goal-prompt 使い分け
+
+使い分けの軸はタスク規模ではなく自律度とする。
+
+- `dig` はその場で完成させる工程。成果物は実装済み diff。ユーザーが同席し、判断をリアルタイムに供給する
+- `goal-prompt` は不在実行に耐える指示書を作る工程。成果物はレビュー済みゴールファイル + 起動プロンプト。実行はユーザーの 1 アクションに分離する
+- 実装系で計画がまだ無い場合の正道は `dig` で調査・write_scope・受け入れ条件を確定し、必要なら「ゴール化して自律実行」で `goal-prompt` へ引き継ぐ
+- ゴール化を選んだ `dig` は、goal-prompt が作るゴールファイル + 起動プロンプトを提示して終了する。実装後レビューはゴール本文の要件として焼き込む
+- 定期ループは `goal-prompt` で `/loop` または保存済みゴールファイル参照の起動プロンプトを提示する
+
 ## Maintenance Rules
 
 - ルートのエージェント向けルールを変更するときは、まずこのファイルを更新する
@@ -92,7 +102,7 @@ codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
 - `plugins/devkit/scripts/`: setup / update 系スクリプト
 - `plugins/devkit/skills/dig/SKILL.md`: 深掘り・計画・実装委譲 workflow の正本
 - `plugins/devkit/skills/improve-skill/SKILL.md`: skill 改善 workflow の正本
-- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・thought-db 接続同期・statusline 適用 workflow の正本
+- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / python3)・thought-db 接続同期・statusline 適用 workflow の正本
 - `plugins/devkit/skills/refactor/SKILL.md`: 負債棚卸し・優先順位付け・計画作成 workflow の正本
 - `plugins/devkit/skills/memory-review/SKILL.md`: AI メモリ棚卸し・前提監査 workflow の正本
 - `plugins/devkit/skills/goal-prompt/SKILL.md`: 自律実行・ループ・大タスク完走向けゴールプロンプト作成 workflow の正本
