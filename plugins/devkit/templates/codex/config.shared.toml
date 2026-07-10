@@ -2,11 +2,8 @@
 # Re-run update-devkit after updating DevKit.
 # Put machine-specific additions in ~/.codex/config.local.toml.
 approval_policy = "never"
-model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
-plan_mode_reasoning_effort = "xhigh"
-model_context_window = 1000000
-model_auto_compact_token_limit = 9000000
+model_reasoning_effort = "medium"
+plan_mode_reasoning_effort = "medium"
 personality = "pragmatic"
 network_access = true
 web_search = "live"

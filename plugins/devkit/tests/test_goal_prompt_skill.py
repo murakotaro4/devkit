@@ -33,6 +33,12 @@ def _section(text: str, heading: str) -> str:
     return text[start:start + len(heading) + following.start()]
 
 
+def _between(text: str, start: str, end: str) -> str:
+    start_index = text.index(start)
+    end_index = text.index(end, start_index + len(start))
+    return text[start_index:end_index]
+
+
 def test_skill_exists():
     assert SKILL_PATH.exists(), "goal-prompt の SKILL.md が存在しない"
 
@@ -84,6 +90,31 @@ def test_harness_and_task_list_contract():
     assert "1 呼び出し最大 3 問" in text
 
 
+def test_codex_model_effort_contract():
+    text = _skill_text()
+    policy = _section(text, "## Codex モデル / effort 契約")
+
+    effort_labels = ["- Low:", "- Medium:", "- High:", "- XHigh:"]
+    effort_positions = [policy.index(label) for label in effort_labels]
+    assert effort_positions == sorted(effort_positions)
+    assert "当該 runtime / account で利用可能な推薦既定" in policy
+    assert "ユーザーがモデルを明示指定した場合に限り `-m` を付ける" in policy
+    assert "Medium: 標準の実装、計画レビュー、diff レビューに使う既定値" in policy
+    assert "Low: 決定論的・低リスクな実装だけ" in policy
+    assert "計画レビューと diff レビューでは Low を選択肢にしない" in policy
+    assert "XHigh: ユーザーが明示した場合、または代表タスクの実測" in policy
+    assert "Max は対応 surface の最深推論" in policy
+    assert "Ultra は並列オーケストレーション" in policy
+    assert "選択肢、CLI の effort、config 値にはしない" in policy
+    assert "並列方針と effort 帯は別々に決める" in policy
+    assert "子 agent ごとの effort 選択を追加しない" in policy
+    assert "effort を指定できる経路だけに適用" in policy
+
+    concrete_efforts = re.findall(r'model_reasoning_effort="([^"<>]+)"', text)
+    assert "max" not in {value.lower() for value in concrete_efforts}
+    assert "ultra" not in {value.lower() for value in concrete_efforts}
+
+
 def test_write_contract_limits_writes_and_execution():
     text = _skill_text()
     assert "step 1-8 は対象 repo に対して read-only" in text
@@ -123,6 +154,7 @@ def test_interview_rounds_are_present():
 
     assert "エンジン選択" not in text
     assert "実行エンジン" not in text
+    assert "effort は指定できる経路だけ確認する" in text
 
 
 def test_failure_modes_and_stop_conditions():
@@ -173,6 +205,12 @@ def test_prompt_template_and_self_check_contract():
     assert "/goal` 条件文 4,000 字上限" in text
     assert "長い本文はファイル参照" in text
     assert "起動プロンプトは短い条件文だけ" in text
+    strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    assert strategy.index("- 並列方針:") < strategy.index("- effort 帯:")
+    assert "Medium を標準" in strategy
+    assert "Low は決定論的・低リスクな実装だけ" in strategy
+    assert "effort を指定できる経路だけ記載する" in strategy
+    assert "spawn_agent など非対応経路は適用なし" in strategy
 
 
 def test_launch_command_table_and_codex_stdin_guard():
@@ -258,6 +296,11 @@ def test_authoring_only_contract():
     assert "step 8 へ進まない" in step7
     assert "保存はせず" in step7
     assert "再実行を案内して停止" in step7
+    assert "`<effort>` は Medium を標準" in step7
+    assert "レビューでは Low を使わない" in step7
+    concrete_review_efforts = re.findall(r'model_reasoning_effort="([^"<>]+)"', step7)
+    assert "low" not in {value.lower() for value in concrete_review_efforts}
+    assert {value.lower() for value in concrete_review_efforts} <= {"medium", "high", "xhigh"}
 
     step9 = _section(text, "### 9. 保存 + 起動プロンプト提示")
     assert "Write でゴールファイルを新規保存" in step9

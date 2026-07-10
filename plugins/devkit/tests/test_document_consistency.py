@@ -201,7 +201,7 @@ def test_shared_skill_contract_canonical_and_referenced():
 
 
 def test_no_hardcoded_codex_model_in_contracts():
-    # モデルは config 既定に従い、契約・ルールへ焼き込まない(dig の設計原則)。
+    # モデルは runtime / account の推薦既定に従い、契約・ルールへ焼き込まない。
     documents = ["AGENTS.md"] + [
         f"plugins/devkit/skills/{skill_name}/SKILL.md" for skill_name in DISTRIBUTED_SKILLS
     ]
@@ -212,6 +212,27 @@ def test_no_hardcoded_codex_model_in_contracts():
             if re.search(r"codex[^\n]*\s-m\s+\S+", line, re.IGNORECASE) or "gpt-5.3-codex-spark" in line
         ]
         assert not offenders, f"{relpath} に codex モデルの焼き込みがある: {offenders}"
+
+
+def test_codex_model_and_effort_contract_stays_in_sync():
+    documents = {
+        "AGENTS.md": _read("AGENTS.md"),
+        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
+        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
+            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        ),
+    }
+    for doc_name, text in documents.items():
+        assert "当該 runtime / account で利用可能な推薦既定" in text, (
+            f"{doc_name} に Codex モデルの推薦既定契約がない"
+        )
+        assert "Low" in text and "決定論的・低リスクな実装だけ" in text
+        assert "Medium" in text and "標準" in text
+        assert "High" in text and "複雑・高リスク" in text
+        assert "XHigh" in text and "代表タスク" in text
+        assert "Max は対応 surface の最深推論" in text
+        assert "Ultra は並列オーケストレーション" in text
+        assert not re.search(r'model_reasoning_effort="(?:max|ultra)"', text, re.IGNORECASE)
 
 
 def test_dig_goal_prompt_switching_terms_stay_in_sync():

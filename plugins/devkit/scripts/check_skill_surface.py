@@ -26,6 +26,8 @@ EXPECTED_SKILLS = {
 REQUIRED_PATHS = {
     "plugins/devkit/statusline/install.js",
     "plugins/devkit/statusline/statusline.js",
+    "plugins/devkit/templates/codex/config.shared.toml",
+    "plugins/devkit/templates/codex/config.windows.toml",
 }
 REMOVED_SKILL_DIRS = {
     "codex-search",
@@ -519,16 +521,39 @@ $Root = {str(ROOT)!r}
 $Tmp = New-Item -ItemType Directory -Path ([IO.Path]::Combine([IO.Path]::GetTempPath(), "devkit-pwsh-" + [Guid]::NewGuid().ToString()))
 try {{
   . (Join-Path $Root "plugins/devkit/scripts/devkit-codex-config.ps1")
-  $shared = Join-Path $Tmp.FullName "shared.toml"
-  $os = Join-Path $Tmp.FullName "os.toml"
-  $overlay = Join-Path $Tmp.FullName "local.toml"
-  $existing = Join-Path $Tmp.FullName "config.toml"
-  Set-Content -LiteralPath $shared -Encoding UTF8 -Value "[sandbox]`nmode = `"workspace-write`"`n"
-  Set-Content -LiteralPath $os -Encoding UTF8 -Value "[windows]`nenabled = true`n"
-  Set-Content -LiteralPath $existing -Encoding UTF8 -Value "[marketplaces.murakotaro4]`nsource_type = `"git`"`nsource = `"murakotaro4/devkit`"`n`n[plugins.`"devkit@murakotaro4`"]`nenabled = true`n"
-  $merged = Get-DevKitCodexConfigContent -SharedTemplatePath $shared -OsTemplatePath $os -LocalOverlayPath $overlay -ExistingConfigPath $existing
-  if (-not $merged.Contains("[marketplaces.murakotaro4]")) {{ throw "marketplace runtime section lost" }}
-  if (-not $merged.Contains("[plugins.`"devkit@murakotaro4`"]")) {{ throw "plugin runtime section lost" }}
+  $configHome = Join-Path $Tmp.FullName "config-home"
+  $configPaths = Get-DevKitCodexConfigPaths -UserHome $configHome
+  New-Item -ItemType Directory -Path $configPaths.TemplateRoot -Force | Out-Null
+  Copy-Item -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.shared.toml") -Destination $configPaths.SharedTemplatePath -Force
+  Copy-Item -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.windows.toml") -Destination $configPaths.WindowsTemplatePath -Force
+  Set-Content -LiteralPath $configPaths.TargetPath -Encoding UTF8 -Value "model = `"gpt-5.4`"`nmodel_reasoning_effort = `"xhigh`"`nplan_mode_reasoning_effort = `"xhigh`"`nmodel_context_window = 1000000`nmodel_auto_compact_token_limit = 9000000`n`n[marketplaces.murakotaro4]`nsource_type = `"git`"`nsource = `"murakotaro4/devkit`"`n`n[plugins.`"devkit@murakotaro4`"]`nenabled = true`n"
+
+  $configResult = Install-DevKitCodexConfig -UserHome $configHome -OsName "windows"
+  if ([string]::IsNullOrWhiteSpace($configResult.BackupPath)) {{ throw "config backup path missing" }}
+  if (-not (Test-Path -LiteralPath $configResult.BackupPath)) {{ throw "config backup file missing" }}
+  $backup = Get-Content -LiteralPath $configResult.BackupPath -Raw -Encoding UTF8
+  if (-not $backup.Contains('model = "gpt-5.4"')) {{ throw "legacy model pin missing from backup" }}
+  if (-not $backup.Contains('model_reasoning_effort = "xhigh"')) {{ throw "legacy model effort missing from backup" }}
+  if (-not $backup.Contains('plan_mode_reasoning_effort = "xhigh"')) {{ throw "legacy plan effort missing from backup" }}
+  if (-not $backup.Contains('model_context_window = 1000000')) {{ throw "legacy context pin missing from backup" }}
+  if (-not $backup.Contains('model_auto_compact_token_limit = 9000000')) {{ throw "legacy auto-compact pin missing from backup" }}
+  if (-not $backup.Contains("[marketplaces.murakotaro4]")) {{ throw "marketplace runtime section missing from backup" }}
+  if (-not $backup.Contains("[plugins.`"devkit@murakotaro4`"]")) {{ throw "plugin runtime section missing from backup" }}
+  if (Test-Path -LiteralPath $configPaths.LocalOverlayPath) {{ throw "legacy pins were moved to local overlay" }}
+
+  $installed = Get-Content -LiteralPath $configPaths.TargetPath -Raw -Encoding UTF8
+  if ($installed -match '(?m)^model\s*=') {{ throw "legacy model pin retained" }}
+  if ($installed -match '(?m)^model_context_window\s*=') {{ throw "legacy context pin retained" }}
+  if ($installed -match '(?m)^model_auto_compact_token_limit\s*=') {{ throw "legacy auto-compact pin retained" }}
+  if (-not $installed.Contains('model_reasoning_effort = "medium"')) {{ throw "model effort is not medium" }}
+  if (-not $installed.Contains('plan_mode_reasoning_effort = "medium"')) {{ throw "plan effort is not medium" }}
+  if ($installed.Contains('model_reasoning_effort = "xhigh"')) {{ throw "legacy model effort retained" }}
+  if ($installed.Contains('plan_mode_reasoning_effort = "xhigh"')) {{ throw "legacy plan effort retained" }}
+  if ($installed -match '(?i)model_reasoning_effort\s*=\s*"(?:max|ultra)"') {{ throw "unsupported effort retained" }}
+  if (-not $installed.Contains('features.multi_agent = true')) {{ throw "multi-agent feature lost" }}
+  if (-not $installed.Contains('sandbox = "unelevated"')) {{ throw "Windows sandbox lost" }}
+  if (-not $installed.Contains("[marketplaces.murakotaro4]")) {{ throw "marketplace runtime section lost" }}
+  if (-not $installed.Contains("[plugins.`"devkit@murakotaro4`"]")) {{ throw "plugin runtime section lost" }}
 
   $script:TaskLog = New-Object System.Collections.Generic.List[string]
   function Get-ScheduledTask {{ param([string]$TaskName) if ($TaskName -eq "DevKitSkillsDailyUpdate") {{ return [pscustomobject]@{{ TaskName = $TaskName }} }} }}

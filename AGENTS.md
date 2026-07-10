@@ -92,9 +92,19 @@
 codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
 ```
 
-- モデルは `-m` で焼き込まず、config 既定（最新モデル）に従う
+- Codex のモデルは `-m` で焼き込まず、当該 runtime / account で利用可能な推薦既定に従う。ユーザーがモデルを明示指定した場合に限り `-m` を付ける
 - 非対話実行では必ず末尾に `< /dev/null` を付ける（stdin 待ちで無期限ハングするため）
 - `-a never` などの top-level オプションは `exec` より前に置く
+
+### Codex effort 選択
+
+- Low: 決定論的・低リスクな実装だけに使う
+- Medium: 標準の実装、計画レビュー、diff レビューに使う既定値
+- High: 複雑・高リスクな作業へ昇格するときに使う
+- XHigh: ユーザーが明示した場合、または代表タスクの実測で品質向上を確認できた場合だけ使う例外
+- 計画レビューと diff レビューでは Low を選択肢にしない
+- Max は対応 surface の最深推論、Ultra は並列オーケストレーションを表す。この repo では説明にだけ用い、backend 選択肢、CLI の effort、config 値にはしない
+- Codex 親が `spawn_agent` を使う場合、子 agent ごとの effort 選択は追加しない
 
 ## Key Paths
 
@@ -148,6 +158,6 @@ codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
 codex -a never exec -c model_reasoning_effort="medium" "<相談内容>" < /dev/null
 ```
 
-- 実行形は「スキル共通契約 > codex exec 実行形」に従う（モデルは `-m` で焼き込まず config 既定に従う）
+- 実行形は「スキル共通契約 > codex exec 実行形」に従う（モデルは `-m` で焼き込まず、当該 runtime / account の推薦既定に従う）
 - 技術的判断に迷った場合、設計の妥当性を確認したい場合に使用する
 - 結果は参考意見として扱い、最終判断は親エージェントが行う

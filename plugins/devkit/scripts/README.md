@@ -43,8 +43,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marke
 Windows の `~/.codex/config.toml` 合成専用です。
 
 - shared template と windows template を結合する
+- shared template は Codex モデルを固定せず、通常・Plan の effort を Medium にする
 - `~/.codex/config.local.toml` があれば結合する
 - Codex が書く marketplace / plugin runtime section を保持する
+- 次回更新時は既存 `config.toml` をバックアップしてから再合成し、旧 DevKit 固定値の `model` / `model_context_window` / `model_auto_compact_token_limit` を削除する
+- 削除する旧固定値は `config.local.toml` へ移送せず、local overlay の許可キーも拡張しない
 - macOS / Linux / WSL では config 合成を行わない
 
 ### devkit-lib.sh / devkit-lib.ps1
@@ -87,12 +90,13 @@ v7 の配布面を検査します。
 
 - `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` と完全一致すること
 - `plugins/devkit/statusline/statusline.js` と `plugins/devkit/statusline/install.js` が存在すること
+- `plugins/devkit/templates/codex/config.shared.toml` と `config.windows.toml` が存在すること
 - 削除済み directory / script / duplicate manifest / scaffold が存在しないこと
 - ルート marketplace manifest の source directory が存在すること
 - fake Codex binary による marketplace add / remove / upgrade / plugin add smoke
 - legacy prune の symlink 削除と user directory 保持
 - marker 存在時の no-op
-- pwsh がある環境での Windows smoke
+- pwsh がある環境で、実 Codex config template による旧固定値除去と runtime section 保持を確認する Windows smoke
 
 ### check_legacy_migration.py
 
