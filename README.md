@@ -145,6 +145,24 @@ Get-ScheduledTask -TaskName "RepoNightlyMaintainer-*" | Unregister-ScheduledTask
 
 `%USERPROFILE%` 配下に `*.linkbak` が残っている場合は、手動で削除してください。
 
+### Windows: DevKit refresh が「Get-DevKitRepoRoot」で失敗する場合
+
+症状: `update-ccx` / `update-devkit` の `DevKit refresh` 段階が次のようなエラーで必ず失敗する。
+
+```
+用語 'Get-DevKitRepoRoot' は、コマンドレット、関数、スクリプト ファイル、または操作可能なプログラムの名前として認識されません。
+```
+
+原因: v7.0.1 未満のインストール済み `~/.codex/bin/update-ccx.ps1` は `devkit-lib.ps1` を関数の内側で dot-source していました。PowerShell の関数内 dot-source は関数の return と同時にスコープが消えるため、後続の `Section-DevKit` が `Get-DevKitRepoRoot` を呼べません。DevKit refresh 自体が新しい updater スクリプトの配布工程のため、旧ビルドのままではこのバグを自己更新で解消できません。
+
+復旧(一度だけ手動実行が必要):
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\update-ccx.ps1" --devkit-only
+```
+
+marketplace clone にある修正済み updater を一度直接実行すると、`~/.codex/bin/update-ccx.ps1` が新しいスクリプトに置き換わります。以後は通常どおり `update-ccx` / `update-devkit` を使えます。
+
 ## Manual Cleanup
 
 `update-devkit` は v6 marker により一度だけ旧資産を prune します。手動で残骸を掃除する場合は、DevKit 管理物だけを対象にしてください。

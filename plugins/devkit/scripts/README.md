@@ -30,6 +30,20 @@ update-devkit --cli-only
 update-devkit --devkit-only
 ```
 
+#### Windows: DevKit refresh が「Get-DevKitRepoRoot」で失敗する場合
+
+症状: `update-ccx` / `update-devkit` の `DevKit refresh` 段階が「用語 'Get-DevKitRepoRoot' は…認識されません」で必ず失敗する。
+
+原因: v7.0.1 未満のインストール済み `~/.codex/bin/update-ccx.ps1` は `devkit-lib.ps1` を関数の内側で dot-source していました。PowerShell の関数内 dot-source は関数の return と同時にスコープが消えるため、後続の `Section-DevKit` が `Get-DevKitRepoRoot` を呼べません。DevKit refresh 自体が新しい updater スクリプトの配布工程のため、旧ビルドのままでは自己更新でこのバグを解消できません。
+
+復旧(一度だけ手動実行が必要): marketplace clone にある修正済み updater を直接実行します。
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\update-ccx.ps1" --devkit-only
+```
+
+`~/.codex/bin/update-ccx.ps1` が新しいスクリプトに置き換わったあとは、通常どおり `update-ccx` / `update-devkit` を使えます。回帰防止のテストは `plugins/devkit/tests/test_update_bootstrap.py` の `test_update_ccx_ps1_dot_sources_devkit_lib_at_script_scope` です。
+
 ### devkit-setup.ps1
 
 Windows の初回 bootstrap 用です。Marketplace 配下から実行し、PowerShell / cmd launcher と Windows 用 Codex config template を配置します。継続更新は `update-devkit` を使います。

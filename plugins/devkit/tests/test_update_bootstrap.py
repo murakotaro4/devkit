@@ -435,3 +435,129 @@ def test_update_ccx_ps1_sets_normal_source_root_before_sourcing_existing_lib(tmp
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(default_checkout)
+
+
+# devkit-lib.ps1 の dot-source をスクリプトトップレベルで行うことを PowerShell AST で検証する。
+# v7.0.1 未満の update-ccx.ps1 は Import-DevKitLibForUpdate 関数の内側で devkit-lib.ps1 を
+# dot-source していた。PowerShell は関数内 dot-source のスコープを関数 return と同時に破棄する
+# ため、後段の Section-DevKit が Get-DevKitRepoRoot を解決できず必ず失敗していた (PR #5)。
+# この回帰を検知するため、regex による行マッチではなく AST で構造を検証する。
+_AST_SCOPE_CHECK_SCRIPT = r"""
+param(
+  [Parameter(Mandatory = $true)]
+  [string]$ScriptPath
+)
+
+$ErrorActionPreference = "Stop"
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($ScriptPath, [ref]$tokens, [ref]$parseErrors)
+
+if ($parseErrors.Count -gt 0) {
+  Write-Host ("FAIL: parse errors: {0}" -f (($parseErrors | ForEach-Object { $_.Message }) -join " | "))
+  exit 1
+}
+
+function Test-HasChildScopeAncestor([System.Management.Automation.Language.Ast]$Node) {
+  $current = $Node.Parent
+  while ($null -ne $current) {
+    if ($current -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+      return $true
+    }
+    if ($current -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+      return $true
+    }
+    $current = $current.Parent
+  }
+  return $false
+}
+
+function Test-TargetsDevKitLib([System.Management.Automation.Language.CommandAst]$CmdAst) {
+  if ($CmdAst.CommandElements.Count -eq 0) {
+    return $false
+  }
+  $targetText = $CmdAst.CommandElements[0].Extent.Text
+  if ($targetText -match "Resolve-DevKitLibForUpdate") {
+    return $true
+  }
+  if ($targetText -match "devkit-lib\.ps1") {
+    return $true
+  }
+  return $false
+}
+
+$allCommandAsts = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
+
+$dotSourceAsts = @($allCommandAsts | Where-Object { $_.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot })
+
+$devkitLibDotSources = @($dotSourceAsts | Where-Object { Test-TargetsDevKitLib $_ })
+
+if ($devkitLibDotSources.Count -ne 1) {
+  Write-Host ("FAIL: expected exactly 1 dot-source targeting Resolve-DevKitLibForUpdate/devkit-lib.ps1, found {0}" -f $devkitLibDotSources.Count)
+  exit 1
+}
+
+$devkitLibDotSource = $devkitLibDotSources[0]
+
+if (Test-HasChildScopeAncestor $devkitLibDotSource) {
+  Write-Host "FAIL: devkit-lib dot-source has a FunctionDefinitionAst/ScriptBlockExpressionAst ancestor (child-scoped, not script-level)"
+  exit 1
+}
+
+$topLevelMainCalls = @($allCommandAsts | Where-Object {
+  ($_.GetCommandName() -eq "Main") -and -not (Test-HasChildScopeAncestor $_)
+})
+
+if ($topLevelMainCalls.Count -ne 1) {
+  Write-Host ("FAIL: expected exactly 1 top-level Main invocation, found {0}" -f $topLevelMainCalls.Count)
+  exit 1
+}
+
+$mainCall = $topLevelMainCalls[0]
+
+if ($devkitLibDotSource.Extent.StartOffset -ge $mainCall.Extent.StartOffset) {
+  Write-Host "FAIL: devkit-lib dot-source must precede the top-level Main invocation"
+  exit 1
+}
+
+$childScopedDevKitLibDotSources = @($dotSourceAsts | Where-Object {
+  (Test-TargetsDevKitLib $_) -and (Test-HasChildScopeAncestor $_)
+})
+
+if ($childScopedDevKitLibDotSources.Count -ne 0) {
+  Write-Host ("FAIL: found {0} devkit-lib dot-source(s) nested inside a function definition or script block expression" -f $childScopedDevKitLibDotSources.Count)
+  exit 1
+}
+
+Write-Host "OK"
+exit 0
+"""
+
+
+def test_update_ccx_ps1_dot_sources_devkit_lib_at_script_scope(tmp_path):
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        pytest.skip("pwsh is not installed")
+
+    checker_path = tmp_path / "check_dot_source_scope.ps1"
+    checker_path.write_text(_AST_SCOPE_CHECK_SCRIPT, encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(checker_path),
+            "-ScriptPath",
+            str(SCRIPTS / "update-ccx.ps1"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "OK" in result.stdout
