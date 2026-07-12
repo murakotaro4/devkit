@@ -176,11 +176,29 @@ def test_backup_collision_and_second_run_noop(tmp_path: Path):
     make_settings(settings, '{"profiles":{"defaults":{"font":{"face":"Other"}}}}')
     second = run_script(*windows_args(settings, fonts))
     second_backup = Path(second["settings"][0]["backup"])
+    # 秒境界を跨ぐと衝突サフィックスは付かないため、名前の形は検査しない
+    # (衝突サフィックスの決定論的検査は test_backup_path_collision_suffix)
     assert first_backup != second_backup
-    assert second_backup.name.endswith("-1")
     third = run_script(*windows_args(settings, fonts))
     assert third["settings"][0] == {"path": str(settings), "changed": False, "backup": None}
     assert len(list(first_backup.parent.iterdir())) == 2
+
+
+def test_backup_path_collision_suffix(tmp_path: Path):
+    from datetime import datetime, timezone
+
+    settings = tmp_path / "settings.json"
+    settings.write_text("{}", encoding="utf-8")
+    now = datetime(2026, 7, 12, 15, 8, 52, tzinfo=timezone.utc)
+    first = terminal_font.backup_path_for(settings, now=now)
+    assert first.name == "settings.json.20260712T150852Z"
+    first.parent.mkdir(parents=True)
+    first.write_text("x", encoding="utf-8")
+    second = terminal_font.backup_path_for(settings, now=now)
+    assert second.name == "settings.json.20260712T150852Z-1"
+    second.write_text("x", encoding="utf-8")
+    third = terminal_font.backup_path_for(settings, now=now)
+    assert third.name == "settings.json.20260712T150852Z-2"
 
 
 @pytest.mark.parametrize(
