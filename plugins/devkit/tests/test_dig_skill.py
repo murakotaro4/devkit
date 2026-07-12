@@ -125,21 +125,21 @@ def test_delegation_command_contract():
     assert not re.search(r"codex exec .*-a never", text), (
         "-a never が codex exec より後ろに置かれた旧語順が残っている"
     )
-    assert "review --uncommitted" in text, "セカンドオピニオン review の記述がない"
+    assert "review --base <default-branch>" in text, "ブランチ全体を対象にする review の記述がない"
     assert "commit 禁止" in text, "backend への commit 禁止の記述がない"
 
 
 def test_codex_job_records_and_resumes_explicit_thread_id():
     text = SKILL_PATH.read_text(encoding="utf-8")
     delegation = _between(text, "### 6. 実装委譲", "### 7. 自レビュー")
-    repair = _between(text, "### 8. 修正ループ", "### 9. 完了報告")
+    repair = _between(text, "### 8. 修正ループ", "### 9. 統合・後始末・完了報告")
 
     assert 'devkit-codex-job.XXXXXX' in delegation
     assert 'echo "JOB_DIR=$JOB_DIR"' in delegation
     assert "echo された JOB_DIR を親が記録" in delegation
     assert "set -o pipefail" in delegation
     assert (
-        'codex -a never exec -C "<repo>" --sandbox workspace-write '
+        'codex -a never exec -C "<worktree>" --sandbox workspace-write '
         '-c model_reasoning_effort="<選択>" --json "<実装指示>" < /dev/null '
         '| tee "$JOB_DIR/codex-events.jsonl"'
     ) in delegation
@@ -153,13 +153,13 @@ def test_codex_job_records_and_resumes_explicit_thread_id():
     assert "resume せず委譲失敗として報告" in delegation
     assert "JOB_DIR / `codex-events.jsonl` / `thread-id.txt` をジョブごとに発行・分離" in delegation
 
-    assert "初回の対象 repo" in repair
+    assert "初回の対象 worktree" in repair
     assert "workspace-write sandbox" in repair
     assert "approval policy" in repair
     assert "選択 effort" in repair
     assert "ジョブ固有 thread_id" in repair
     assert (
-        'codex -a never -C "<repo>" --sandbox workspace-write exec resume '
+        'codex -a never -C "<worktree>" --sandbox workspace-write exec resume '
         '-c model_reasoning_effort="<選択>" '
         '"$(cat "$JOB_DIR/thread-id.txt")" "<指摘と修正指示>" < /dev/null'
     ) in repair
@@ -205,7 +205,7 @@ def test_codex_parent_spawn_agent_does_not_select_effort():
 
 def test_nine_step_flow_contract():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    assert "### 9. 完了報告" in text, "9 step 目の完了報告見出しがない"
+    assert "### 9. 統合・後始末・完了報告" in text, "9 step 目の統合・完了報告見出しがない"
 
 
 # ── 9. 計画レビュー step の記述(read-only sandbox) ──────────────
@@ -243,6 +243,34 @@ def test_cursor_backend_contract():
     assert "--sandbox enabled" not in text, "sandbox なし契約と矛盾する記述がある"
 
 
+def test_worktree_delegation_commands():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    delegation = _between(text, "### 6. 実装委譲", "### 7. 自レビュー")
+    repair = _between(text, "### 8. 修正ループ", "### 9. 統合・後始末・完了報告")
+
+    assert 'codex -a never exec -C "<worktree>"' in delegation
+    assert (
+        'JOB_DIR=<echo された記録済みのパス> && cursor-agent -p --resume '
+        '"$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model composer-2.5 '
+        '--workspace "<worktree>" --output-format text "<実装指示>"'
+    ) in delegation
+    assert 'codex -a never -C "<worktree>"' in repair
+    assert (
+        'JOB_DIR=<step 6 で記録したパス> && cursor-agent -p --resume '
+        '"$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model composer-2.5 '
+        '--workspace "<worktree>" --output-format text "<指摘と修正指示>"` を Bash '
+        '`run_in_background` で起動し、リダイレクトなしで TaskOutput を確認する'
+    ) in repair
+    assert (
+        'JOB_DIR=<step 6 で記録したパス> && cursor-agent -p --resume '
+        '"$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model composer-2.5 '
+        '--workspace "<worktree>" --output-format text "<指摘と修正指示>" > '
+        '"$JOB_DIR/cursor-agent.log" 2>&1` を shell 経由で実行し、ログ増分で進捗を確認する'
+    ) in repair
+    assert '-C "<repo>" --sandbox workspace-write' not in delegation
+    assert '--workspace "<repo>"' not in delegation + repair
+
+
 # ── 12. codex exec の stdin 閉鎖契約 ──────────────────────────────
 
 
@@ -276,3 +304,45 @@ def test_goal_handoff_contract():
     assert "監視または引き渡し" not in text
     assert "step 7(自レビュー)以降を続行" not in text
     assert ".claude/worktrees/" not in text
+
+
+def test_worktree_integration_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    worktree = _between(text, "## worktree 運用と統合", "## フロー")
+
+    assert "非 git repo" in worktree
+    assert "ゴール化して自律実行" in worktree
+    assert "調査のみの dig" in worktree
+    assert 'git symbolic-ref --short refs/remotes/origin/HEAD' in worktree
+    assert "取得できなければ `main`" in worktree
+    assert "`main` も無ければ現在のブランチ" in worktree
+    assert "fetch 失敗は警告を報告して続行し、統合前に再試行" in worktree
+    assert 'WT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-wt.XXXXXX")' in worktree
+    assert 'worktree add -b <type>/<slug> "$WT_DIR/wt" origin/<default>' in worktree
+    assert "ブランチ名が既存なら `-2` から連番" in worktree
+    assert "mktemp ディレクトリを削除" in worktree
+    assert "main ツリー実装へ黙って戻らず" in worktree
+    assert "実装 backend は従来どおり commit 禁止" in worktree
+    assert "git add <そのジョブの write_scope>" in worktree
+    assert "`git add .` と `git add -A` は使わない" in worktree
+    assert "review --base <default-branch>" in text
+    assert "worktree 内で `codex" in text
+    assert 'merge --ff-only <branch>' in worktree
+    assert 'push origin <default>' in worktree
+    assert "PR 経路" in worktree
+    assert "gh pr create" in worktree
+    assert "CI 確認まで" in worktree
+    assert "PR 提出完了" in worktree
+    assert "merge は人間が行い" in worktree
+    assert "変更を破棄しない" in worktree
+    assert "git rebase --abort" in worktree
+    assert "`--force` せず" in worktree
+    assert "git worktree remove" in worktree
+    assert "git branch -d <branch>" in worktree
+    assert "commit / push はユーザー指示があった場合のみ" not in text
+
+    backend_selection = _between(text, "### 3. backend 選択", "### 4. 計画レビュー")
+    assert "統合方法も 1 問で確認" in backend_selection
+    assert "既定推奨は「直接統合」" in backend_selection
+    assert "`command -v gh` が通らない場合は PR 選択肢を出さない" in backend_selection
+    assert "「ゴール化して自律実行」の場合と非 git repo" in backend_selection
