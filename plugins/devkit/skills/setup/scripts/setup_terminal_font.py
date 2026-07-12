@@ -273,8 +273,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return result
 
     if not registered:
-        # posix=True は Windows パスのバックスラッシュを剥がすため OS で切り替える
-        command = shlex.split(args.winget_cmd, posix=(os.name != "nt")) + [
+        if Path(args.winget_cmd).exists():
+            # スペースを含むパスを分割しないよう、実在するパスは単一の実行体として扱う
+            winget_argv = [args.winget_cmd]
+        else:
+            # posix=True は Windows パスのバックスラッシュを剥がすため OS で切り替える
+            winget_argv = shlex.split(args.winget_cmd, posix=(os.name != "nt"))
+        command = winget_argv + [
             "install", "--id", PACKAGE_ID, "--exact", "--silent",
             "--accept-package-agreements", "--accept-source-agreements",
         ]
