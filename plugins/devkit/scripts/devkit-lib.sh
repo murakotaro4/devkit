@@ -198,10 +198,14 @@ ensure_devkit_repo_root() {
 
   if [[ -d "$repo_root/.git" ]]; then
     if command -v git >/dev/null 2>&1; then
-      devkit_log "Updating DevKit checkout: $repo_root"
-      if ! git -C "$repo_root" pull --ff-only >&2; then
-        printf 'DEVKIT_REPO_PULL_FAILED: %s\n' "$repo_root" >&2
-        return 1
+      if git -C "$repo_root" symbolic-ref -q HEAD >/dev/null 2>&1; then
+        devkit_log "Updating DevKit checkout: $repo_root"
+        if ! git -C "$repo_root" pull --ff-only >&2; then
+          printf 'DEVKIT_REPO_PULL_FAILED: %s\n' "$repo_root" >&2
+          return 1
+        fi
+      else
+        devkit_log "Detached HEAD checkout. Reusing the existing DevKit checkout."
       fi
     else
       devkit_log "git is unavailable. Reusing the existing DevKit checkout."
