@@ -81,11 +81,13 @@ def test_platform_override_beats_windir():
 @pytest.mark.parametrize(
     ("names", "installed"),
     [
-        (["JetBrainsMono Nerd Font Regular (TrueType)"], True),
-        (["JetBrainsMono Nerd Font Bold Italic (OpenType)"], True),
-        (["JetBrainsMono Nerd Font ExtraLight Italic (TrueType)"], True),
-        (["JetBrainsMono Nerd Font Mono Bold (TrueType)"], False),
-        (["JetBrainsMono Nerd Font Propo Regular (TrueType)"], False),
+        (["JetBrainsMono NF Regular (TrueType)"], True),
+        (["JetBrainsMono NF Bold Italic (OpenType)"], True),
+        (["JetBrainsMono NF ExtraLight Italic (TrueType)"], True),
+        (["JetBrainsMono NFM Bold (TrueType)"], False),
+        (["JetBrainsMono NFP Regular (TrueType)"], False),
+        (["JetBrainsMonoNL NF Regular (TrueType)"], False),
+        (["JetBrainsMono Nerd Font Regular (TrueType)"], False),
     ],
 )
 def test_font_family_detection(tmp_path: Path, names: list[str], installed: bool):
@@ -106,7 +108,7 @@ def test_fake_winget_arguments_and_successful_redetection(tmp_path: Path):
     winget = make_winget(
         tmp_path / "winget",
         f"import json, pathlib, sys\npathlib.Path({str(calls)!r}).write_text(json.dumps(sys.argv[1:]))\n"
-        f"pathlib.Path({str(fonts)!r}).write_text('JetBrainsMono Nerd Font Regular (TrueType)\\n')",
+        f"pathlib.Path({str(fonts)!r}).write_text('JetBrainsMono NF Regular (TrueType)\\n')",
     )
     result = run_script(*windows_args(settings, fonts, "--winget-cmd", winget))
     assert result["font_installed"] is True
@@ -166,7 +168,7 @@ def test_missing_winget_includes_manual_install_guidance(tmp_path: Path):
 def test_json_jsonc_trailing_comma_and_bom_are_updated(tmp_path: Path, content: bytes | str):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono Nerd Font Regular (TrueType)")
+    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
     make_settings(settings, content)
     had_bom = settings.read_bytes().startswith(b"\xef\xbb\xbf")
     result = run_script(*windows_args(settings, fonts))
@@ -175,13 +177,13 @@ def test_json_jsonc_trailing_comma_and_bom_are_updated(tmp_path: Path, content: 
     raw = settings.read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf") is had_bom
     data = json.loads(raw.decode("utf-8-sig"))
-    assert data["profiles"]["defaults"]["font"]["face"] == "JetBrainsMono Nerd Font"
+    assert data["profiles"]["defaults"]["font"]["face"] == "JetBrainsMono NF"
 
 
 def test_jsonc_trailing_comma_cleanup_preserves_string_content(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono Nerd Font Regular (TrueType)")
+    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
     make_settings(settings, '{"literal": ",} and ,]", // comment\n "profiles": {},}\n')
     result = run_script(*windows_args(settings, fonts))
     assert result["settings"][0]["changed"] is True
@@ -192,7 +194,7 @@ def test_jsonc_trailing_comma_cleanup_preserves_string_content(tmp_path: Path):
 def test_backup_collision_and_second_run_noop(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono Nerd Font Regular (TrueType)")
+    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
     make_settings(settings, '{"profiles":{"defaults":{"font":{"face":"Other"}}}}')
     first = run_script(*windows_args(settings, fonts))
     first_backup = Path(first["settings"][0]["backup"])
@@ -238,7 +240,7 @@ def test_backup_path_collision_suffix(tmp_path: Path):
 def test_invalid_json_and_unexpected_structures_are_unchanged(tmp_path: Path, content: str):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono Nerd Font Regular (TrueType)")
+    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
     make_settings(settings, content)
     original = settings.read_bytes()
     result = run_script(*windows_args(settings, fonts))
@@ -265,7 +267,7 @@ def test_check_never_runs_winget_or_changes_files(tmp_path: Path):
 def test_check_reports_would_change_for_registered_font(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono Nerd Font Regular (TrueType)")
+    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
     make_settings(settings)
     result = run_script(*windows_args(settings, fonts, "--check"))
     assert result["settings"][0]["would_change"] is True
