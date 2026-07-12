@@ -255,7 +255,12 @@ def base_result(platform_name: str) -> dict[str, Any]:
 def run(args: argparse.Namespace) -> dict[str, Any]:
     platform_name = args.platform or platform_module.system()
     result = base_result(platform_name)
-    if platform_name.casefold() != "windows" and not os.environ.get("WINDIR"):
+    if args.platform:
+        # 明示指定を最優先する(実 Windows ホストの WINDIR で上書きさせない)
+        is_windows = args.platform.casefold() == "windows"
+    else:
+        is_windows = platform_name.casefold() == "windows" or bool(os.environ.get("WINDIR"))
+    if not is_windows:
         result.update({"status": "skip", "reason": "windows-only"})
         return result
 

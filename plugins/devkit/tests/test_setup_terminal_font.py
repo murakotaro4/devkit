@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -51,6 +52,21 @@ def windows_args(settings: Path, fonts: Path, *extra: object) -> tuple[object, .
 
 def test_non_windows_is_skipped():
     result = run_script("--platform", "Linux")
+    assert result["status"] == "skip"
+    assert result["reason"] == "windows-only"
+
+
+def test_platform_override_beats_windir():
+    # 実 Windows ホスト(WINDIR あり)でも明示 --platform を優先して skip する
+    env = {**os.environ, "WINDIR": "C:\\Windows"}
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--platform", "Linux", "--format", "json"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    result = json.loads(completed.stdout)
     assert result["status"] == "skip"
     assert result["reason"] == "windows-only"
 
