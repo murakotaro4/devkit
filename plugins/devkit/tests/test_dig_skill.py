@@ -314,6 +314,7 @@ def test_worktree_integration_contract():
     assert "ゴール化して自律実行" in worktree
     assert "調査のみの dig" in worktree
     assert 'git symbolic-ref --short refs/remotes/origin/HEAD' in worktree
+    assert "結果から `origin/` プレフィックスを取り除いた名前を `<default>`" in worktree
     assert "取得できなければ `main`" in worktree
     assert "`main` も無ければ現在のブランチ" in worktree
     assert "fetch 失敗は警告を報告して続行し、統合前に再試行" in worktree
@@ -342,7 +343,13 @@ def test_worktree_integration_contract():
     assert "`--force` せず" in worktree
     assert "git worktree remove" in worktree
     assert "git branch -d <branch>" in worktree
+    assert "push reject は fetch して手順 1 からやり直し、version の再計算もやり直す" in worktree
     assert "commit / push はユーザー指示があった場合のみ" not in text
+
+    integration = _between(worktree, "### 統合(step 9、終了条件達成後)", "### 失敗時の共通契約")
+    fetch_position = integration.index("1. `git fetch origin` を再試行")
+    version_position = integration.index("2. その後、repo の release 規則")
+    assert fetch_position < version_position
 
     backend_selection = _between(text, "### 3. backend 選択", "### 4. 計画レビュー")
     assert "統合方法も 1 問で確認" in backend_selection
