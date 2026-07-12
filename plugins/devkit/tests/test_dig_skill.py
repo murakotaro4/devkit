@@ -325,6 +325,9 @@ def test_worktree_integration_contract():
     assert "実装 backend は従来どおり commit 禁止" in worktree
     assert "git add <そのジョブの write_scope>" in worktree
     assert "`git add .` と `git add -A` は使わない" in worktree
+    assert "pre-commit hook(prek 等)が unstaged 変更を stash" in worktree
+    assert "並列ジョブが実行中の間は節目 commit を保留" in worktree
+    assert "全ジョブ回収後に、ジョブ単位で順にパス限定 commit" in worktree
     assert "review --base <default-branch>" in text
     assert "worktree 内で `codex" in text
     assert 'merge --ff-only <branch>' in worktree
