@@ -1,0 +1,4 @@
+interface:
+  display_name: "Catch Up"
+  short_description: "Update registered external premises safely"
+  default_prompt: "Use $catch-up to verify an external change, inventory registered occurrences, and update the approved surfaces with independent review."

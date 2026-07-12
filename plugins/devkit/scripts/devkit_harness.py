@@ -172,6 +172,7 @@ CHECKS_FAST: list[list[str]] = [
     [sys.executable, script("check_utf8_bom.py")],
     [sys.executable, script("check_skill_surface.py"), "--phase=B"],
     [sys.executable, script("check_legacy_migration.py"), "--mode=repo"],
+    [sys.executable, script("check_external_premises.py")],
     [sys.executable, script("devkit_harness.py"), "verify-secrets"],
     [sys.executable, "-m", "pytest", str(SCRIPT_DIR.parent / "tests"), "-x", "-q"],
 ]

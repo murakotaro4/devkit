@@ -21,6 +21,7 @@ def test_expected_skill_surface_matches_repository():
         "goal-prompt",
         "handoff",
         "backlog",
+        "catch-up",
     }
 
 
@@ -29,6 +30,7 @@ def test_required_statusline_artifacts_are_part_of_surface_contract():
         "plugins/devkit/statusline/statusline.js",
         "plugins/devkit/statusline/install.js",
     }.issubset(check_skill_surface.REQUIRED_PATHS)
+    assert "plugins/devkit/premises.json" in check_skill_surface.REQUIRED_PATHS
 
 
 def test_required_terminal_font_script_is_part_of_surface_contract():

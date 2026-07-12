@@ -1,6 +1,6 @@
 # devkit/scripts
 
-DevKit の setup / update / verification scripts を置くディレクトリです。v7 では marketplace 配布を正本にし、skill surface は `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` を扱います。
+DevKit の setup / update / verification scripts を置くディレクトリです。v7 では marketplace 配布を正本にし、skill surface は `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` / `catch-up` を扱います。
 
 ## Entry Points
 
@@ -89,8 +89,9 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 1. `check_utf8_bom.py`
 2. `check_skill_surface.py`
 3. `check_legacy_migration.py`
-4. detect-secrets baseline 照合
-5. pytest
+4. `check_external_premises.py`
+5. detect-secrets baseline 照合
+6. pytest
 
 `verify-full` は `verify-fast` に `check_plugin_version_bump.py` を加えます。
 
@@ -102,7 +103,7 @@ git 追跡下の text metadata file に UTF-8 BOM が混入していないかを
 
 v7 の配布面を検査します。
 
-- `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` と完全一致すること
+- `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` / `catch-up` と完全一致すること
 - `plugins/devkit/statusline/statusline.js` と `plugins/devkit/statusline/install.js` が存在すること
 - `plugins/devkit/skills/setup/scripts/setup_terminal_font.py` が存在すること
 - `plugins/devkit/templates/codex/config.shared.toml` と `config.windows.toml` が存在すること
@@ -116,6 +117,12 @@ v7 の配布面を検査します。
 ### check_legacy_migration.py
 
 退役 token が docs / skills / scripts に残っていないことを検査します。README の `Migration Notice` と prune 実装だけは旧資産削除の説明に必要なため例外です。
+
+### check_external_premises.py
+
+`plugins/devkit/premises.json` のスキーマ、宣言 occurrence の正確な出現数、未登録出現を検査します。`obsolete_value_patterns` に移した旧値は走査対象でゼロ件であることを強制し、部分移行の取り残しも検出します。走査には tracked file と未追跡 file の両方を含め、モデル名・CLI フラグ・ハーネス判定キー・marketplace 名の repo 内インベントリを同期させます。
+
+この check は `current_value` が外部世界で最新かどうかを検出しません。外部 release note と実機での裏取り、値の追従更新は `catch-up` skill の責務です。実装は CRLF と OS 非依存の path 処理を考慮していますが、Windows 対応設計であり、現 CI (`ubuntu-latest`) では未実証です。
 
 ### check_plugin_version_bump.py
 

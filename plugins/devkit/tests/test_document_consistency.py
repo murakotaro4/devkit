@@ -17,6 +17,7 @@ DISTRIBUTED_SKILLS = (
     "goal-prompt",
     "handoff",
     "backlog",
+    "catch-up",
 )
 PLUGIN_DESCRIPTION_SURFACES = (
     "/dig",
@@ -26,6 +27,7 @@ PLUGIN_DESCRIPTION_SURFACES = (
     "memory-review",
     "goal-prompt",
     "handoff",
+    "/catch-up",
 )
 
 

@@ -5,7 +5,7 @@
 ## Repo Context
 
 - このリポジトリは DevKit のセットアップ/更新スクリプト、skills、templates を管理する
-- v7 の配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/` の 8 つとする
+- v7 の配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/` の 9 つとする
 - statusline 配布物は `plugins/devkit/statusline/` に同梱し、適用は setup workflow から行う
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
@@ -45,6 +45,7 @@
 - ルートのエージェント向けルールを変更するときは、まずこのファイルを更新する
 - スクリプトの仕様変更時は `README.md` と `plugins/devkit/scripts/README.md` を同期する
 - スキル契約を変える場合は対応する `SKILL.md` と必要な templates / scripts を同期する
+- 外部世界由来の値（モデル名・CLI フラグ・marketplace 名等）を docs へ追加・変更するときは `plugins/devkit/premises.json` に登録・更新する（`check_external_premises.py` が同期を強制する）
 - スキル契約や user-visible workflow を刷新するときは、ユーザーが明示しない限り fallback や後方互換の維持を要件にしない。新しい正本の挙動を明確化し、旧経路を半端に残さない
 - この repo では、ファイル変更を伴うタスクごとに必ず独立したサブエージェント review を 1 回以上実施する
 - review で指摘が出た場合は修正後に再 review を回し、追加 findings がなくなるまで繰り返す
@@ -125,6 +126,8 @@ codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
 - `plugins/devkit/skills/goal-prompt/SKILL.md`: 自律実行・ループ・大タスク完走向けゴールプロンプト作成 workflow の正本
 - `plugins/devkit/skills/handoff/SKILL.md`: セッション引継ぎドキュメント書き出し workflow の正本
 - `plugins/devkit/skills/backlog/SKILL.md`: 残課題の横断棚卸し(read-only)・dig 引き継ぎ workflow の正本
+- `plugins/devkit/skills/catch-up/SKILL.md`: 外部前提の裏取り・影響棚卸し・追従更新 workflow の正本
+- `plugins/devkit/premises.json`: モデル名・CLI フラグ・ハーネス機能・marketplace 名の外部前提レジストリ
 - `plugins/devkit/statusline/`: plugin 同梱 statusline 実装と適用スクリプト
 - `plugins/devkit/templates/codex/`: Codex 設定テンプレート
 - `plugins/devkit/templates/rules/`: setup スキルが対象リポジトリへ同期するルールテンプレート

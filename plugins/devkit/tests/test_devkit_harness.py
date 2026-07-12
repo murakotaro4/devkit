@@ -19,6 +19,7 @@ def test_fast_checks_order():
         "check_skill_surface.py",
         "check_legacy_migration.py",
     ]
+    assert names[3] == "check_external_premises.py"
     assert devkit_harness.CHECKS_FAST[0] == [
         devkit_harness.sys.executable,
         devkit_harness.script("check_utf8_bom.py"),

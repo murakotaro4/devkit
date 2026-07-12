@@ -16,6 +16,7 @@ ROOT = Path.cwd()
 PLUGIN_DIR = ROOT / "plugins/devkit"
 EXPECTED_SKILLS = {
     "backlog",
+    "catch-up",
     "dig",
     "improve-skill",
     "setup",
@@ -25,6 +26,7 @@ EXPECTED_SKILLS = {
     "handoff",
 }
 REQUIRED_PATHS = {
+    "plugins/devkit/premises.json",
     "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
     "plugins/devkit/statusline/install.js",
     "plugins/devkit/statusline/statusline.js",
