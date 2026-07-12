@@ -30,6 +30,16 @@
 - dig の実装系は常に worktree を使う(正本は `plugins/devkit/skills/dig/SKILL.md`)
 - `plugins/devkit/**` に触る作業の開始時と version bump 直前に `git fetch origin` で origin/main との差を確認し、遅れていれば先に取り込む(v7.5.0 の version 衝突・rebase コンフリクトの再発予防)
 
+### 統合時 rebase 衝突の標準解消手順
+
+worktree 統合の rebase で発生する既知の機械的衝突は、以下の手順で解消して rebase を続行してよい（dig の統合契約から参照される）。機械解消の対象はここに列挙したクラスに限定する。
+
+- `plugins/devkit/.claude-plugin/plugin.json` の `version` の衝突: origin 側の値を一時採用して rebase を続行し、rebase 完了後に Release Rules に従い最新 origin 値から bump 種別を一度だけ再適用する。rebase 中に version 変更だけの commit が空になった場合は `git rebase --skip` する（version 以外の変更を含む commit は skip しない）
+- `plugin.json` の `description` の衝突: base と比べて片側だけが変更している場合はその側を採用する。両側が変更している場合は機械解消せず停止・報告する（version と一括りに origin 側を採用しない）
+- スキル一覧の識別子集合（`check_skill_surface.py` の EXPECTED_SKILLS、`test_document_consistency.py` の DISTRIBUTED_SKILLS）の衝突: base / origin / branch の三者比較で両側とも追加のみと確認できた場合に限り和集合で解消する。削除・rename・同一項目の両側変更を含む場合は停止・報告する。AGENTS.md / README.md / plugin description など文章中のスキル列挙・個数は和集合の対象にせず、確定した識別子集合に合わせて再構成する
+- 標準解消で rebase を完了した後は verify-full を再実行し、失敗時は push せず停止・報告する
+- 上記以外の衝突は従来どおり `git rebase --abort` して停止・報告する
+
 ## dig / goal-prompt 使い分け
 
 使い分けの軸はタスク規模ではなく自律度とする。

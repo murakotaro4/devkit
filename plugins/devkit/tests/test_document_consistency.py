@@ -255,3 +255,18 @@ def test_dig_goal_prompt_switching_terms_stay_in_sync():
         assert "自律度" in text, f"{doc_name} に使い分け軸(自律度)がない"
         assert "ゴール化" in text, f"{doc_name} に dig 連携語(ゴール化)がない"
         assert "起動プロンプト" in text, f"{doc_name} に goal-prompt 境界語(起動プロンプト)がない"
+
+
+def test_rebase_conflict_resolution_contract_stays_in_sync():
+    agents = _read("AGENTS.md")
+    heading = "### 統合時 rebase 衝突の標準解消手順"
+    assert heading in agents, "AGENTS.md に rebase 衝突の標準解消手順がない"
+
+    contract = agents.split(heading, 1)[1].split("\n## ", 1)[0]
+    for keyword in ("追加のみ", "和集合", "削除", "停止", "git rebase --abort", "verify-full", "片側"):
+        assert keyword in contract, f"rebase 衝突の標準解消手順に契約キーワードがない: {keyword}"
+
+    dig = _read("plugins/devkit/skills/dig/SKILL.md")
+    integration = dig.split("### 統合(step 9、終了条件達成後)", 1)[1].split("\n### ", 1)[0]
+    assert "標準解消手順" in integration, "dig の統合手順が標準解消手順を参照していない"
+    assert "git rebase --abort" in integration, "dig の統合手順に未知の衝突時の abort fallback がない"
