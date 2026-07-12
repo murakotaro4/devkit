@@ -319,12 +319,15 @@ function Get-DevKitRepoRoot([string]$UserHome, [scriptblock]$Logger) {
     if (-not (Test-DevKitCommandAvailable "git")) {
       Invoke-DevKitLogger $Logger "git is unavailable. Reusing the existing DevKit checkout."
     } else {
-      & git -C $repoRoot symbolic-ref -q HEAD *> $null
-      if ($LASTEXITCODE -eq 0) {
+      & git -C $repoRoot symbolic-ref -q HEAD | Out-Null
+      $symbolicRefExitCode = $LASTEXITCODE
+      if ($symbolicRefExitCode -eq 0) {
         Invoke-DevKitLogger $Logger ("Updating DevKit checkout: " + $repoRoot)
         Invoke-DevKitGit -WorkingDirectory $repoRoot -Arguments @("pull", "--ff-only")
-      } else {
+      } elseif ($symbolicRefExitCode -eq 1) {
         Invoke-DevKitLogger $Logger "Detached HEAD checkout. Reusing the existing DevKit checkout."
+      } else {
+        throw "DEVKIT_REPO_PULL_FAILED: $repoRoot"
       }
     }
   } elseif (-not (Test-Path -LiteralPath (Join-Path $repoRoot "plugins\devkit"))) {
