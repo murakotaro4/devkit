@@ -16,6 +16,7 @@ DISTRIBUTED_SKILLS = (
     "memory-review",
     "goal-prompt",
     "handoff",
+    "backlog",
 )
 PLUGIN_DESCRIPTION_SURFACES = (
     "/dig",

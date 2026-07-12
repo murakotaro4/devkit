@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backlog"
+  short_description: "Inventory remaining repository work"
+  default_prompt: "Use $backlog to scan the current repository read-only, consolidate stale and active work signals, and present a prioritized backlog dashboard with evidence and concrete next actions."

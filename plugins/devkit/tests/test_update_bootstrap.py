@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,26 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "plugins" / "devkit" / "scripts"
+
+
+def _probe_symlink_support() -> bool:
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            probe_dir = Path(tmp_dir)
+            target = probe_dir / "target"
+            target.mkdir()
+            (probe_dir / "link").symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        return False
+    return True
+
+
+SYMLINK_SUPPORTED = _probe_symlink_support()
+
+
+def require_symlink_support() -> None:
+    if not SYMLINK_SUPPORTED:
+        pytest.skip("Windows runner など symlink 作成権限がない環境では実行できません")
 
 
 def bash_path() -> str:
@@ -45,6 +66,7 @@ def test_update_ccx_sh_bootstraps_missing_lib_from_persisted_source_root(tmp_pat
 
 
 def test_update_ccx_sh_bootstraps_missing_lib_from_default_checkout(tmp_path):
+    require_symlink_support()
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
     default_checkout = home / "cursor" / "devkit"
@@ -70,6 +92,7 @@ def test_update_ccx_sh_bootstraps_missing_lib_from_default_checkout(tmp_path):
 
 
 def test_update_ccx_sh_ignores_stale_persisted_source_root(tmp_path):
+    require_symlink_support()
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
     state_dir = home / ".codex" / "devkit"
@@ -98,6 +121,7 @@ def test_update_ccx_sh_ignores_stale_persisted_source_root(tmp_path):
 
 
 def test_update_ccx_sh_prefers_default_checkout_over_existing_stale_persisted_root(tmp_path):
+    require_symlink_support()
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
     state_dir = home / ".codex" / "devkit"
@@ -234,6 +258,7 @@ def test_update_ccx_ps1_bootstraps_missing_lib_from_persisted_source_root(tmp_pa
 
 
 def test_update_ccx_ps1_bootstraps_missing_lib_from_default_checkout(tmp_path):
+    require_symlink_support()
     pwsh = shutil.which("pwsh")
     if not pwsh:
         pytest.skip("pwsh is not installed")
@@ -271,6 +296,7 @@ def test_update_ccx_ps1_bootstraps_missing_lib_from_default_checkout(tmp_path):
 
 
 def test_update_ccx_ps1_ignores_stale_persisted_source_root(tmp_path):
+    require_symlink_support()
     pwsh = shutil.which("pwsh")
     if not pwsh:
         pytest.skip("pwsh is not installed")
@@ -311,6 +337,7 @@ def test_update_ccx_ps1_ignores_stale_persisted_source_root(tmp_path):
 
 
 def test_update_ccx_ps1_prefers_default_checkout_over_existing_stale_persisted_root(tmp_path):
+    require_symlink_support()
     pwsh = shutil.which("pwsh")
     if not pwsh:
         pytest.skip("pwsh is not installed")

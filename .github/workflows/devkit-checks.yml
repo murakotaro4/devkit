@@ -71,3 +71,28 @@ jobs:
             echo "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\ci\\assert-pr-checks.ps1 -PrNumber <PR_NUMBER>";
             echo "\`\`\`";
           } >> "$GITHUB_STEP_SUMMARY"
+
+  devkit-checks-windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      DEVKIT_VERSION_BASE_REF: origin/${{ github.base_ref || 'main' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync harness dependencies
+        run: uv sync --project plugins/devkit
+
+      - name: Run harness verify
+        run: uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full

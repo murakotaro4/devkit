@@ -5,6 +5,7 @@
 .claude/plans/
 .claude/sessions/
 .claude/state/
+.claude/worktrees/
 
 # Python
 __pycache__/

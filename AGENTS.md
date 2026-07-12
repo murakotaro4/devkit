@@ -5,7 +5,7 @@
 ## Repo Context
 
 - このリポジトリは DevKit のセットアップ/更新スクリプト、skills、templates を管理する
-- v7 の配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/handoff/` の 7 つとする
+- v7 の配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/` の 8 つとする
 - statusline 配布物は `plugins/devkit/statusline/` に同梱し、適用は setup workflow から行う
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
@@ -22,6 +22,12 @@
 5. 自レビュー: diff 全文を計画と突き合わせ、テスト・リンタを実行する
 6. 修正ループ: 指摘が解消するまで修正を繰り返す
 7. 報告とコミット: 変更サマリーを報告し、コミット・プッシュはユーザー指示に従う
+
+## 並行開発と worktree
+
+- 並行して進める開発は `git worktree` で分離する。main の作業ツリー上で複数機能を同時に進めない(1 ブランチ = 1 worktree)
+- サブエージェント並列実装も worktree 分離(Claude 親: `isolation: "worktree"` / EnterWorktree)を使う
+- `plugins/devkit/**` に触る作業の開始時と version bump 直前に `git fetch origin` で origin/main との差を確認し、遅れていれば先に取り込む(v7.5.0 の version 衝突・rebase コンフリクトの再発予防)
 
 ## dig / goal-prompt 使い分け
 
@@ -117,6 +123,7 @@ codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
 - `plugins/devkit/skills/memory-review/SKILL.md`: AI メモリ棚卸し・前提監査 workflow の正本
 - `plugins/devkit/skills/goal-prompt/SKILL.md`: 自律実行・ループ・大タスク完走向けゴールプロンプト作成 workflow の正本
 - `plugins/devkit/skills/handoff/SKILL.md`: セッション引継ぎドキュメント書き出し workflow の正本
+- `plugins/devkit/skills/backlog/SKILL.md`: 残課題の横断棚卸し(read-only)・dig 引き継ぎ workflow の正本
 - `plugins/devkit/statusline/`: plugin 同梱 statusline 実装と適用スクリプト
 - `plugins/devkit/templates/codex/`: Codex 設定テンプレート
 - `plugins/devkit/templates/rules/`: setup スキルが対象リポジトリへ同期するルールテンプレート

@@ -15,6 +15,7 @@ from typing import NamedTuple
 ROOT = Path.cwd()
 PLUGIN_DIR = ROOT / "plugins/devkit"
 EXPECTED_SKILLS = {
+    "backlog",
     "dig",
     "improve-skill",
     "setup",
@@ -132,6 +133,14 @@ def assert_skill_surface(problems: list[str]) -> None:
             f"expected={sorted(EXPECTED_SKILLS)} actual={sorted(actual)}"
         )
 
+    for name in sorted(EXPECTED_SKILLS):
+        for relpath in ("SKILL.md", "agents/openai.yaml"):
+            path = skills_dir / name / relpath
+            if not path.is_file():
+                problems.append(
+                    f"expected skill surface file missing: plugins/devkit/skills/{name}/{relpath}"
+                )
+
     for name in sorted(REMOVED_SKILL_DIRS):
         rel = f"plugins/devkit/skills/{name}"
         if (ROOT / rel).exists():
@@ -219,7 +228,11 @@ exit 0
 def prepare_update_smoke_home(home_path: Path) -> Path:
     source_root = home_path / "source"
     (source_root / "plugins").mkdir(parents=True)
-    (source_root / "plugins/devkit").symlink_to(PLUGIN_DIR, target_is_directory=True)
+    target = source_root / "plugins/devkit"
+    try:
+        target.symlink_to(PLUGIN_DIR, target_is_directory=True)
+    except OSError:
+        shutil.copytree(PLUGIN_DIR, target)
     return source_root
 
 

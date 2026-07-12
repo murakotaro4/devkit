@@ -20,6 +20,7 @@ def test_expected_skill_surface_matches_repository():
         "memory-review",
         "goal-prompt",
         "handoff",
+        "backlog",
     }
 
 

@@ -181,6 +181,7 @@ def test_prompt_template_and_self_check_contract():
         "## 実行戦略(実装系のみ)",
         "## 進捗管理",
         "## 実装後レビュー",
+        "## 完了レポート",
         "## 実行前提",
     ):
         assert section in text
@@ -193,11 +194,12 @@ def test_prompt_template_and_self_check_contract():
         "秘密情報なし",
         "受け渡し制約への適合",
         "実装系ゴール",
+        "完了レポート",
     ):
         assert check in text
 
     self_check = _section(text, "## セルフチェック")
-    assert len(re.findall(r"^\d+\. ", self_check, re.MULTILINE)) == 7
+    assert len(re.findall(r"^\d+\. ", self_check, re.MULTILINE)) == 8
     assert "`実行戦略(実装系のみ)` と `実装後レビュー`" in text
     assert "逸脱時ログ記録の 1 行" in text
     assert "戦略から逸脱が必要なら理由を進捗ログに記録して保守的に判断する" in text
@@ -206,6 +208,28 @@ def test_prompt_template_and_self_check_contract():
     assert "長い本文はファイル参照" in text
     assert "起動プロンプトは短い条件文だけ" in text
     strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    assert strategy.index("## 実装後レビュー") < strategy.index("## 完了レポート")
+    assert strategy.index("## 完了レポート") < strategy.index("## 実行前提")
+    completion_report = _section(strategy, "## 完了レポート")
+    for required in (
+        ".claude/goal-runs/",
+        "停止種別",
+        "成功条件ごとの達成状況",
+        "検証コマンド結果",
+        "逸脱と判断ログ要約",
+        "残課題",
+        "変更ファイル一覧",
+        "未保存の貼り付け実行",
+        "英小文字・数字・ハイフンへスラッグ化",
+        "`YYYY-MM-DD-<slug>.md`",
+        "step 6 の組み立て時に該当する具体名をこの節へ焼き込み",
+        "`<basename>-2.md` からの連番",
+        "「制約・非対象」や `write_scope` より優先する運用メタデータ領域として常に書き込みを許可",
+    ):
+        assert required in completion_report
+    step6 = _section(text, "### 6. 組み立て + セルフチェック")
+    assert "未保存なら短い名前から作る `YYYY-MM-DD-<slug>.md`" in step6
+    assert "具体名をテンプレート本文へ焼き込む" in step6
     assert strategy.index("- 並列方針:") < strategy.index("- effort 帯:")
     assert "Medium を標準" in strategy
     assert "Low は決定論的・低リスクな実装だけ" in strategy
@@ -304,10 +328,13 @@ def test_authoring_only_contract():
 
     step9 = _section(text, "### 9. 保存 + 起動プロンプト提示")
     assert "Write でゴールファイルを新規保存" in step9
-    assert "起動プロンプトを提示して終了" in step9
-    assert "保存しない場合は、通常セッション貼付け用の本文だけを提示して終了する" in step9
+    assert "起動プロンプト" in step9 and "提示して終了" in step9
+    assert "検収チェックリスト" in step9
+    assert "保存しない場合も、fallback の具体的なレポート名を焼き込んだ通常セッション貼付け用の本文" in step9
+    assert "そのレポート名を参照する同じ検収チェックリストを 1 ブロックで提示して終了する" in step9
     assert "ファイル参照型の起動プロンプトは保存済みファイルが前提のため提示しない" in step9
-    assert "起動" in step9 and "実行" not in step9
+    # 実行への言及は「実行終了後」「(検証コマンド)再実行」の検収文脈だけ許す(skill 自身は実行しない)
+    assert "起動" in step9 and "実行" not in step9.replace("実行終了後", "").replace("再実行", "")
 
     assert "/goal` を付けるのは Claude 系の起動プロンプトだけ" in text
     assert "委譲先 codex exec には素の実装指示" in text
@@ -324,9 +351,9 @@ def test_dig_handoff_mode_contract():
     assert "破壊的操作の可否" in text
     assert "権限、進捗管理、実装戦略" in text
     assert "commit / push 禁止" in text
-    assert "実装後レビュー要件は転記必須項目" in text
+    assert "実装後レビュー要件、どの停止種別でも書き出す完了レポート要件は転記必須項目" in text
     assert "組み立て + セルフチェック、独立レビュー、最終確認、保存 + 起動プロンプト提示" in text
-    assert "セルフチェック 7 項目" in text
+    assert "セルフチェック 8 項目" in text
 
 
 def test_retired_goal_prompt_phrases_are_absent():
