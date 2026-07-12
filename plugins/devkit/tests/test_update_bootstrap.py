@@ -224,6 +224,41 @@ def test_update_ccx_sh_exports_normal_source_root_before_sourcing_existing_lib(t
     os.name == "nt",
     reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
 )
+def test_update_ccx_sh_bootstraps_from_existing_source_root(tmp_path):
+    home = tmp_path / "home"
+    codex_bin = home / ".codex" / "bin"
+    caller_source_root = tmp_path / "caller-source"
+    caller_scripts = caller_source_root / "plugins" / "devkit" / "scripts"
+    codex_bin.mkdir(parents=True)
+    caller_scripts.mkdir(parents=True)
+    (caller_scripts / "devkit-lib.sh").write_text(
+        'printf "%s\\n" "$DEVKIT_SOURCE_ROOT" > "$HOME/selected-root.txt"\n',
+        encoding="utf-8",
+    )
+    shutil.copyfile(SCRIPTS / "update-ccx.sh", codex_bin / "update-ccx.sh")
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["DEVKIT_SOURCE_ROOT"] = str(caller_source_root)
+
+    result = subprocess.run(
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (codex_bin / "devkit-lib.sh").is_file()
+    assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{caller_source_root}\n"
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
+)
 def test_update_ccx_sh_preserves_existing_source_root(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"

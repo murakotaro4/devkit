@@ -40,6 +40,9 @@ function Resolve-DevKitLibForUpdate {
   }
 
   $repoCandidates = New-Object System.Collections.Generic.List[string]
+  if (-not [string]::IsNullOrWhiteSpace($env:DEVKIT_SOURCE_ROOT)) {
+    $repoCandidates.Add($env:DEVKIT_SOURCE_ROOT.Trim()) | Out-Null
+  }
   $checkoutCandidate = Join-Path $PSScriptRoot "..\..\..\plugins\devkit\scripts\devkit-lib.ps1"
   if (Test-Path -LiteralPath $checkoutCandidate) {
     $repoCandidates.Add([IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))) | Out-Null

@@ -45,6 +45,9 @@ source_devkit_lib_for_update() {
     local repo_root=""
     local -a repo_candidates=()
 
+    if [[ -n "${DEVKIT_SOURCE_ROOT:-}" ]]; then
+        repo_candidates+=("$DEVKIT_SOURCE_ROOT")
+    fi
     if [[ -f "$SCRIPT_DIR/../../../plugins/devkit/scripts/devkit-lib.sh" ]]; then
         repo_candidates+=("$(cd "$SCRIPT_DIR/../../.." && pwd)")
     fi
