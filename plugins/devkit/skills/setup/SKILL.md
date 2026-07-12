@@ -7,7 +7,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit", "AskUserQuestio
 
 # /setup
 
-対象リポジトリに DevKit 標準ルールを冪等同期し、ユーザー環境へ思想 DB（thought-db）への参照を同期し、Claude 親では statusline などの Claude Code 向け環境設定も必要に応じて適用する。
+対象リポジトリに DevKit 標準ルールを冪等同期し、ユーザー環境へ思想 DB（thought-db）への参照を同期する。Claude 親では statusline を、Windows ではハーネスを問わず Windows Terminal の JetBrainsMono Nerd Font を必要に応じて適用する。
 
 ## トピック ($ARGUMENTS)
 
@@ -22,7 +22,7 @@ $ARGUMENTS
 - どちらでもない場合は判定不能として扱い、選択肢を箇条書きで提示して自由文回答を求める。
 - `request_user_input` は plan mode 依存で不安定なため、判定キーに使わない(Codex 親 plan mode の質問手段としてのみ使う)。
 
-statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う。Codex 親ではルール同期と thought-db 接続同期を実行し、statusline は対象外として報告する。
+statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う。Codex 親では statusline は対象外として報告する。Windows Terminal のフォント適用はターミナルレベルの設定なので、Claude 親 / Codex 親のどちらでも扱う。
 
 ## 同期対象
 
@@ -31,6 +31,7 @@ statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う
 - `.claude/devkit-rules.json`: 同期 version、同期時刻、テンプレート SHA-256 を記録する。
 - `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`(ユーザーレベル): `<!-- devkit:thought-db:start -->` / `<!-- devkit:thought-db:end -->` 区間へ、思想 DB(`~/repos/thought-db`)への参照ブロックを同期する。thought-db が存在しない環境では skip として報告する。
 - Claude 親のみ: plugin 同梱の `statusline/install.js` で Claude Code の statusline 設定を確認し、ユーザー承認後に適用する。
+- Windows のみ: Windows Terminal のフォント(JetBrainsMono Nerd Font)設定を確認し、ユーザー承認後に適用する。
 
 ## 実行ルール
 
@@ -58,12 +59,12 @@ done
 | codex | dig の実装・レビュー backend。goal-prompt の独立レビュー候補 | codex 系 backend と goal-prompt の codex レビュー候補が使えない |
 | cursor-agent | dig の高速レーン(任意) | dig で cursor-agent の選択肢を提示しないだけ。導入は任意 |
 | node | statusline 適用 | statusline 適用が実行不可 |
-| python3 | ルール同期・thought-db 同期スクリプト | ルール同期・thought-db 同期が実行不可(必須) |
+| python3 | ルール同期・thought-db 同期・Windows Terminal フォント適用スクリプト | ルール同期・thought-db 同期・フォント適用が実行不可(必須) |
 
 結果は OK / MISSING の一覧で報告し、MISSING には上表の影響と導入コマンドを添える。インストール自体はこのスキルでは行わない。
 
-- `python3` が `MISSING` の場合: step 3-4 のルール同期・thought-db 同期は実行不能のため、この時点で停止し、step 3 以降は実行しない。macOS/Homebrew 例として `brew install python` を案内し、`python3` 導入後に `/setup` を再実行するよう伝える。
-- `node` が `MISSING` の場合: step 5 の statusline 適用だけをスキップし、step 3-4 と step 6 は続行する。macOS/Homebrew 例として `brew install node` を案内し、statusline を適用したい場合は `node` 導入後に `/setup` を再実行するよう伝える。
+- `python3` が `MISSING` の場合: step 3-4 のルール同期・thought-db 同期と step 6 のフォント適用は実行不能のため、この時点で停止し、step 3 以降は実行しない。macOS/Homebrew 例として `brew install python` を案内し、`python3` 導入後に `/setup` を再実行するよう伝える。
+- `node` が `MISSING` の場合: step 5 の statusline 適用だけをスキップし、step 3-4 と step 6-7 は続行する。macOS/Homebrew 例として `brew install node` を案内し、statusline を適用したい場合は `node` 導入後に `/setup` を再実行するよう伝える。
 - `claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみで、ルール同期・thought-db 同期・statusline 適用の制御条件にはしない。
 
 ### 3. `scripts/sync_rules.py` による冪等同期
@@ -112,22 +113,42 @@ node "$STATUSLINE_INSTALL" --check
 - 他の statusline 設定を検出した場合: 既存設定を上書きするかを追加確認し、承認された場合だけ `node "$STATUSLINE_INSTALL" --force` を実行する。
 - ユーザーがスキップを選んだ場合: ルール同期結果だけを報告する。
 
-### 6. 検証とレポート
+### 6. ターミナルフォント適用(Windows のみ)
+
+Claude 親 / Codex 親のどちらでも実行する。ターミナルレベルの設定であり、ハーネスには依存しない。非 Windows 環境では skip し、「macOS/Linux は対象外(macOS は Ghostty 既定が JetBrains Mono)」と報告する。
+
+Windows では現在の検出・変更予定を確認する。
+
+```bash
+SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
+python3 "$SKILL_DIR/scripts/setup_terminal_font.py" --check --format json
+```
+
+結果 JSON を提示し、選択肢付き質問で承認を得てから適用する。Codex 親通常 mode または判定不能では、選択肢を箇条書きで提示して自由文回答を求める。
+
+```bash
+python3 "$SKILL_DIR/scripts/setup_terminal_font.py" --format json
+```
+
+winget 未導入、winget 失敗、フォント未登録、Windows Terminal 未検出は案内のみとし、setup 全体を停止しない。フォントを検出できない場合の settings.json 書き込みはスクリプト側のゲートで抑止する。
+
+### 7. 検証とレポート
 
 1. `AGENTS.md` に `devkit:rules` の start/end マーカーが 1 組あることを確認する。
 2. `CLAUDE.md` に `@./AGENTS.md` が 1 行だけあることを確認する。
 3. `.claude/devkit-rules.json` の `template_sha256` がテンプレートの SHA-256 と一致することを確認する。
 4. thought-db 同期を実行した場合は、`~/.claude/CLAUDE.md` と `~/.codex/AGENTS.md` に `devkit:thought-db` の start/end マーカーが 1 組ずつあることを確認する。skip の場合はその旨を報告する。
 5. statusline を適用した場合は installer の結果 JSON を報告する。
-6. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。環境前提チェックで MISSING があった場合は、影響と導入コマンドを報告に含める。
+6. ターミナルフォント確認を実行した場合は `status` / `font_installed` / `winget` / `settings` / `actions` を含む結果 JSON を報告する。
+7. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。環境前提チェックで MISSING があった場合は、影響と導入コマンドを報告に含める。
 
 ## 再実行時の動作
 
-DevKit 更新後に `/setup` を再実行すると、ルール・thought-db 参照・statusline を最新へ同期する。ルール同期と thought-db 同期は冪等で、テンプレート・マーカー区間・参照入口・同期メタデータが最新なら no-op になる。テンプレートが変わった場合はマーカー区間だけを置換し、マーカー外の記述は保持する。Claude 親で statusline 適用を選ぶと、同梱最新版を管理先へ再コピーして設定を更新する。
+DevKit 更新後に `/setup` を再実行すると、ルール・thought-db 参照・statusline・Windows Terminal フォント設定を最新へ同期する。ルール同期と thought-db 同期は冪等で、テンプレート・マーカー区間・参照入口・同期メタデータが最新なら no-op になる。テンプレートが変わった場合はマーカー区間だけを置換し、マーカー外の記述は保持する。Claude 親で statusline 適用を選ぶと、同梱最新版を管理先へ再コピーして設定を更新する。フォントの face が既に JetBrainsMono Nerd Font なら no-op となり、バックアップも増やさない。
 
 ## 注意
 
-- ルール同期のマーカー区間書き込みは設計上、差分承認ゲートなしで実行する(冪等同期が本務のため)。承認ゲートがあるのは statusline 適用のみで、この非対称は意図的なもの。
+- ルール同期のマーカー区間書き込みは設計上、差分承認ゲートなしで実行する(冪等同期が本務のため)。承認ゲートがあるのは statusline 適用とターミナルフォント適用のみで、この非対称は意図的なもの。
 - マーカー内の手動編集は次回 `/setup` 実行時に上書きされる。
 - プロジェクト固有ルールはマーカー外に書く。
 - DevKit repo 自身には実行しない。

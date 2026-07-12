@@ -17,6 +17,7 @@ SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_rules.py"
 TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/agents-rules.md"
 THOUGHT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_thought_db.py"
 THOUGHT_TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/thought-db-user.md"
+TERMINAL_FONT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/setup_terminal_font.py"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -101,6 +102,18 @@ def test_skill_contract_mentions_environment_prerequisites():
     assert "`brew install node`" in text
     assert "`claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみ" in text
     assert "MISSING があった場合は、影響と導入コマンドを報告に含める" in text
+
+
+def test_skill_contract_mentions_windows_terminal_font_approval_gate():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "### 6. ターミナルフォント適用(Windows のみ)" in text
+    assert "setup_terminal_font.py" in text
+    assert "JetBrainsMono Nerd Font" in text
+    assert "--check --format json" in text
+    assert "選択肢付き質問で承認" in text
+    assert "statusline 適用とターミナルフォント適用のみ" in text
+    assert TERMINAL_FONT_SCRIPT_PATH.is_file()
 
 
 def test_openai_agent_metadata_exists():

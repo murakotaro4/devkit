@@ -31,6 +31,10 @@ def test_required_statusline_artifacts_are_part_of_surface_contract():
     }.issubset(check_skill_surface.REQUIRED_PATHS)
 
 
+def test_required_terminal_font_script_is_part_of_surface_contract():
+    assert "plugins/devkit/skills/setup/scripts/setup_terminal_font.py" in check_skill_surface.REQUIRED_PATHS
+
+
 def test_removed_surface_contract_covers_v6_retirements():
     assert {
         "gpt-pro",

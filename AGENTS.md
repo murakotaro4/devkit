@@ -118,7 +118,7 @@ codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
 - `plugins/devkit/scripts/`: setup / update 系スクリプト
 - `plugins/devkit/skills/dig/SKILL.md`: 深掘り・計画・実装委譲 workflow の正本
 - `plugins/devkit/skills/improve-skill/SKILL.md`: skill 改善 workflow の正本
-- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / python3)・thought-db 接続同期・statusline 適用 workflow の正本
+- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / python3)・thought-db 接続同期・statusline 適用・Windows Terminal フォント適用 workflow の正本
 - `plugins/devkit/skills/refactor/SKILL.md`: 負債棚卸し・優先順位付け・計画作成 workflow の正本
 - `plugins/devkit/skills/memory-review/SKILL.md`: AI メモリ棚卸し・前提監査 workflow の正本
 - `plugins/devkit/skills/goal-prompt/SKILL.md`: 自律実行・ループ・大タスク完走向けゴールプロンプト作成 workflow の正本

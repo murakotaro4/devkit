@@ -104,6 +104,7 @@ v7 の配布面を検査します。
 
 - `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` と完全一致すること
 - `plugins/devkit/statusline/statusline.js` と `plugins/devkit/statusline/install.js` が存在すること
+- `plugins/devkit/skills/setup/scripts/setup_terminal_font.py` が存在すること
 - `plugins/devkit/templates/codex/config.shared.toml` と `config.windows.toml` が存在すること
 - 削除済み directory / script / duplicate manifest / scaffold が存在しないこと
 - ルート marketplace manifest の source directory が存在すること

@@ -25,6 +25,7 @@ EXPECTED_SKILLS = {
     "handoff",
 }
 REQUIRED_PATHS = {
+    "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
     "plugins/devkit/statusline/install.js",
     "plugins/devkit/statusline/statusline.js",
     "plugins/devkit/templates/codex/config.shared.toml",
