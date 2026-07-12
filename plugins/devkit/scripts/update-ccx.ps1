@@ -33,7 +33,7 @@ function Resolve-DevKitLibForUpdate {
         }
       }
     }
-    if (-not [string]::IsNullOrWhiteSpace($normalRoot)) {
+    if ([string]::IsNullOrWhiteSpace($env:DEVKIT_SOURCE_ROOT) -and -not [string]::IsNullOrWhiteSpace($normalRoot)) {
       $env:DEVKIT_SOURCE_ROOT = $normalRoot
     }
     return $libPath
@@ -67,7 +67,9 @@ function Resolve-DevKitLibForUpdate {
       $codexBin = Join-Path (Join-Path $env:USERPROFILE ".codex") "bin"
       New-Item -ItemType Directory -Path $codexBin -Force | Out-Null
       Copy-Item -LiteralPath $repoLib -Destination (Join-Path $codexBin "devkit-lib.ps1") -Force
-      $env:DEVKIT_SOURCE_ROOT = $repoRoot
+      if ([string]::IsNullOrWhiteSpace($env:DEVKIT_SOURCE_ROOT)) {
+        $env:DEVKIT_SOURCE_ROOT = $repoRoot
+      }
       return (Join-Path $codexBin "devkit-lib.ps1")
     }
   }

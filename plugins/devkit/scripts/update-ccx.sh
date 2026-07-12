@@ -35,7 +35,7 @@ source_devkit_lib_for_update() {
                 normal_root="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//' || true)"
             fi
         fi
-        if [[ -n "$normal_root" ]]; then
+        if [[ -z "${DEVKIT_SOURCE_ROOT:-}" && -n "$normal_root" ]]; then
             export DEVKIT_SOURCE_ROOT="$normal_root"
         fi
         source "$lib_path" || return 1
@@ -65,7 +65,9 @@ source_devkit_lib_for_update() {
             # v5 -> v6 one-time rebootstrap: old installed updaters do not know devkit-lib.sh.
             mkdir -p "$HOME/.codex/bin"
             cp "$lib_path" "$HOME/.codex/bin/devkit-lib.sh"
-            export DEVKIT_SOURCE_ROOT="$repo_root"
+            if [[ -z "${DEVKIT_SOURCE_ROOT:-}" ]]; then
+                export DEVKIT_SOURCE_ROOT="$repo_root"
+            fi
             source "$HOME/.codex/bin/devkit-lib.sh" || return 1
             return 0
         fi
