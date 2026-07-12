@@ -157,7 +157,7 @@ python3 "$SKILL_DIR/scripts/create_blueprint.py" \
 - Claude 親: Codex レビューを実行する（実行形の正本は devkit `AGENTS.md`「スキル共通契約 > codex exec 実行形」）:
 
 ```bash
-codex -a never exec -c model_reasoning_effort="medium" "<レビュー依頼内容>" < /dev/null
+codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<レビュー依頼内容>" < /dev/null
 ```
 
 Claude 親のレビュー委譲は Bash `run_in_background` で起動し、完了自動通知で回収する。タスクリスト(TaskCreate / TaskUpdate)が使える場合は 1 委譲 = 1 タスクで登録する。待機中の出力増分確認は TaskOutput で行い、長時間増分がない場合のみ停滞状況を報告する。正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。

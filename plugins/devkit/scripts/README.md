@@ -57,10 +57,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marke
 Windows の `~/.codex/config.toml` 合成専用です。
 
 - shared template と windows template を結合する
-- shared template は Codex モデルを固定せず、通常・Plan の effort を Medium にする
+- shared template は model を `gpt-5.6-sol` に固定し、通常・Plan の effort を Medium にする
 - `~/.codex/config.local.toml` があれば結合する
 - Codex が書く marketplace / plugin runtime section を保持する
-- 次回更新時は既存 `config.toml` をバックアップしてから再合成し、旧 DevKit 固定値の `model` / `model_context_window` / `model_auto_compact_token_limit` を削除する
+- 次回更新時は既存 `config.toml` をバックアップしてから再合成し、旧 DevKit 固定値の `model` は template の `gpt-5.6-sol` へ置き換え、`model_context_window` / `model_auto_compact_token_limit` を削除する
 - 削除する旧固定値は `config.local.toml` へ移送せず、local overlay の許可キーも拡張しない
 - macOS / Linux / WSL では config 合成を行わない
 

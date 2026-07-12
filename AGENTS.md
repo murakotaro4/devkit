@@ -97,20 +97,16 @@
 ### codex exec 実行形
 
 ```bash
-codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
+codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>" < /dev/null
 ```
 
-- Codex のモデルは `-m` で焼き込まず、当該 runtime / account で利用可能な推薦既定に従う。ユーザーがモデルを明示指定した場合に限り `-m` を付ける
+- Codex のモデルは `gpt-5.6-sol` を `-m` で明示する。世代追従は catch-up スキルと `premises.json` で管理する（ユーザーが別モデルを明示指定した場合はそれに従う）
 - 非対話実行では必ず末尾に `< /dev/null` を付ける（stdin 待ちで無期限ハングするため）
 - `-a never` などの top-level オプションは `exec` より前に置く
 
-### Codex effort 選択
+### Codex モデル / effort
 
-- Low: 決定論的・低リスクな実装だけに使う
-- Medium: 標準の実装、計画レビュー、diff レビューに使う既定値
-- High: 複雑・高リスクな作業へ昇格するときに使う
-- XHigh: ユーザーが明示した場合、または代表タスクの実測で品質向上を確認できた場合だけ使う例外
-- 計画レビューと diff レビューでは Low を選択肢にしない
+- モデルは `gpt-5.6-sol`、effort は `medium` に固定する。計画レビュー・実装・diff レビューのすべてで同じ値を使い、effort の選択質問は行わない
 - Max は対応 surface の最深推論、Ultra は並列オーケストレーションを表す。この repo では説明にだけ用い、backend 選択肢、CLI の effort、config 値にはしない
 - Codex 親が `spawn_agent` を使う場合、子 agent ごとの effort 選択は追加しない
 
@@ -166,9 +162,9 @@ codex -a never exec -c model_reasoning_effort="<effort>" "<内容>" < /dev/null
 リポジトリ全体のルール: 行き詰まった場合は `codex exec` で外部モデルに相談する。全エージェント作業に適用する。
 
 ```bash
-codex -a never exec -c model_reasoning_effort="medium" "<相談内容>" < /dev/null
+codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<相談内容>" < /dev/null
 ```
 
-- 実行形は「スキル共通契約 > codex exec 実行形」に従う（モデルは `-m` で焼き込まず、当該 runtime / account の推薦既定に従う）
+- 実行形は「スキル共通契約 > codex exec 実行形」に従う（モデルは `gpt-5.6-sol`、effort は `medium` に固定）
 - 技術的判断に迷った場合、設計の妥当性を確認したい場合に使用する
 - 結果は参考意見として扱い、最終判断は親エージェントが行う

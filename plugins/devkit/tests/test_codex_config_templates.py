@@ -33,11 +33,12 @@ def _string_values(value: Any) -> list[str]:
     return [value] if isinstance(value, str) else []
 
 
-def test_shared_template_uses_recommended_model_and_medium_effort():
+def test_shared_template_pins_model_and_medium_effort():
     shared = _parse(SHARED_PATH)
 
-    for removed_key in ("model", "model_context_window", "model_auto_compact_token_limit"):
+    for removed_key in ("model_context_window", "model_auto_compact_token_limit"):
         assert removed_key not in shared
+    assert shared["model"] == "gpt-5.6-sol"
     assert shared["model_reasoning_effort"] == "medium"
     assert shared["plan_mode_reasoning_effort"] == "medium"
     assert not ({"max", "ultra"} & {value.lower() for value in _string_values(shared)})
@@ -64,6 +65,7 @@ def test_shared_and_windows_templates_preserve_exact_platform_contract():
     assert merged["notice"] == {"hide_full_access_warning": True}
     assert merged["model_reasoning_effort"] == "medium"
     assert merged["plan_mode_reasoning_effort"] == "medium"
-    for removed_key in ("model", "model_context_window", "model_auto_compact_token_limit"):
+    assert merged["model"] == "gpt-5.6-sol"
+    for removed_key in ("model_context_window", "model_auto_compact_token_limit"):
         assert removed_key not in merged
     assert not ({"max", "ultra"} & {value.lower() for value in _string_values(merged)})

@@ -558,7 +558,8 @@ try {{
   if (Test-Path -LiteralPath $configPaths.LocalOverlayPath) {{ throw "legacy pins were moved to local overlay" }}
 
   $installed = Get-Content -LiteralPath $configPaths.TargetPath -Raw -Encoding UTF8
-  if ($installed -match '(?m)^model\s*=') {{ throw "legacy model pin retained" }}
+  if (-not $installed.Contains('model = "gpt-5.6-sol"')) {{ throw "model is not pinned to gpt-5.6-sol" }}
+  if ($installed.Contains('model = "gpt-5.4"')) {{ throw "legacy model pin retained" }}
   if ($installed -match '(?m)^model_context_window\s*=') {{ throw "legacy context pin retained" }}
   if ($installed -match '(?m)^model_auto_compact_token_limit\s*=') {{ throw "legacy auto-compact pin retained" }}
   if (-not $installed.Contains('model_reasoning_effort = "medium"')) {{ throw "model effort is not medium" }}

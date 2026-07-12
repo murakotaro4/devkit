@@ -70,7 +70,7 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 
 ### 7. 独立レビュー(必須・スキップ不可)
 
-- Claude 親: `codex -a never exec -c model_reasoning_effort="medium" review --uncommitted < /dev/null` を background 起動し、完了通知で回収する。
+- Claude 親: `codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --uncommitted < /dev/null` を background 起動し、完了通知で回収する。
 - Codex 親: `spawn_agent` explorer に read-only 指示、承認済み計画、diff 全文を渡す。
 
 指摘を修正して再検証し、追加 findings がなくなるまで独立レビューを繰り返す。

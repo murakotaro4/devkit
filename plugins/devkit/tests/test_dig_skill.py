@@ -57,7 +57,7 @@ def test_interview_and_approval_contract():
     assert "goal-prompt のゴール本文に実装後レビュー要件を焼き込む" in text
     assert "モデル / effort は選択した backend で適用可能な場合だけ追記" in text
     assert "モデル / effort 非対応の経路は「適用なし」" in text
-    assert "Codex のモデル欄は固定名ではなく当該 runtime / account の推薦既定" in text
+    assert "codex のモデル / effort 欄は `gpt-5.6-sol` / `medium` 固定と記す" in text
 
 
 # ── 4. backend 選択の契約 ─────────────────────────────────────────
@@ -70,23 +70,16 @@ def test_backend_selection_contract():
     review = _between(
         claude_parent,
         "計画レビュー / diff レビュー backend",
-        "- Codex のモデルは指定せず",
+        "- Codex のモデルは `gpt-5.6-sol`",
     )
 
-    implementation_efforts = ["effort low", "effort medium", "effort high", "effort xhigh"]
-    implementation_positions = [implementation.index(value) for value in implementation_efforts]
-    assert implementation_positions == sorted(implementation_positions)
-    assert implementation.count("| codex — effort") == 4
+    assert implementation.count("| codex — gpt-5.6-sol medium") == 1
+    assert "| codex — effort" not in implementation, "effort ladder の実装選択肢が残っている"
     assert "標準の実装(既定)" in implementation
-    assert "決定論的・低リスクな実装だけ" in implementation
-    assert "複雑・高リスクな実装" in implementation
-    assert "ユーザー明示、または代表タスクの実測で品質向上を確認できた例外" in implementation
+    assert '-m gpt-5.6-sol -c model_reasoning_effort="medium"' in implementation
 
-    review_efforts = ["effort medium", "effort high", "effort xhigh"]
-    review_positions = [review.index(value) for value in review_efforts]
-    assert review_positions == sorted(review_positions)
-    assert review.count("| codex review — effort") == 3
-    assert "effort low" not in review, "計画 / diff レビューに Low が混入している"
+    assert review.count("| codex review — gpt-5.6-sol medium") == 1
+    assert "| codex review — effort" not in review, "effort ladder のレビュー選択肢が残っている"
     assert "標準の計画レビュー / diff レビュー(既定)" in review
 
     assert not re.search(r'model_reasoning_effort="(?:max|ultra)"', text, re.IGNORECASE)
@@ -140,7 +133,7 @@ def test_codex_job_records_and_resumes_explicit_thread_id():
     assert "set -o pipefail" in delegation
     assert (
         'codex -a never exec -C "<worktree>" --sandbox workspace-write '
-        '-c model_reasoning_effort="<選択>" --json "<実装指示>" < /dev/null '
+        '-m gpt-5.6-sol -c model_reasoning_effort="medium" --json "<実装指示>" < /dev/null '
         '| tee "$JOB_DIR/codex-events.jsonl"'
     ) in delegation
     assert 'event.get("type") == "thread.started"' in delegation
@@ -156,23 +149,26 @@ def test_codex_job_records_and_resumes_explicit_thread_id():
     assert "初回の対象 worktree" in repair
     assert "workspace-write sandbox" in repair
     assert "approval policy" in repair
-    assert "選択 effort" in repair
+    assert "固定のモデル / effort" in repair
     assert "ジョブ固有 thread_id" in repair
     assert (
         'codex -a never -C "<worktree>" --sandbox workspace-write exec resume '
-        '-c model_reasoning_effort="<選択>" '
+        '-m gpt-5.6-sol -c model_reasoning_effort="medium" '
         '"$(cat "$JOB_DIR/thread-id.txt")" "<指摘と修正指示>" < /dev/null'
     ) in repair
 
 
-# ── 6. モデルを焼き込まない（config 既定に従う） ─────────────────────
+# ── 6. モデル / effort 固定（gpt-5.6-sol / medium） ─────────────────
 
 
-def test_no_hardcoded_model():
+def test_pinned_model_and_effort():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    assert "当該 runtime / account で利用可能な推薦既定" in text
-    assert "ユーザーがモデルを明示指定した場合に限り `-m` を付ける" in text
-    assert not re.search(r"-m\s+gpt-", text), "委譲コマンドにモデルが焼き込まれている"
+    assert "Codex のモデルは `gpt-5.6-sol` を `-m` で明示する" in text
+    assert "catch-up スキルと `premises.json` で管理" in text
+    baked_models = set(re.findall(r"-m\s+(gpt-[\w.\-]+)", text))
+    assert baked_models == {"gpt-5.6-sol"}, f"想定外のモデル焼き込み: {baked_models}"
+    concrete_efforts = set(re.findall(r'model_reasoning_effort="([^"<>]+)"', text))
+    assert concrete_efforts == {"medium"}, f"medium 以外の effort が残っている: {concrete_efforts}"
     assert "spark" not in text, "旧モデル（spark）への言及が残っている"
 
 
@@ -369,18 +365,17 @@ def test_worktree_integration_contract():
     review_table = _between(
         claude_parent,
         "計画レビュー / diff レビュー backend",
-        "- Codex のモデルは指定せず",
+        "- Codex のモデルは `gpt-5.6-sol`",
     )
-    for effort in ("medium", "high", "xhigh"):
-        assert (
-            f'codex -a never exec -c model_reasoning_effort="{effort}" '
-            'review --base origin/<default> < /dev/null'
-        ) in review_table
-    assert review_table.count("origin なし repo は `--base <default>`") == 3
+    assert (
+        'codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" '
+        'review --base origin/<default> < /dev/null'
+    ) in review_table
+    assert review_table.count("origin なし repo は `--base <default>`") == 1
 
     self_review = _between(text, "### 7. 自レビュー", "### 8. 修正ループ")
     assert (
-        'codex -a never exec -c model_reasoning_effort="<選択>" '
+        'codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" '
         'review --base origin/<default> < /dev/null'
     ) in self_review
     assert "origin なし repo は `--base <default>`" in self_review
