@@ -165,6 +165,15 @@ def test_failure_modes_and_stop_conditions():
     assert "上限停止" in text
     assert "行き詰まり停止" in text
     assert "上限停止は省略禁止" in text
+    strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    stop_conditions = _section(strategy, "## 停止条件(3 種)")
+    assert "blocker と試行内容を進捗ログへ記録" in stop_conditions
+    assert "代替アプローチを 2 案検討" in stop_conditions
+    assert "最有力の案で続行" in stop_conditions
+    assert "既存制約の内側" in stop_conditions
+    assert "代替試行せず即停止" in stop_conditions
+    failure_modes = _section(text, "## 排除する失敗モード")
+    assert "blocker 即停止による不在時間の空転" in failure_modes
 
 
 def test_prompt_template_and_self_check_contract():
@@ -196,7 +205,7 @@ def test_prompt_template_and_self_check_contract():
         assert check in text
 
     self_check = _section(text, "## セルフチェック")
-    assert len(re.findall(r"^\d+\. ", self_check, re.MULTILINE)) == 8
+    assert len(re.findall(r"^\d+\. ", self_check, re.MULTILINE)) == 9
     assert "`実行戦略(実装系のみ)` と `実装後レビュー`" in text
     assert "逸脱時ログ記録の 1 行" in text
     assert "戦略から逸脱が必要なら理由を進捗ログに記録して保守的に判断する" in text
@@ -205,9 +214,15 @@ def test_prompt_template_and_self_check_contract():
     assert "長い本文はファイル参照" in text
     assert "起動プロンプトは短い条件文だけ" in text
     strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    progress_management = _section(strategy, "## 進捗管理")
+    assert "次にやること / 直近で決めた方針" in progress_management
+    assert "コンテキスト圧縮後" in progress_management
+    constraints = _section(strategy, "## 制約・非対象")
+    assert "成功条件を満たしたことにしない" in constraints
     assert strategy.index("## 実装後レビュー") < strategy.index("## 完了レポート")
     assert strategy.index("## 完了レポート") < strategy.index("## 実行前提")
     completion_report = _section(strategy, "## 完了レポート")
+    assert "読み返し" in completion_report
     for required in (
         ".claude/goal-runs/",
         "停止種別",
@@ -346,7 +361,7 @@ def test_dig_handoff_mode_contract():
     assert "commit / push 禁止" in text
     assert "実装後レビュー要件、どの停止種別でも書き出す完了レポート要件は転記必須項目" in text
     assert "組み立て + セルフチェック、独立レビュー、最終確認、保存 + 起動プロンプト提示" in text
-    assert "セルフチェック 8 項目" in text
+    assert "セルフチェック 9 項目" in text
 
 
 def test_retired_goal_prompt_phrases_are_absent():
