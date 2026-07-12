@@ -125,7 +125,7 @@ def test_delegation_command_contract():
     assert not re.search(r"codex exec .*-a never", text), (
         "-a never が codex exec より後ろに置かれた旧語順が残っている"
     )
-    assert "review --base <default-branch>" in text, "ブランチ全体を対象にする review の記述がない"
+    assert "review --base origin/<default>" in text, "remote の default を基点にする review の記述がない"
     assert "commit 禁止" in text, "backend への commit 禁止の記述がない"
 
 
@@ -320,6 +320,8 @@ def test_worktree_integration_contract():
     assert "fetch 失敗は警告を報告して続行し、統合前に再試行" in worktree
     assert 'WT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-wt.XXXXXX")' in worktree
     assert 'worktree add -b <type>/<slug> "$WT_DIR/wt" origin/<default>' in worktree
+    assert 'git -C "<worktree>" rev-parse HEAD' in worktree
+    assert "worktree add に使った起点の `<base-commit>` として親が記録" in worktree
     assert "ブランチ名が既存なら `-2` から連番" in worktree
     assert "mktemp ディレクトリを削除" in worktree
     assert "main ツリー実装へ黙って戻らず" in worktree
@@ -329,8 +331,10 @@ def test_worktree_integration_contract():
     assert "pre-commit hook(prek 等)が unstaged 変更を stash" in worktree
     assert "並列ジョブが実行中の間は節目 commit を保留" in worktree
     assert "全ジョブ回収後に、ジョブ単位で順にパス限定 commit" in worktree
-    assert "review --base <default-branch>" in text
+    assert "review --base origin/<default>" in text
+    assert "origin なし repo は `--base <default>`" in text
     assert "worktree 内で `codex" in text
+    assert "`git diff <記録した基点>...HEAD` を全文読み" in text
     assert 'merge --ff-only <branch>' in worktree
     assert 'push origin <default>' in worktree
     assert "PR 経路" in worktree
@@ -343,6 +347,9 @@ def test_worktree_integration_contract():
     assert "`--force` せず" in worktree
     assert "git worktree remove" in worktree
     assert "git branch -d <branch>" in worktree
+    assert "origin なし repo では fetch / push / PR 経路を省略" in worktree
+    assert "`merge --ff-only` までで統合完了と扱い(push なし)" in worktree
+    assert "報告にその旨を明記" in worktree
     assert "push reject は fetch して手順 1 からやり直し、version の再計算もやり直す" in worktree
     assert "commit / push はユーザー指示があった場合のみ" not in text
 
@@ -354,5 +361,26 @@ def test_worktree_integration_contract():
     backend_selection = _between(text, "### 3. backend 選択", "### 4. 計画レビュー")
     assert "統合方法も 1 問で確認" in backend_selection
     assert "既定推奨は「直接統合」" in backend_selection
-    assert "`command -v gh` が通らない場合は PR 選択肢を出さない" in backend_selection
+    assert "`command -v gh` が通らない場合" in backend_selection
     assert "「ゴール化して自律実行」の場合と非 git repo" in backend_selection
+    assert "または origin なし repo では PR 選択肢を出さない" in backend_selection
+
+    claude_parent = _between(text, "#### Claude 親の選択肢", "#### Codex 親の選択肢")
+    review_table = _between(
+        claude_parent,
+        "計画レビュー / diff レビュー backend",
+        "- Codex のモデルは指定せず",
+    )
+    for effort in ("medium", "high", "xhigh"):
+        assert (
+            f'codex -a never exec -c model_reasoning_effort="{effort}" '
+            'review --base origin/<default> < /dev/null'
+        ) in review_table
+    assert review_table.count("origin なし repo は `--base <default>`") == 3
+
+    self_review = _between(text, "### 7. 自レビュー", "### 8. 修正ループ")
+    assert (
+        'codex -a never exec -c model_reasoning_effort="<選択>" '
+        'review --base origin/<default> < /dev/null'
+    ) in self_review
+    assert "origin なし repo は `--base <default>`" in self_review
