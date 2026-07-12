@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-FONT_FACE = "JetBrainsMono Nerd Font"
+FONT_FACE = "JetBrainsMono NF"
 PACKAGE_ID = "DEVCOM.JetBrainsMonoNerdFont"
 REGISTRY_PATHS = (
     ("HKEY_LOCAL_MACHINE", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
