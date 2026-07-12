@@ -41,6 +41,13 @@ def make_font_names(path: Path, *names: str) -> None:
 
 
 def make_winget(path: Path, body: str) -> Path:
+    if os.name == "nt":
+        # Windows は shebang を解釈しないため、python 本体を .cmd 経由で起動する
+        impl = path.with_name(path.name + "-impl.py")
+        impl.write_text(body + "\n", encoding="utf-8")
+        cmd = path.with_name(path.name + ".cmd")
+        cmd.write_text(f'@echo off\r\n"{sys.executable}" "{impl}" %*\r\n', encoding="utf-8")
+        return cmd
     path.write_text(f"#!{sys.executable}\n{body}\n", encoding="utf-8")
     path.chmod(0o755)
     return path

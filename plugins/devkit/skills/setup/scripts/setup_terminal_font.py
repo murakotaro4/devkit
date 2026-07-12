@@ -273,7 +273,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return result
 
     if not registered:
-        command = shlex.split(args.winget_cmd) + [
+        # posix=True は Windows パスのバックスラッシュを剥がすため OS で切り替える
+        command = shlex.split(args.winget_cmd, posix=(os.name != "nt")) + [
             "install", "--id", PACKAGE_ID, "--exact", "--silent",
             "--accept-package-agreements", "--accept-source-agreements",
         ]
