@@ -220,6 +220,43 @@ def test_update_ccx_sh_exports_normal_source_root_before_sourcing_existing_lib(t
     assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{default_checkout}\n"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
+)
+def test_update_ccx_sh_preserves_existing_source_root(tmp_path):
+    home = tmp_path / "home"
+    codex_bin = home / ".codex" / "bin"
+    default_checkout = home / "cursor" / "devkit"
+    default_scripts = default_checkout / "plugins" / "devkit" / "scripts"
+    caller_source_root = tmp_path / "caller-source"
+    codex_bin.mkdir(parents=True)
+    default_scripts.mkdir(parents=True)
+    caller_source_root.mkdir()
+    (codex_bin / "devkit-lib.sh").write_text(
+        'printf "%s\\n" "$DEVKIT_SOURCE_ROOT" > "$HOME/selected-root.txt"\n',
+        encoding="utf-8",
+    )
+    (default_scripts / "devkit-lib.sh").write_text("# default lib marker\n", encoding="utf-8")
+    shutil.copyfile(SCRIPTS / "update-ccx.sh", codex_bin / "update-ccx.sh")
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["DEVKIT_SOURCE_ROOT"] = str(caller_source_root)
+
+    result = subprocess.run(
+        [bash_path(), (codex_bin / "update-ccx.sh").as_posix(), "--version"],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{caller_source_root}\n"
+
+
 def test_update_ccx_ps1_bootstraps_missing_lib_from_persisted_source_root(tmp_path):
     pwsh = shutil.which("pwsh")
     if not pwsh:
@@ -462,6 +499,51 @@ def test_update_ccx_ps1_sets_normal_source_root_before_sourcing_existing_lib(tmp
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(default_checkout)
+
+
+def test_update_ccx_ps1_preserves_existing_source_root(tmp_path):
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        pytest.skip("pwsh is not installed")
+
+    home = tmp_path / "home"
+    codex_bin = home / ".codex" / "bin"
+    default_checkout = home / "cursor" / "devkit"
+    default_scripts = default_checkout / "plugins" / "devkit" / "scripts"
+    caller_source_root = tmp_path / "caller-source"
+    codex_bin.mkdir(parents=True)
+    default_scripts.mkdir(parents=True)
+    caller_source_root.mkdir()
+    (codex_bin / "devkit-lib.ps1").write_text(
+        'Set-Content -LiteralPath (Join-Path $env:USERPROFILE "selected-root.txt") -Value $env:DEVKIT_SOURCE_ROOT\n',
+        encoding="utf-8",
+    )
+    (default_scripts / "devkit-lib.ps1").write_text("# default lib marker\n", encoding="utf-8")
+    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    env["DEVKIT_SOURCE_ROOT"] = str(caller_source_root)
+
+    result = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(codex_bin / "update-ccx.ps1"),
+            "--version",
+        ],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(caller_source_root)
 
 
 # devkit-lib.ps1 の dot-source をスクリプトトップレベルで行うことを PowerShell AST で検証する。
