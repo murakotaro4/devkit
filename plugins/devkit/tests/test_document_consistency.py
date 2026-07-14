@@ -20,6 +20,7 @@ DISTRIBUTED_SKILLS = (
     "backlog",
     "catch-up",
 )
+DELEGATING_SKILLS = ("dig", "improve-skill", "memory-review", "goal-prompt", "catch-up")
 PLUGIN_DESCRIPTION_SURFACES = (
     "/dig",
     "skill 改善",
@@ -351,6 +352,24 @@ def test_shared_skill_contract_canonical_and_referenced():
     for skill_name in DISTRIBUTED_SKILLS:
         text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
         assert "スキル共通契約" in text, f"{skill_name} の SKILL.md が共通契約を参照していない"
+
+
+def test_delegating_skills_have_progress_visibility_contract():
+    for skill_name in DELEGATING_SKILLS:
+        text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
+        assert "## 進捗可視化" in text, f"{skill_name} の SKILL.md に進捗可視化の見出しがない"
+        assert "1 ジョブ = 1 タスク" in text, f"{skill_name} の SKILL.md にジョブのタスク化契約がない"
+        assert "委譲・長時間ジョブの進捗可視化" in text, (
+            f"{skill_name} の SKILL.md が AGENTS.md の進捗可視化契約を参照していない"
+        )
+
+        allowed_tools_match = re.search(r'allowed-tools:\s*\[(.*?)\]', text)
+        assert allowed_tools_match, f"{skill_name} の SKILL.md に allowed-tools がない"
+        allowed_tools = re.findall(r'"([^"]+)"', allowed_tools_match.group(1))
+        for tool_name in ("TaskCreate", "TaskUpdate", "TaskOutput"):
+            assert tool_name in allowed_tools, (
+                f"{skill_name} の SKILL.md の allowed-tools に {tool_name} がない"
+            )
 
 
 def test_codex_model_pinned_to_current_generation():

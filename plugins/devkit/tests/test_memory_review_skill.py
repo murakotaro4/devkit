@@ -50,6 +50,7 @@ def test_skill_frontmatter_contract():
         "request_user_input",
         "TaskCreate",
         "TaskUpdate",
+        "TaskOutput",
         "Skill",
         "Agent",
         "spawn_agent",

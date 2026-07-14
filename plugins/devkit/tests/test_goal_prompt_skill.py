@@ -68,6 +68,7 @@ def test_skill_frontmatter_contract():
         "wait_agent",
         "TaskCreate",
         "TaskUpdate",
+        "TaskOutput",
         "Write",
         "Skill",
         "Agent",

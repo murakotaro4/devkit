@@ -30,7 +30,12 @@ $ARGUMENTS
 
 ## 進捗可視化
 
-正本は `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。独立レビューは 1 ジョブ = 1 タスクで登録する。Claude 親は外部 CLI を background 起動し完了通知で回収する。Codex 親は `wait_agent` で黙って待たず進捗を提示し、実体は `git status` / `git diff` で確認する。
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。要点:
+
+- 委譲ジョブは 1 ジョブ = 1 タスクとしてタスクリストへ登録し、開始時 in_progress・完了時 completed へ更新する(親 step のタスクへ blockedBy で紐付ける)。
+- Claude 親の外部 CLI 委譲は Bash `run_in_background` で起動し、完了自動通知を契機に回収する。定期ハートビートは逐次表示せず、出力増分が長時間ない場合のみ停滞状況を報告する。
+- Codex 親の子 agent 委譲は `wait_agent` で黙って待たず、定期的に進捗をユーザーへ提示する。
+- 実体の進捗は `git status` / `git diff` で確認し、resume を進捗確認に使わない。
 
 ## フロー
 
