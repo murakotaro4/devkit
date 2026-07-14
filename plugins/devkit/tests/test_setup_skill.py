@@ -18,6 +18,7 @@ TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/agents-rules.md"
 THOUGHT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_thought_db.py"
 THOUGHT_TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/thought-db-user.md"
 TERMINAL_FONT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/setup_terminal_font.py"
+UPDATER_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_updater.py"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -98,7 +99,7 @@ def test_skill_contract_mentions_environment_prerequisites():
     assert "この時点で停止し、step 3 以降は実行しない" in text
     assert "`brew install python`" in text
     assert "`node` が `MISSING` の場合" in text
-    assert "step 5 の statusline 適用だけをスキップ" in text
+    assert "step 6 の statusline 適用だけをスキップ" in text
     assert "`brew install node`" in text
     assert "`claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみ" in text
     assert "MISSING があった場合は、影響と導入コマンドを報告に含める" in text
@@ -107,13 +108,29 @@ def test_skill_contract_mentions_environment_prerequisites():
 def test_skill_contract_mentions_windows_terminal_font_approval_gate():
     text = SKILL_PATH.read_text(encoding="utf-8")
 
-    assert "### 6. ターミナルフォント適用(Windows のみ)" in text
+    assert "### 7. ターミナルフォント適用(Windows のみ)" in text
     assert "setup_terminal_font.py" in text
     assert "JetBrainsMono Nerd Font" in text
     assert "--check --format json" in text
     assert "選択肢付き質問で承認" in text
     assert "statusline 適用とターミナルフォント適用のみ" in text
     assert TERMINAL_FONT_SCRIPT_PATH.is_file()
+
+
+def test_updater_sync_step_order_and_reporting_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    thought_heading = "### 4. thought-db 接続同期(ユーザー環境)"
+    updater_heading = "### 5. updater 同期(ユーザー環境)"
+    statusline_heading = "### 6. statusline 適用"
+
+    assert text.index(thought_heading) < text.index(updater_heading) < text.index(statusline_heading)
+    updater_section = text.split(updater_heading, 1)[1].split(statusline_heading, 1)[0]
+    assert "sync_updater.py" in updater_section
+    assert "Claude 親 / Codex 親のどちらでも実行" in updater_section
+    assert "承認ゲートは置かず" in updater_section
+    for field in ("`changed`", "`skipped`", "`actions`"):
+        assert field in updater_section
+    assert UPDATER_SCRIPT_PATH.is_file()
 
 
 def test_openai_agent_metadata_exists():

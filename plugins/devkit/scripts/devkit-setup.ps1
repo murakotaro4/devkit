@@ -54,11 +54,10 @@ try {
   Write-Info "Setup completed."
   Write-Host ""
   Write-Host "Run DevKit updates from PowerShell/cmd:"
-  Write-Host "  update-devkit"
   Write-Host "  update-ccx"
   Write-Host ""
   Write-Host "Manual update command:"
-  Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$($managed.CodexBin)\update-devkit.ps1`" --devkit-only"
+  Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$($managed.CodexBin)\update-ccx.ps1`" --devkit-only"
   exit 0
 } catch {
   Write-Error $_

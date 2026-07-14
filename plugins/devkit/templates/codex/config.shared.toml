@@ -1,5 +1,5 @@
 # Managed by DevKit.
-# Re-run update-devkit after updating DevKit.
+# Re-run update-ccx after updating DevKit.
 # Put machine-specific additions in ~/.codex/config.local.toml.
 approval_policy = "never"
 model = "gpt-5.6-sol"

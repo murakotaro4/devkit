@@ -425,7 +425,12 @@ devkit_prune_legacy_bin_assets() {
     "$codex_bin/devkit-runtime-sync.ps1" \
     "$codex_bin/devkit-skill-update.ps1" \
     "$codex_bin/devkit-skill-update.cmd" \
-    "$user_home/.local/bin/devkit-skill-update"
+    "$user_home/.local/bin/devkit-skill-update" \
+    "$codex_bin/update-devkit.sh" \
+    "$codex_bin/update-devkit.ps1" \
+    "$codex_bin/update-devkit.cmd" \
+    "$user_home/.local/bin/update-devkit" \
+    "$user_home/.local/bin/update-devkit.cmd"
 }
 
 prune_legacy_devkit_assets() {

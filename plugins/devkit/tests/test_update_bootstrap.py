@@ -13,6 +13,33 @@ ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "plugins" / "devkit" / "scripts"
 
 
+def test_managed_updater_copy_excludes_retired_update_devkit_files():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    shell_copy_names = shell.split("for script_name in ", 1)[1].split("; do", 1)[0].split()
+    assert shell_copy_names == ["update-ccx.sh", "devkit-lib.sh"]
+
+    powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
+    managed_function = powershell.split("function Install-DevKitManagedFiles", 1)[1].split(
+        "function Test-DevKitPathLooksManaged", 1
+    )[0]
+    managed_names = managed_function.split("foreach ($fileName in @(", 1)[1].split("))", 1)[0]
+    assert '"update-ccx.ps1"' in managed_names
+    assert '"update-ccx.cmd"' in managed_names
+    assert "update-devkit" not in managed_names
+
+
+def test_updater_self_refresh_defines_all_retired_name_prune_targets():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
+    for name in ("update-devkit.sh", "update-devkit.ps1", "update-devkit.cmd"):
+        assert name in shell
+        assert name in powershell
+    assert '"$local_bin/update-devkit"' in shell
+    assert '"$local_bin/update-devkit.cmd"' in shell
+    assert '(Join-Path $localBin "update-devkit")' in powershell
+    assert '(Join-Path $localBin "update-devkit.cmd")' in powershell
+
+
 def _probe_symlink_support() -> bool:
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:

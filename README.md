@@ -14,7 +14,7 @@ v6.0.0 は配布面を整理する breaking release です。
 - 旧 dig adapter 名: `dig-core`, `dig-claude`, `dig-codex`, `dig-cursor`, `dig-opencode`, `codex-impl`, `decomposition`, `devkit-init`
 - 単独表記の `AskUserQuestionTool` はハーネス中立の質問手段へ置き換え
 
-v6 の置き換え先は marketplace 配布の `dig` と `improve-skill` です。`update-devkit` は移行時に旧 symlink / 旧 helper / 旧タスクを prune し、以後は Codex marketplace の git source と Claude Code plugin marketplace を正本にします。
+v6 の置き換え先は marketplace 配布の `dig` と `improve-skill` です。updater は移行時に旧 symlink / 旧 helper / 旧タスクを prune し、以後は Codex marketplace の git source と Claude Code plugin marketplace を正本にします。
 
 ## Skills
 
@@ -82,21 +82,16 @@ codex plugin list --json
 
 ## Update
 
-Codex の git marketplace は Codex 起動時に自動アップグレードされます。すぐ反映したい場合だけ `update-devkit` を実行します。
-
-```bash
-update-devkit
-update-devkit --version
-```
-
-`update-ccx` は互換 alias です。
+Codex の git marketplace は Codex 起動時に自動アップグレードされます。すぐ反映したい場合だけ `update-ccx` を実行します。
 
 ```bash
 update-ccx
 update-ccx --version
 ```
 
-`update-devkit` が行うこと:
+`update-ccx` が唯一の updater コマンドです。旧名称 `update-devkit` は廃止され、`/setup` または updater 自身の更新時に残骸を prune します。互換 shim や fallback は提供しません。
+
+`update-ccx` が行うこと:
 
 - Claude Code / Codex CLI の install / update
 - DevKit 管理 script の配置更新
@@ -125,7 +120,7 @@ macOS / Linux / WSL では config 合成を行いません。Codex plugin 登録
 
 事前条件はありません。旧 updater のままで問題ありません。v6 の `update-ccx.ps1` は `devkit-lib` 欠落時に一回きり self-heal します。
 
-`update-devkit` を 1 回実行すると、次を自動で処理します。
+`update-ccx` を 1 回実行すると、次を自動で処理します。
 
 - repo pull
 - managed copy 更新
@@ -149,7 +144,7 @@ Get-ScheduledTask -TaskName "RepoNightlyMaintainer-*" | Unregister-ScheduledTask
 
 ### Windows: DevKit refresh が「Get-DevKitRepoRoot」で失敗する場合
 
-症状: `update-ccx` / `update-devkit` の `DevKit refresh` 段階が次のようなエラーで必ず失敗する。
+症状: `update-ccx` の `DevKit refresh` 段階が次のようなエラーで必ず失敗する。
 
 ```
 用語 'Get-DevKitRepoRoot' は、コマンドレット、関数、スクリプト ファイル、または操作可能なプログラムの名前として認識されません。
@@ -163,11 +158,11 @@ Get-ScheduledTask -TaskName "RepoNightlyMaintainer-*" | Unregister-ScheduledTask
 pwsh -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\update-ccx.ps1" --devkit-only
 ```
 
-marketplace clone にある修正済み updater を一度直接実行すると、`~/.codex/bin/update-ccx.ps1` が新しいスクリプトに置き換わります。以後は通常どおり `update-ccx` / `update-devkit` を使えます。
+marketplace clone にある修正済み updater を一度直接実行すると、`~/.codex/bin/update-ccx.ps1` が新しいスクリプトに置き換わります。以後は通常どおり `update-ccx` を使えます。
 
 ## Manual Cleanup
 
-`update-devkit` は v6 marker により一度だけ旧資産を prune します。手動で残骸を掃除する場合は、DevKit 管理物だけを対象にしてください。
+`update-ccx` は v6 marker により一度だけ旧資産を prune します。廃止済みの旧名称 `update-devkit` の残骸は `/setup` と updater 同期でも削除します。手動で残骸を掃除する場合は、DevKit 管理物だけを対象にしてください。
 
 確認例:
 

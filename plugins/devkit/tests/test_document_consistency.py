@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -40,6 +41,47 @@ def _backtick_fence(line: str) -> tuple[int, str] | None:
     if not match:
         return None
     return len(match.group(1)), match.group(2).strip()
+
+
+def test_retired_update_devkit_mentions_are_allowlisted():
+    allowed_line_patterns = {
+        "README.md": (r"旧名称 `update-devkit`",),
+        "plugins/devkit/scripts/README.md": (r"旧名称 `update-devkit`",),
+        "plugins/devkit/scripts/update-ccx.sh": (r"/(?:update-devkit(?:\.(?:sh|ps1|cmd))?)",),
+        "plugins/devkit/scripts/devkit-lib.sh": (r"/(?:update-devkit(?:\.(?:sh|ps1|cmd))?)",),
+        "plugins/devkit/scripts/devkit-lib.ps1": (r'"update-devkit(?:\.(?:sh|ps1|cmd))?"',),
+        "plugins/devkit/skills/setup/scripts/sync_updater.py": (
+            r'^LEGACY_(?:CODEX|LOCAL)_BIN_FILES = .*"update-devkit',
+        ),
+        # この確定済み設計は旧名称廃止と prune 対象を定義する移行記録。
+        "docs/goals/2026-07-14-update-ccx-setup-sync.md": (r"update-devkit",),
+    }
+    tracked_and_untracked = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    offenders: list[str] = []
+    for relpath in tracked_and_untracked:
+        if relpath.startswith("plugins/devkit/tests/"):
+            continue
+        path = REPO_ROOT / relpath
+        if not path.is_file():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            continue
+        for line_no, line in enumerate(lines, start=1):
+            if "update-devkit" not in line:
+                continue
+            patterns = allowed_line_patterns.get(relpath, ())
+            if not any(re.search(pattern, line) for pattern in patterns):
+                offenders.append(f"{relpath}:{line_no}:{line.strip()}")
+
+    assert not offenders, "旧 updater 名の非許可言及が残っている:\n" + "\n".join(offenders)
 
 
 # ── 1. CLAUDE.md が AGENTS.md を正本として参照している ─────────────

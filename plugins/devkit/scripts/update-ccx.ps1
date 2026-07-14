@@ -803,7 +803,7 @@ function Ensure-Fnm {
   }
 
   if (-not (Test-CommandAvailable "winget")) {
-    Add-ResultError "fnm: winget not available, install fnm manually and re-run update-devkit.cmd."
+    Add-ResultError "fnm: winget not available, install fnm manually and re-run update-ccx.cmd."
     return
   }
 
@@ -1099,7 +1099,7 @@ function Update-Codex([string]$Method) {
     }
     "external" {
       Write-Host "SKIPPED"
-      Add-ResultWarning "Codex CLI: resolved command is an external installation. update-devkit does not modify standalone codex.exe installs."
+      Add-ResultWarning "Codex CLI: resolved command is an external installation. update-ccx does not modify standalone codex.exe installs."
     }
   }
 }
@@ -1447,11 +1447,10 @@ function Parse-CliArgs {
 
 function Show-Usage {
   Write-Host "Usage:"
-  Write-Host "  update-devkit.cmd                    # preferred name: update tools and DevKit"
-  Write-Host "  update-ccx.cmd                       # compatibility alias"
-  Write-Host "  update-devkit.cmd --version          # show current versions"
-  Write-Host "  update-devkit.cmd --cli-only         # update Claude/Codex only"
-  Write-Host "  update-devkit.cmd --devkit-only      # refresh DevKit managed files and Codex plugin only"
+  Write-Host "  update-ccx.cmd                       # update tools and DevKit"
+  Write-Host "  update-ccx.cmd --version             # show current versions"
+  Write-Host "  update-ccx.cmd --cli-only            # update Claude/Codex only"
+  Write-Host "  update-ccx.cmd --devkit-only         # refresh DevKit managed files and Codex plugin only"
 }
 
 function Main {

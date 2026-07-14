@@ -1,14 +1,13 @@
 #!/bin/bash
 #
-# update-ccx.sh - compatibility alias for update-devkit.
+# update-ccx.sh - DevKit updater.
 #
 # Updates Claude Code / Codex CLI and keeps the DevKit Codex plugin registered
 # through the Codex plugin marketplace.
 #
 # Usage:
-#   update-devkit.sh           # update CLIs and DevKit plugin registration
-#   update-ccx.sh              # compatibility alias
-#   update-devkit.sh --version # show current versions
+#   update-ccx.sh              # update CLIs and DevKit plugin registration
+#   update-ccx.sh --version    # show current versions
 #
 
 set -o pipefail
@@ -212,11 +211,10 @@ show_versions() {
 show_usage() {
     cat <<'EOF'
 Usage:
-  update-devkit.sh                    # preferred name: update tools and DevKit plugin registration
-  update-ccx.sh                       # compatibility alias
-  update-devkit.sh --version          # show current versions
-  update-devkit.sh --cli-only         # update Claude/Codex CLIs only
-  update-devkit.sh --devkit-only      # update DevKit managed files and Codex plugin registration only
+  update-ccx.sh                       # update tools and DevKit plugin registration
+  update-ccx.sh --version             # show current versions
+  update-ccx.sh --cli-only            # update Claude/Codex CLIs only
+  update-ccx.sh --devkit-only         # update DevKit managed files and Codex plugin registration only
 EOF
 }
 
@@ -547,17 +545,22 @@ section_managed_copy() {
     codex_bin="$HOME/.codex/bin"
     local_bin="$HOME/.local/bin"
 
-    for script_name in update-devkit.sh update-ccx.sh devkit-lib.sh; do
+    for script_name in update-ccx.sh devkit-lib.sh; do
         if ! ensure_managed_file "$plugin_scripts/$script_name" "$codex_bin/$script_name" true; then
             ERRORS+=("DevKit managed file: failed to update $script_name")
             return 1
         fi
     done
 
-    chmod +x "$codex_bin/update-devkit.sh" "$codex_bin/update-ccx.sh"
+    chmod +x "$codex_bin/update-ccx.sh"
     devkit_persist_codex_source_root "$HOME" "$repo_root"
-    install_devkit_shell_shim "$local_bin/update-devkit" "$codex_bin/update-devkit.sh"
     install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
+    rm -f \
+        "$codex_bin/update-devkit.sh" \
+        "$codex_bin/update-devkit.ps1" \
+        "$codex_bin/update-devkit.cmd" \
+        "$local_bin/update-devkit" \
+        "$local_bin/update-devkit.cmd"
     echo "OK managed files updated"
 }
 
