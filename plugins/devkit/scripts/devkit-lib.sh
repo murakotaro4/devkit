@@ -419,6 +419,13 @@ devkit_prune_marketplace_hooks() {
 devkit_prune_legacy_bin_assets() {
   local user_home="$1"
   local codex_bin="$user_home/.codex/bin"
+  local -a legacy_updater_paths=(
+    "$codex_bin/update-devkit.sh"
+    "$codex_bin/update-devkit.ps1"
+    "$codex_bin/update-devkit.cmd"
+    "$user_home/.local/bin/update-devkit"
+    "$user_home/.local/bin/update-devkit.cmd"
+  )
 
   rm -f \
     "$codex_bin/devkit-runtime-sync.sh" \
@@ -426,11 +433,7 @@ devkit_prune_legacy_bin_assets() {
     "$codex_bin/devkit-skill-update.ps1" \
     "$codex_bin/devkit-skill-update.cmd" \
     "$user_home/.local/bin/devkit-skill-update" \
-    "$codex_bin/update-devkit.sh" \
-    "$codex_bin/update-devkit.ps1" \
-    "$codex_bin/update-devkit.cmd" \
-    "$user_home/.local/bin/update-devkit" \
-    "$user_home/.local/bin/update-devkit.cmd"
+    "${legacy_updater_paths[@]}"
 }
 
 prune_legacy_devkit_assets() {

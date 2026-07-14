@@ -43,38 +43,121 @@ def _backtick_fence(line: str) -> tuple[int, str] | None:
     return len(match.group(1)), match.group(2).strip()
 
 
+def _line_patterns_in_blocks(
+    lines: list[str], block_patterns: tuple[tuple[str, str, tuple[str, ...]], ...]
+) -> dict[int, tuple[str, ...]]:
+    allowed: dict[int, tuple[str, ...]] = {}
+    end_pattern: str | None = None
+    entry_patterns: tuple[str, ...] = ()
+    for line_no, line in enumerate(lines, start=1):
+        if end_pattern is not None:
+            if re.fullmatch(end_pattern, line):
+                end_pattern = None
+                entry_patterns = ()
+            else:
+                allowed[line_no] = entry_patterns
+            continue
+        for start_pattern, candidate_end_pattern, candidate_entry_patterns in block_patterns:
+            if re.fullmatch(start_pattern, line):
+                end_pattern = candidate_end_pattern
+                entry_patterns = candidate_entry_patterns
+                break
+    assert end_pattern is None, "旧 updater allowlist の構造ブロックが閉じていない"
+    return allowed
+
+
 def test_retired_update_devkit_mentions_are_allowlisted():
+    retired_updater_name = "update-" + "devkit"
+    retired_updater_pattern = re.escape(retired_updater_name)
     allowed_line_patterns = {
-        "README.md": (r"(?=.*update-devkit)(?=.*(?:廃止|旧名称|残骸|prune|削除))",),
+        "README.md": (
+            rf"(?=.*{retired_updater_pattern})(?=.*(?:廃止|旧名称|残骸|prune|削除))",
+        ),
         "plugins/devkit/scripts/README.md": (
-            r"(?=.*update-devkit)(?=.*(?:廃止|旧名称|残骸|prune|削除))",
-        ),
-        "plugins/devkit/scripts/update-ccx.sh": (
-            r'^\s*"\$(?:codex_bin|local_bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"\s*\\?$',
-        ),
-        "plugins/devkit/scripts/devkit-lib.sh": (
-            r'^\s*"\$(?:codex_bin|user_home/.local/bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"\s*\\?$',
+            rf"(?=.*{retired_updater_pattern})(?=.*(?:廃止|旧名称|残骸|prune|削除))",
         ),
         "plugins/devkit/scripts/devkit-lib.ps1": (
-            r'^\s*(?:\(Join-Path \$(?:codexBin|localBin) "update-devkit(?:\.(?:sh|ps1|cmd))?"\)|"update-devkit(?:\.(?:sh|ps1|cmd))?")[,]?$',
-            r'^\s*foreach \(\$fileName in @\("update-devkit", "update-devkit\.cmd"\)\) \{$',
+            rf'^\s*foreach \(\$fileName in \$legacyLocalBinFileNames\) \{{$',
         ),
         "plugins/devkit/skills/setup/scripts/sync_updater.py": (
-            r'^LEGACY_CODEX_BIN_FILES = \("update-devkit\.sh", "update-devkit\.ps1", "update-devkit\.cmd"\)$',
-            r'^LEGACY_LOCAL_BIN_FILES = \("update-devkit", "update-devkit\.cmd"\)$',
+            rf'^LEGACY_CODEX_BIN_FILES = \("{retired_updater_pattern}\.sh", '
+            rf'"{retired_updater_pattern}\.ps1", "{retired_updater_pattern}\.cmd"\)$',
+            rf'^LEGACY_LOCAL_BIN_FILES = \("{retired_updater_pattern}", '
+            rf'"{retired_updater_pattern}\.cmd"\)$',
         ),
         "plugins/devkit/tests/test_update_bootstrap.py": (
-            r'^\s*assert "update-devkit" not in managed_names$',
-            r'^\s*for name in \("update-devkit\.sh", "update-devkit\.ps1", "update-devkit\.cmd"\):$',
-            r'^\s*assert [\'\']"\$local_bin/update-devkit(?:\.cmd)?"[\'\'] in shell$',
-            r'^\s*assert [\'\']\(Join-Path \$localBin "update-devkit(?:\.cmd)?"\)[\'\'] in powershell$',
-        ),
-        "plugins/devkit/tests/test_document_consistency.py": (
-            r'^\s*(?:"[^"\n]+": \()?r["\'](?:\(\?=\.\*|\^(?:\\s\*|[A-Z])).*update-' r'devkit',
+            rf'^\s*assert "{retired_updater_pattern}" not in managed_names$',
+            rf'^\s*for name in \("{retired_updater_pattern}\.sh", '
+            rf'"{retired_updater_pattern}\.ps1", "{retired_updater_pattern}\.cmd"\):$',
+            rf'^\s*assert [\'\']"\$local_bin/{retired_updater_pattern}"[\'\'] in shell$',
+            rf'^\s*assert [\'\']"\$local_bin/{retired_updater_pattern}\.cmd"[\'\'] in shell$',
+            rf'^\s*assert [\'\']\(Join-Path \$localBin "{retired_updater_pattern}"\)'
+            rf"[\'\'] in powershell$",
+            rf'^\s*assert [\'\']\(Join-Path \$localBin "{retired_updater_pattern}\.cmd"\)'
+            rf"[\'\'] in powershell$",
         ),
         # この確定済み設計は旧名称の廃止・移行または prune 対象を同じ行で明記する。
         "docs/goals/2026-07-14-update-ccx-setup-sync.md": (
-            r"(?=.*update-devkit)(?=.*(?:廃止|旧名称|旧名|移行|prune|残骸|削除|全廃|二重名義))",
+            rf"(?=.*{retired_updater_pattern})"
+            rf"(?=.*(?:廃止|旧名称|旧名|移行|prune|残骸|削除|全廃|二重名義))",
+        ),
+    }
+    allowed_block_patterns = {
+        "plugins/devkit/scripts/update-ccx.sh": (
+            (
+                r"\s*local -a legacy_updater_paths=\(",
+                r"\s*\)",
+                (
+                    rf'\s*"\$codex_bin/{retired_updater_pattern}\.sh"',
+                    rf'\s*"\$codex_bin/{retired_updater_pattern}\.ps1"',
+                    rf'\s*"\$codex_bin/{retired_updater_pattern}\.cmd"',
+                    rf'\s*"\$local_bin/{retired_updater_pattern}"',
+                    rf'\s*"\$local_bin/{retired_updater_pattern}\.cmd"',
+                ),
+            ),
+        ),
+        "plugins/devkit/scripts/devkit-lib.sh": (
+            (
+                r"\s*local -a legacy_updater_paths=\(",
+                r"\s*\)",
+                (
+                    rf'\s*"\$codex_bin/{retired_updater_pattern}\.sh"',
+                    rf'\s*"\$codex_bin/{retired_updater_pattern}\.ps1"',
+                    rf'\s*"\$codex_bin/{retired_updater_pattern}\.cmd"',
+                    rf'\s*"\$user_home/\.local/bin/{retired_updater_pattern}"',
+                    rf'\s*"\$user_home/\.local/bin/{retired_updater_pattern}\.cmd"',
+                ),
+            ),
+        ),
+        "plugins/devkit/scripts/devkit-lib.ps1": (
+            (
+                r"\s*\$legacyUpdaterPaths = @\(",
+                r"\s*\)",
+                (
+                    rf'\s*\(Join-Path \$codexBin "{retired_updater_pattern}\.sh"\),',
+                    rf'\s*\(Join-Path \$codexBin "{retired_updater_pattern}\.ps1"\),',
+                    rf'\s*\(Join-Path \$codexBin "{retired_updater_pattern}\.cmd"\),',
+                    rf'\s*\(Join-Path \$localBin "{retired_updater_pattern}"\),',
+                    rf'\s*\(Join-Path \$localBin "{retired_updater_pattern}\.cmd"\)',
+                ),
+            ),
+            (
+                r"\s*\$legacyCodexBinFileNames = @\(",
+                r"\s*\)",
+                (
+                    rf'\s*"{retired_updater_pattern}\.sh",',
+                    rf'\s*"{retired_updater_pattern}\.ps1",',
+                    rf'\s*"{retired_updater_pattern}\.cmd"',
+                ),
+            ),
+            (
+                r"\s*\$legacyLocalBinFileNames = @\(",
+                r"\s*\)",
+                (
+                    rf'\s*"{retired_updater_pattern}",',
+                    rf'\s*"{retired_updater_pattern}\.cmd"',
+                ),
+            ),
         ),
     }
     tracked_and_untracked = subprocess.run(
@@ -84,7 +167,6 @@ def test_retired_update_devkit_mentions_are_allowlisted():
         capture_output=True,
         text=True,
     ).stdout.splitlines()
-    retired_updater_name = "update-" + "devkit"
     offenders: list[str] = []
     for relpath in tracked_and_untracked:
         path = REPO_ROOT / relpath
@@ -94,8 +176,14 @@ def test_retired_update_devkit_mentions_are_allowlisted():
             lines = path.read_text(encoding="utf-8").splitlines()
         except UnicodeDecodeError:
             continue
+        allowed_block_line_patterns = _line_patterns_in_blocks(
+            lines, allowed_block_patterns.get(relpath, ())
+        )
         for line_no, line in enumerate(lines, start=1):
             if retired_updater_name not in line:
+                continue
+            block_line_patterns = allowed_block_line_patterns.get(line_no, ())
+            if any(re.fullmatch(pattern, line) for pattern in block_line_patterns):
                 continue
             patterns = allowed_line_patterns.get(relpath, ())
             if not any(re.search(pattern, line) for pattern in patterns):

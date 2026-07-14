@@ -413,13 +413,14 @@ function Install-DevKitManagedFiles([string]$RepoRoot, [string]$UserHome) {
   Set-DevKitPersistedSourceRoot -StateFile (Join-Path $codexDevKit "source-root.txt") -RepoRoot $RepoRoot
 
   Install-DevKitCommandShim -ShimPath (Join-Path $localBin "update-ccx.cmd") -TargetCommandPath (Join-Path $codexBin "update-ccx.cmd")
-  foreach ($legacyPath in @(
+  $legacyUpdaterPaths = @(
     (Join-Path $codexBin "update-devkit.sh"),
     (Join-Path $codexBin "update-devkit.ps1"),
     (Join-Path $codexBin "update-devkit.cmd"),
     (Join-Path $localBin "update-devkit"),
     (Join-Path $localBin "update-devkit.cmd")
-  )) {
+  )
+  foreach ($legacyPath in $legacyUpdaterPaths) {
     Remove-DevKitPathOrThrow -Path $legacyPath
   }
   [void](Ensure-DevKitUserPathContains -PathEntry $localBin)
@@ -556,7 +557,7 @@ function Remove-DevKitLegacyAssets([string]$UserHome, [string]$SourceRoot, [scri
   Clear-DevKitMarketplaceHooks -UserHome $UserHome
 
   $codexBin = Join-Path $UserHome ".codex\bin"
-  foreach ($fileName in @(
+  $legacyCodexBinFileNames = @(
     "devkit-runtime-sync.ps1",
     "devkit-runtime-sync.sh",
     "devkit-skill-update.ps1",
@@ -564,12 +565,17 @@ function Remove-DevKitLegacyAssets([string]$UserHome, [string]$SourceRoot, [scri
     "update-devkit.sh",
     "update-devkit.ps1",
     "update-devkit.cmd"
-  )) {
+  )
+  foreach ($fileName in $legacyCodexBinFileNames) {
     $path = Join-Path $codexBin $fileName
     Remove-DevKitPathOrThrow -Path $path
   }
 
-  foreach ($fileName in @("update-devkit", "update-devkit.cmd")) {
+  $legacyLocalBinFileNames = @(
+    "update-devkit",
+    "update-devkit.cmd"
+  )
+  foreach ($fileName in $legacyLocalBinFileNames) {
     $path = Join-Path $UserHome ".local\bin\$fileName"
     Remove-DevKitPathOrThrow -Path $path
   }

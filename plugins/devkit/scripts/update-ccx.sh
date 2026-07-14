@@ -556,13 +556,14 @@ section_managed_copy() {
     devkit_persist_codex_source_root "$HOME" "$repo_root"
     install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
     local legacy_path
-    for legacy_path in \
-        "$codex_bin/update-devkit.sh" \
-        "$codex_bin/update-devkit.ps1" \
-        "$codex_bin/update-devkit.cmd" \
-        "$local_bin/update-devkit" \
+    local -a legacy_updater_paths=(
+        "$codex_bin/update-devkit.sh"
+        "$codex_bin/update-devkit.ps1"
+        "$codex_bin/update-devkit.cmd"
+        "$local_bin/update-devkit"
         "$local_bin/update-devkit.cmd"
-    do
+    )
+    for legacy_path in "${legacy_updater_paths[@]}"; do
         rm -f -- "$legacy_path"
         if [[ -e "$legacy_path" || -L "$legacy_path" ]]; then
             echo "PRUNE_FAILED: $legacy_path" >&2
