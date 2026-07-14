@@ -2,7 +2,7 @@
 name: "memory-review"
 description: "AI メモリ棚卸し・前提監査。CLAUDE.md / AGENTS.md / rules / commands / skills / memory files / auto-memory を監査し、古い前提・矛盾・危険な自動化ルールを人間レビュー可能な形で整理する。「メモリを棚卸しして」「メモリ監査して」「前提を点検して」「/memory-review」で起動"
 argument-hint: "[scope]"
-allowed-tools: ["Read", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user_input", "TaskCreate", "TaskUpdate", "Skill", "Agent", "spawn_agent", "wait_agent", "Write", "Edit"]
+allowed-tools: ["Read", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user_input", "TaskCreate", "TaskUpdate", "TaskOutput", "Skill", "Agent", "spawn_agent", "wait_agent", "Write", "Edit"]
 ---
 
 # /memory-review - AI メモリ棚卸し・前提監査
@@ -25,6 +25,14 @@ $ARGUMENTS
 ## タスクリスト連動
 
 正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > タスクリスト連動」。memory-review 開始時に step 1-7 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する(Claude 親: TaskCreate / TaskUpdate、利用不可なら省略可。Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示)。
+
+## 進捗可視化
+
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。要点:
+
+- 委譲ジョブは 1 ジョブ = 1 タスクとしてタスクリストへ登録し、開始時 in_progress・完了時 completed へ更新する(親 step のタスクへ blockedBy で紐付ける)。
+- Claude 親の Agent 委譲は元々バックグラウンド実行 + 完了自動通知のため追加の起動処置は不要で、通知駆動で回収する。定期ハートビートは逐次表示せず、長時間出力増分がない場合のみ停滞の継続時間と推定原因を報告する。
+- Codex 親の子 agent 委譲は `wait_agent` で黙って待たず、定期的に進捗をユーザーへ提示する。
 
 ## 監査対象と除外
 
@@ -108,7 +116,7 @@ Claude auto-memory は、対象 repo の絶対パスから導出した slug で 
 
 サブエージェントが使え、対象が大きい場合は 4 役(監査役 / 矛盾検出役 / 安全性レビュー役 / 修正案作成役)に分割する。Claude 親は Agent、Codex 親は spawn_agent / wait_agent を使い、いずれも read-only 指示(監査対象の読み取りのみ、ファイル変更禁止)を明記して委譲する。小規模なら親単独で実施する。最終判断は親が統合し、重複のない指摘にする。
 
-委譲時は 1 役 = 1 タスクとしてタスクリストへ登録し、開始・完了で状態を更新する。Claude 親の Agent 委譲はバックグラウンド実行され完了時に自動通知が届くため通知駆動で回収し、長時間出力増分がない場合のみ停滞状況(継続時間・推定原因)を報告する。Codex 親は `wait_agent` で黙って待たず定期的に進捗を提示する。正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。
+各役への委譲のタスク登録・回収・停滞検知は「進捗可視化」節に従う。
 
 監査結果のメモ形式:
 

@@ -2,7 +2,7 @@
 name: "goal-prompt"
 description: "自律・長時間実行 / 定期ループ実行 / 大タスク完走依頼向けのゴールプロンプトを、選択肢付きインタビューで組み立てる。「ゴールプロンプトを作って」「夜間実行の指示書を作って」「ループ用プロンプトを作って」「/goal-prompt」で起動"
 argument-hint: "[task]"
-allowed-tools: ["Read", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user_input", "spawn_agent", "wait_agent", "TaskCreate", "TaskUpdate", "Write", "Skill", "Agent"]
+allowed-tools: ["Read", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user_input", "spawn_agent", "wait_agent", "TaskCreate", "TaskUpdate", "TaskOutput", "Write", "Skill", "Agent"]
 ---
 
 # /goal-prompt - ゴールプロンプト作成
@@ -34,6 +34,14 @@ $ARGUMENTS
 ## タスクリスト連動
 
 正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > タスクリスト連動」。goal-prompt 開始時に step 1-9 をタスクリストへ登録し、各 step の開始時に `in_progress`、完了時に `completed` へ更新する(Claude 親: TaskCreate / TaskUpdate、利用不可なら省略可。Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示)。
+
+## 進捗可視化
+
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。step 7 の独立レビュー委譲では次を守る。
+
+- 委譲ジョブは 1 ジョブ = 1 タスクとしてタスクリストへ登録し、開始時 in_progress・完了時 completed へ更新する(親 step のタスクへ blockedBy で紐付ける)。
+- Claude 親の Agent 委譲は元々バックグラウンド実行 + 完了自動通知のため追加の起動処置は不要で、通知駆動で回収する。定期ハートビートは逐次表示せず、長時間出力増分がない場合のみ停滞の継続時間と推定原因を報告する。
+- Codex 親の子 agent 委譲は `wait_agent` で黙って待たず、定期的に進捗をユーザーへ提示する。
 
 ## Codex モデル / effort 契約
 

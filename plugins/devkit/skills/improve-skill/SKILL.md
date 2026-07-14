@@ -16,6 +16,18 @@ $ARGUMENTS
 
 正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。要点: `AskUserQuestion` が使える → Claude 親、なければ `spawn_agent` が使える → Codex 親。`request_user_input` は判定キーに使わず、Codex 親 plan mode の質問手段としてのみ使う。質問手段は Claude 親 = AskUserQuestion、Codex 親 plan mode = `request_user_input`、Codex 親通常 mode / 判定不能 = 選択肢を箇条書きで提示して自由文回答を求める。
 
+## タスクリスト連動
+
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > タスクリスト連動」。Claude 親は TaskCreate / TaskUpdate が使える場合、モード別フローの主要 step(refresh / create: 分析 → 照合 → 提案作成、retro: 分析 → 承認 → 適用 → レビュー)を登録し、開始時 `in_progress`・完了時 `completed` へ更新する。利用不可なら省略可。Codex 親は組み込み plan 機能で同等の進捗を提示する。
+
+## 進捗可視化
+
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。要点:
+
+- 委譲ジョブは 1 ジョブ = 1 タスクとしてタスクリストへ登録し、開始時 in_progress・完了時 completed へ更新する(親 step のタスクへ blockedBy で紐付ける)。
+- Claude 親の `codex exec` レビュー委譲は Bash `run_in_background` で起動し、完了自動通知を契機に回収する。定期ハートビートは逐次表示せず、待機中は TaskOutput で出力増分を確認し、増分ゼロが長時間続く場合のみ停滞の継続時間と推定原因を報告する。
+- Codex 親の子 agent レビュー委譲は `wait_agent` で黙って待たず、定期的に進捗をユーザーへ提示する。
+
 ## 目的
 
 - `refresh` / `create`: 手動起動。選択肢付き質問で用途確定→チェックリスト返却（既存動作維持）
@@ -160,7 +172,7 @@ python3 "$SKILL_DIR/scripts/create_blueprint.py" \
 codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<レビュー依頼内容>" < /dev/null
 ```
 
-Claude 親のレビュー委譲は Bash `run_in_background` で起動し、完了自動通知で回収する。タスクリスト(TaskCreate / TaskUpdate)が使える場合は 1 委譲 = 1 タスクで登録する。待機中の出力増分確認は TaskOutput で行い、長時間増分がない場合のみ停滞状況を報告する。正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。
+レビュー委譲のタスク登録・回収・停滞検知は「進捗可視化」節に従う。
 
 - Codex 親: `spawn_agent`(explorer) に read-only 指示を明記してレビューを依頼する
 - コミットはユーザーが明示した場合のみ行う。ステージングは Step 3 で編集したファイルに限定する。メッセージ例: `fix(skills): セッション振り返り - <skill-name> <原因要約>`
