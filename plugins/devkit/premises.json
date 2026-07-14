@@ -1,69 +1,164 @@
 {
   "version": 1,
   "scan": {
-    "include_suffixes": [".md", ".py", ".toml", ".json", ".yaml", ".sh", ".ps1", ".cmd", ".js"],
-    "exclude_prefixes": [".claude/", "docs/reviews/", "plugins/devkit/premises.json"]
+    "include_suffixes": [
+      ".md",
+      ".py",
+      ".toml",
+      ".json",
+      ".yaml",
+      ".sh",
+      ".ps1",
+      ".cmd",
+      ".js"
+    ],
+    "exclude_prefixes": [
+      ".claude/",
+      "docs/reviews/",
+      "docs/goals/",
+      "plugins/devkit/premises.json"
+    ]
   },
   "premises": [
     {
       "id": "cursor-composer-model",
       "summary": "cursor-agent に明示指定する Cursor 自社モデル名",
       "current_value": "composer-2.5",
-      "value_patterns": ["(?<![A-Za-z0-9_])composer-2\\.5(?![A-Za-z0-9_])"],
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])composer-2\\.5(?![A-Za-z0-9_])"
+      ],
       "obsolete_value_patterns": [],
       "verify_hint": "cursor-agent --help / Cursor changelog / web 検索",
       "update_notes": "auto はサードパーティへルーティングされうるため常に明示。dig の全コマンド例と契約テストを同時更新",
       "last_verified": "2026-07-12",
       "occurrences": [
-        {"path": "plugins/devkit/skills/dig/SKILL.md", "count": 5},
-        {"path": "plugins/devkit/tests/test_check_external_premises.py", "count": 16},
-        {"path": "plugins/devkit/tests/test_dig_skill.py", "count": 5}
+        {
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/tests/test_check_external_premises.py",
+          "count": 16
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 5
+        }
       ]
     },
     {
       "id": "codex-model",
       "summary": "Codex 委譲コマンドと config に固定するモデル名",
       "current_value": "gpt-5.6-sol",
-      "value_patterns": ["(?<![A-Za-z0-9_])gpt-5\\.6-sol(?![A-Za-z0-9_-])"],
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])gpt-5\\.6-sol(?![A-Za-z0-9_-])"
+      ],
       "obsolete_value_patterns": [],
       "verify_hint": "codex -a never exec -m <モデル名> の実機ヘッダ / OpenAI release note (Sol/Terra/Luna)",
       "update_notes": "AGENTS.md・README・全スキルの codex コマンド例・config.shared.toml・契約テスト・check_skill_surface.py を同時更新。effort medium 固定とセットで扱う",
       "last_verified": "2026-07-13",
       "occurrences": [
-        {"path": "AGENTS.md", "count": 5},
-        {"path": "README.md", "count": 3},
-        {"path": "plugins/devkit/scripts/README.md", "count": 2},
-        {"path": "plugins/devkit/scripts/check_skill_surface.py", "count": 2},
-        {"path": "plugins/devkit/skills/catch-up/SKILL.md", "count": 1},
-        {"path": "plugins/devkit/skills/dig/SKILL.md", "count": 12},
-        {"path": "plugins/devkit/skills/goal-prompt/SKILL.md", "count": 6},
-        {"path": "plugins/devkit/skills/improve-skill/SKILL.md", "count": 1},
-        {"path": "plugins/devkit/templates/codex/config.shared.toml", "count": 1},
-        {"path": "plugins/devkit/tests/test_codex_config_templates.py", "count": 2},
-        {"path": "plugins/devkit/tests/test_dig_skill.py", "count": 13},
-        {"path": "plugins/devkit/tests/test_document_consistency.py", "count": 4},
-        {"path": "plugins/devkit/tests/test_goal_prompt_skill.py", "count": 6}
+        {
+          "path": "AGENTS.md",
+          "count": 5
+        },
+        {
+          "path": "README.md",
+          "count": 3
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/scripts/check_skill_surface.py",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/skills/catch-up/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 12
+        },
+        {
+          "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/skills/improve-skill/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/templates/codex/config.shared.toml",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_codex_config_templates.py",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 13
+        },
+        {
+          "path": "plugins/devkit/tests/test_document_consistency.py",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/tests/test_goal_prompt_skill.py",
+          "count": 6
+        }
       ]
     },
     {
       "id": "codex-effort-default-medium",
       "summary": "Codex 委譲に固定する effort 値",
       "current_value": "medium",
-      "value_patterns": ["(?:^medium$|(?<![A-Za-z0-9_])model_reasoning_effort\\s*=\\s*\"medium\"(?![A-Za-z0-9_]))"],
+      "value_patterns": [
+        "(?:^medium$|(?<![A-Za-z0-9_])model_reasoning_effort\\s*=\\s*\"medium\"(?![A-Za-z0-9_]))"
+      ],
       "obsolete_value_patterns": [],
       "verify_hint": "codex --help / OpenAI Codex documentation",
       "update_notes": "実行例と Codex config の固定値を同時更新。モデル固定(codex-model)とセットで扱う",
       "last_verified": "2026-07-13",
-      "exclude_paths": ["plugins/devkit/scripts/check_skill_surface.py"],
+      "exclude_paths": [
+        "plugins/devkit/scripts/check_skill_surface.py"
+      ],
       "occurrences": [
-        {"path": "AGENTS.md", "count": 2},
-        {"path": "plugins/devkit/skills/catch-up/SKILL.md", "count": 1},
-        {"path": "plugins/devkit/skills/dig/SKILL.md", "count": 6},
-        {"path": "plugins/devkit/skills/goal-prompt/SKILL.md", "count": 3},
-        {"path": "plugins/devkit/skills/improve-skill/SKILL.md", "count": 1},
-        {"path": "plugins/devkit/templates/codex/config.shared.toml", "count": 1},
-        {"path": "plugins/devkit/tests/test_dig_skill.py", "count": 5},
-        {"path": "plugins/devkit/tests/test_goal_prompt_skill.py", "count": 2}
+        {
+          "path": "AGENTS.md",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/skills/catch-up/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
+          "count": 3
+        },
+        {
+          "path": "plugins/devkit/skills/improve-skill/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/templates/codex/config.shared.toml",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/tests/test_goal_prompt_skill.py",
+          "count": 2
+        }
       ]
     },
     {
@@ -80,45 +175,128 @@
       "update_notes": "AGENTS.md、全配布スキルの自己完結契約、契約テストを同時更新",
       "last_verified": "2026-07-12",
       "occurrences": [
-        {"path": "AGENTS.md", "count": 7},
-        {"path": "plugins/devkit/skills/backlog/SKILL.md", "count": 7},
-        {"path": "plugins/devkit/skills/catch-up/SKILL.md", "count": 10},
-        {"path": "plugins/devkit/skills/dig/SKILL.md", "count": 21},
-        {"path": "plugins/devkit/skills/goal-prompt/SKILL.md", "count": 13},
-        {"path": "plugins/devkit/skills/handoff/SKILL.md", "count": 5},
-        {"path": "plugins/devkit/skills/improve-skill/SKILL.md", "count": 9},
-        {"path": "plugins/devkit/skills/improve-skill/scripts/refresh_mapper.py", "count": 2},
-        {"path": "plugins/devkit/skills/memory-review/SKILL.md", "count": 10},
-        {"path": "plugins/devkit/skills/refactor/SKILL.md", "count": 7},
-        {"path": "plugins/devkit/skills/setup/SKILL.md", "count": 5},
-        {"path": "plugins/devkit/tests/test_backlog_skill.py", "count": 4},
-        {"path": "plugins/devkit/tests/test_catch_up_skill.py", "count": 2},
-        {"path": "plugins/devkit/tests/test_dig_skill.py", "count": 3},
-        {"path": "plugins/devkit/tests/test_goal_prompt_skill.py", "count": 7},
-        {"path": "plugins/devkit/tests/test_handoff_skill.py", "count": 4},
-        {"path": "plugins/devkit/tests/test_memory_review_skill.py", "count": 5},
-        {"path": "plugins/devkit/tests/test_refactor_skill.py", "count": 4},
-        {"path": "plugins/devkit/tests/test_setup_skill.py", "count": 1}
+        {
+          "path": "AGENTS.md",
+          "count": 7
+        },
+        {
+          "path": "plugins/devkit/skills/backlog/SKILL.md",
+          "count": 7
+        },
+        {
+          "path": "plugins/devkit/skills/catch-up/SKILL.md",
+          "count": 10
+        },
+        {
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 21
+        },
+        {
+          "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
+          "count": 13
+        },
+        {
+          "path": "plugins/devkit/skills/handoff/SKILL.md",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/skills/improve-skill/SKILL.md",
+          "count": 9
+        },
+        {
+          "path": "plugins/devkit/skills/improve-skill/scripts/refresh_mapper.py",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/skills/memory-review/SKILL.md",
+          "count": 10
+        },
+        {
+          "path": "plugins/devkit/skills/refactor/SKILL.md",
+          "count": 7
+        },
+        {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/tests/test_backlog_skill.py",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/tests/test_catch_up_skill.py",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 3
+        },
+        {
+          "path": "plugins/devkit/tests/test_goal_prompt_skill.py",
+          "count": 7
+        },
+        {
+          "path": "plugins/devkit/tests/test_handoff_skill.py",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/tests/test_memory_review_skill.py",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/tests/test_refactor_skill.py",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_skill.py",
+          "count": 1
+        }
       ]
     },
     {
       "id": "codex-exec-command-form",
       "summary": "Codex 非対話実行の top-level option 順序",
       "current_value": "codex -a never exec",
-      "value_patterns": ["(?<![A-Za-z0-9_])codex -a never exec(?![A-Za-z0-9_])"],
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])codex -a never exec(?![A-Za-z0-9_])"
+      ],
       "obsolete_value_patterns": [],
       "verify_hint": "codex exec --help",
       "update_notes": "stdin 閉鎖を含む AGENTS.md と各 skill の実行例、契約テストを同時更新",
       "last_verified": "2026-07-13",
       "occurrences": [
-        {"path": "AGENTS.md", "count": 2},
-        {"path": "plugins/devkit/skills/dig/SKILL.md", "count": 4},
-        {"path": "plugins/devkit/skills/catch-up/SKILL.md", "count": 1},
-        {"path": "plugins/devkit/skills/goal-prompt/SKILL.md", "count": 1},
-        {"path": "plugins/devkit/skills/improve-skill/SKILL.md", "count": 1},
-        {"path": "plugins/devkit/tests/test_dig_skill.py", "count": 4},
-        {"path": "plugins/devkit/tests/test_document_consistency.py", "count": 1},
-        {"path": "plugins/devkit/tests/test_goal_prompt_skill.py", "count": 2}
+        {
+          "path": "AGENTS.md",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/skills/catch-up/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/improve-skill/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/tests/test_document_consistency.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_goal_prompt_skill.py",
+          "count": 2
+        }
       ]
     },
     {
@@ -135,8 +313,14 @@
       "update_notes": "dig の cursor-agent 起動・resume 例と契約テストを同時更新",
       "last_verified": "2026-07-12",
       "occurrences": [
-        {"path": "plugins/devkit/skills/dig/SKILL.md", "count": 8},
-        {"path": "plugins/devkit/tests/test_dig_skill.py", "count": 8}
+        {
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 8
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 8
+        }
       ]
     },
     {
@@ -152,30 +336,68 @@
       "update_notes": "goal-prompt の起動プロンプト例と契約テストを同時更新",
       "last_verified": "2026-07-12",
       "occurrences": [
-        {"path": "plugins/devkit/skills/goal-prompt/SKILL.md", "count": 3},
-        {"path": "plugins/devkit/tests/test_goal_prompt_skill.py", "count": 3}
+        {
+          "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
+          "count": 3
+        },
+        {
+          "path": "plugins/devkit/tests/test_goal_prompt_skill.py",
+          "count": 3
+        }
       ]
     },
     {
       "id": "marketplace-name",
       "summary": "Claude Code / Codex の配布正本 marketplace 名",
       "current_value": "murakotaro4",
-      "value_patterns": ["(?<![A-Za-z0-9_])murakotaro4(?![A-Za-z0-9_])"],
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])murakotaro4(?![A-Za-z0-9_])"
+      ],
       "obsolete_value_patterns": [],
       "verify_hint": "Claude Code / Codex marketplace list",
       "update_notes": "marketplace manifest、setup/update scripts、README、契約テストを同時更新",
       "last_verified": "2026-07-12",
       "occurrences": [
-        {"path": ".claude-plugin/marketplace.json", "count": 3},
-        {"path": "AGENTS.md", "count": 1},
-        {"path": "README.md", "count": 12},
-        {"path": "plugins/devkit/scripts/README.md", "count": 5},
-        {"path": "plugins/devkit/scripts/check_skill_surface.py", "count": 36},
-        {"path": "plugins/devkit/scripts/devkit-lib.ps1", "count": 4},
-        {"path": "plugins/devkit/scripts/devkit-lib.sh", "count": 8},
-        {"path": "plugins/devkit/scripts/update-ccx.ps1", "count": 13},
-        {"path": "plugins/devkit/scripts/update-ccx.sh", "count": 8},
-        {"path": "plugins/devkit/tests/test_check_skill_surface.py", "count": 2}
+        {
+          "path": ".claude-plugin/marketplace.json",
+          "count": 3
+        },
+        {
+          "path": "AGENTS.md",
+          "count": 1
+        },
+        {
+          "path": "README.md",
+          "count": 12
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/scripts/check_skill_surface.py",
+          "count": 36
+        },
+        {
+          "path": "plugins/devkit/scripts/devkit-lib.ps1",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/scripts/devkit-lib.sh",
+          "count": 8
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.ps1",
+          "count": 13
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 8
+        },
+        {
+          "path": "plugins/devkit/tests/test_check_skill_surface.py",
+          "count": 2
+        }
       ]
     }
   ]
