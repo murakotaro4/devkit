@@ -50,17 +50,18 @@ def test_retired_update_devkit_mentions_are_allowlisted():
             r"(?=.*update-devkit)(?=.*(?:廃止|旧名称|残骸|prune|削除))",
         ),
         "plugins/devkit/scripts/update-ccx.sh": (
-            r'^\s*"\$(?:codex_bin|local_bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"',
+            r'^\s*"\$(?:codex_bin|local_bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"\s*\\?$',
         ),
         "plugins/devkit/scripts/devkit-lib.sh": (
-            r'^\s*"\$(?:codex_bin|user_home/.local/bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"',
+            r'^\s*"\$(?:codex_bin|user_home/.local/bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"\s*\\?$',
         ),
         "plugins/devkit/scripts/devkit-lib.ps1": (
-            r'^\s*(?:\(Join-Path \$(?:codexBin|localBin) |")"?update-devkit(?:\.(?:sh|ps1|cmd))?"',
-            r'^\s*foreach \(\$fileName in @\("update-devkit", "update-devkit\.cmd"\)\)',
+            r'^\s*(?:\(Join-Path \$(?:codexBin|localBin) "update-devkit(?:\.(?:sh|ps1|cmd))?"\)|"update-devkit(?:\.(?:sh|ps1|cmd))?")[,]?$',
+            r'^\s*foreach \(\$fileName in @\("update-devkit", "update-devkit\.cmd"\)\) \{$',
         ),
         "plugins/devkit/skills/setup/scripts/sync_updater.py": (
-            r'^LEGACY_(?:CODEX|LOCAL)_BIN_FILES = .*"update-devkit',
+            r'^LEGACY_CODEX_BIN_FILES = \("update-devkit\.sh", "update-devkit\.ps1", "update-devkit\.cmd"\)$',
+            r'^LEGACY_LOCAL_BIN_FILES = \("update-devkit", "update-devkit\.cmd"\)$',
         ),
         "plugins/devkit/tests/test_update_bootstrap.py": (
             r'^\s*assert "update-devkit" not in managed_names$',
