@@ -102,6 +102,10 @@ def test_retired_update_devkit_mentions_are_allowlisted():
             rf"(?=.*{retired_updater_pattern})"
             rf"(?=.*(?:廃止|旧名称|旧名|移行|prune|残骸|削除|全廃|二重名義))",
         ),
+        "docs/goals/2026-07-14-windows-ci-verification.md": (
+            rf"(?=.*{retired_updater_pattern})"
+            rf"(?=.*(?:廃止|旧名称|旧名|移行|prune|残骸|削除|全廃|二重名義))",
+        ),
     }
     allowed_block_patterns = {
         "plugins/devkit/scripts/update-ccx.sh": (
@@ -153,6 +157,25 @@ def test_retired_update_devkit_mentions_are_allowlisted():
             ),
             (
                 r"\s*\$legacyLocalBinFileNames = @\(",
+                r"\s*\)",
+                (
+                    rf'\s*"{retired_updater_pattern}",',
+                    rf'\s*"{retired_updater_pattern}\.cmd"',
+                ),
+            ),
+        ),
+        "scripts/ci/windows-updater-smoke.ps1": (
+            (
+                r"\s*\$legacyCodexBinRemnantNames = @\(",
+                r"\s*\)",
+                (
+                    rf'\s*"{retired_updater_pattern}\.sh",',
+                    rf'\s*"{retired_updater_pattern}\.ps1",',
+                    rf'\s*"{retired_updater_pattern}\.cmd"',
+                ),
+            ),
+            (
+                r"\s*\$legacyLocalBinRemnantNames = @\(",
                 r"\s*\)",
                 (
                     rf'\s*"{retired_updater_pattern}",',

@@ -66,6 +66,7 @@ def _cmd_shim_from_devkit_lib(target_command: Path) -> bytes:
     return ("\r\n".join(lines) + "\r\n").encode()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX 実行ビットは Windows のファイルシステムでは表現できない")
 def test_posix_sync_is_idempotent_and_uses_expected_targets(tmp_path):
     home = tmp_path / "home"
     source = _source_tree(tmp_path)
