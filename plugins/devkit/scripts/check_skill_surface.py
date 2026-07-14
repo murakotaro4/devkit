@@ -573,8 +573,9 @@ try {{
   if (-not $installed.Contains("[plugins.`"devkit@murakotaro4`"]")) {{ throw "plugin runtime section lost" }}
 
   $script:TaskLog = New-Object System.Collections.Generic.List[string]
-  function Get-ScheduledTask {{ param([string]$TaskName) if ($TaskName -eq "DevKitSkillsDailyUpdate") {{ return [pscustomobject]@{{ TaskName = $TaskName }} }} }}
-  function Unregister-ScheduledTask {{ param([string]$TaskName, [switch]$Confirm) $script:TaskLog.Add("unregister:$TaskName") | Out-Null }}
+  $script:LegacyTaskPresent = $true
+  function Get-ScheduledTask {{ param([string]$TaskName) if ($script:LegacyTaskPresent -and $TaskName -eq "DevKitSkillsDailyUpdate") {{ return [pscustomobject]@{{ TaskName = $TaskName }} }} }}
+  function Unregister-ScheduledTask {{ param([string]$TaskName, [switch]$Confirm) $script:TaskLog.Add("unregister:$TaskName") | Out-Null; $script:LegacyTaskPresent = $false }}
   function Register-ScheduledTask {{ param([string]$TaskName) $script:TaskLog.Add("register:$TaskName") | Out-Null }}
   . (Join-Path $Root "plugins/devkit/scripts/devkit-lib.ps1")
   $userHome = Join-Path $Tmp.FullName "home"
