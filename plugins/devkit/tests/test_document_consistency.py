@@ -164,6 +164,25 @@ def test_retired_update_devkit_mentions_are_allowlisted():
                 ),
             ),
         ),
+        "scripts/ci/windows-updater-smoke.ps1": (
+            (
+                r"\s*\$legacyCodexBinRemnantNames = @\(",
+                r"\s*\)",
+                (
+                    rf'\s*"{retired_updater_pattern}\.sh",',
+                    rf'\s*"{retired_updater_pattern}\.ps1",',
+                    rf'\s*"{retired_updater_pattern}\.cmd"',
+                ),
+            ),
+            (
+                r"\s*\$legacyLocalBinRemnantNames = @\(",
+                r"\s*\)",
+                (
+                    rf'\s*"{retired_updater_pattern}",',
+                    rf'\s*"{retired_updater_pattern}\.cmd"',
+                ),
+            ),
+        ),
     }
     tracked_and_untracked = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
