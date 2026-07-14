@@ -555,12 +555,21 @@ section_managed_copy() {
     chmod +x "$codex_bin/update-ccx.sh"
     devkit_persist_codex_source_root "$HOME" "$repo_root"
     install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
-    rm -f \
+    local legacy_path
+    for legacy_path in \
         "$codex_bin/update-devkit.sh" \
         "$codex_bin/update-devkit.ps1" \
         "$codex_bin/update-devkit.cmd" \
         "$local_bin/update-devkit" \
         "$local_bin/update-devkit.cmd"
+    do
+        rm -f -- "$legacy_path"
+        if [[ -e "$legacy_path" || -L "$legacy_path" ]]; then
+            echo "PRUNE_FAILED: $legacy_path" >&2
+            ERRORS+=("DevKit managed file: failed to prune $legacy_path")
+            return 1
+        fi
+    done
     echo "OK managed files updated"
 }
 

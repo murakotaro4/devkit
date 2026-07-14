@@ -24,7 +24,7 @@
   - `update-ccx.ps1` / `update-ccx.cmd` の usage 文言も update-ccx へ統一。
 - `plugins/devkit/scripts/update-devkit.sh` / `update-devkit.ps1` / `update-devkit.cmd` を削除する。
 - ドキュメント同期: `README.md`（「update-devkit が主名称」節を「update-ccx が唯一の updater」へ再構成、トラブルシュートも update-ccx 名義へ）、`plugins/devkit/scripts/README.md`、`AGENTS.md`（言及があれば）。旧名称への言及は「廃止・移行注記」としてのみ残してよい。
-- テスト: 新規 pytest（`sync_updater.py` 対象）を追加し、`test_update_bootstrap.py` 等の update-devkit 前提を更新する。
+- テスト: 新規 pytest（`sync_updater.py` 対象）を追加し、`test_update_bootstrap.py` 等の旧名称 update-devkit 前提を更新する。
 - `plugins/devkit/.claude-plugin/plugin.json` の version を major bump（origin/main の最新値から一度だけ適用。現時点想定 8.0.0）。
 
 ## 成功条件(検証可能)
@@ -43,8 +43,8 @@
 ```bash
 cd <worktree>
 uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
-! ls plugins/devkit/scripts | grep -q update-devkit
-rg -n "update-devkit" README.md AGENTS.md plugins/devkit -g '!plugins/devkit/tests/**'   # 補助的な目視用。pass/fail の判定は成功条件 6 の allowlist テストで行う
+! ls plugins/devkit/scripts | grep -q update-devkit   # 旧名称の配布削除を確認
+rg -n "update-devkit" README.md AGENTS.md plugins/devkit   # 旧名称の残存を補助的に目視。pass/fail の判定は成功条件 6 の allowlist テストで行う
 ```
 
 手動確認（ユーザー検収向け）: 統合後に `/setup` を他 repo で実行し、updater 同期 step の JSON 報告と `~/.codex/bin` / `~/.local/bin` の実体を確認する。
@@ -53,7 +53,7 @@ rg -n "update-devkit" README.md AGENTS.md plugins/devkit -g '!plugins/devkit/tes
 
 - `plugins/devkit/scripts/**`（update-devkit.{sh,ps1,cmd} の削除を含む）
 - `plugins/devkit/skills/setup/**`
-- `plugins/devkit/templates/**`（update-devkit 言及コメントの追従のみ。設定値は変えない）
+- `plugins/devkit/templates/**`（旧名称 update-devkit の言及コメント追従のみ。設定値は変えない）
 - `plugins/devkit/tests/**`
 - `README.md`、`AGENTS.md`、`plugins/devkit/scripts/README.md`
 - `plugins/devkit/.claude-plugin/plugin.json`（version）

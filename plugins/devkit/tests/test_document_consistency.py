@@ -45,16 +45,36 @@ def _backtick_fence(line: str) -> tuple[int, str] | None:
 
 def test_retired_update_devkit_mentions_are_allowlisted():
     allowed_line_patterns = {
-        "README.md": (r"旧名称 `update-devkit`",),
-        "plugins/devkit/scripts/README.md": (r"旧名称 `update-devkit`",),
-        "plugins/devkit/scripts/update-ccx.sh": (r"/(?:update-devkit(?:\.(?:sh|ps1|cmd))?)",),
-        "plugins/devkit/scripts/devkit-lib.sh": (r"/(?:update-devkit(?:\.(?:sh|ps1|cmd))?)",),
-        "plugins/devkit/scripts/devkit-lib.ps1": (r'"update-devkit(?:\.(?:sh|ps1|cmd))?"',),
+        "README.md": (r"(?=.*update-devkit)(?=.*(?:廃止|旧名称|残骸|prune|削除))",),
+        "plugins/devkit/scripts/README.md": (
+            r"(?=.*update-devkit)(?=.*(?:廃止|旧名称|残骸|prune|削除))",
+        ),
+        "plugins/devkit/scripts/update-ccx.sh": (
+            r'^\s*"\$(?:codex_bin|local_bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"',
+        ),
+        "plugins/devkit/scripts/devkit-lib.sh": (
+            r'^\s*"\$(?:codex_bin|user_home/.local/bin)/update-devkit(?:\.(?:sh|ps1|cmd))?"',
+        ),
+        "plugins/devkit/scripts/devkit-lib.ps1": (
+            r'^\s*(?:\(Join-Path \$(?:codexBin|localBin) |")"?update-devkit(?:\.(?:sh|ps1|cmd))?"',
+            r'^\s*foreach \(\$fileName in @\("update-devkit", "update-devkit\.cmd"\)\)',
+        ),
         "plugins/devkit/skills/setup/scripts/sync_updater.py": (
             r'^LEGACY_(?:CODEX|LOCAL)_BIN_FILES = .*"update-devkit',
         ),
-        # この確定済み設計は旧名称廃止と prune 対象を定義する移行記録。
-        "docs/goals/2026-07-14-update-ccx-setup-sync.md": (r"update-devkit",),
+        "plugins/devkit/tests/test_update_bootstrap.py": (
+            r'^\s*assert "update-devkit" not in managed_names$',
+            r'^\s*for name in \("update-devkit\.sh", "update-devkit\.ps1", "update-devkit\.cmd"\):$',
+            r'^\s*assert [\'\']"\$local_bin/update-devkit(?:\.cmd)?"[\'\'] in shell$',
+            r'^\s*assert [\'\']\(Join-Path \$localBin "update-devkit(?:\.cmd)?"\)[\'\'] in powershell$',
+        ),
+        "plugins/devkit/tests/test_document_consistency.py": (
+            r'^\s*(?:"[^"\n]+": \()?r["\'](?:\(\?=\.\*|\^(?:\\s\*|[A-Z])).*update-' r'devkit',
+        ),
+        # この確定済み設計は旧名称の廃止・移行または prune 対象を同じ行で明記する。
+        "docs/goals/2026-07-14-update-ccx-setup-sync.md": (
+            r"(?=.*update-devkit)(?=.*(?:廃止|旧名称|旧名|移行|prune|残骸|削除|全廃|二重名義))",
+        ),
     }
     tracked_and_untracked = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
@@ -63,10 +83,9 @@ def test_retired_update_devkit_mentions_are_allowlisted():
         capture_output=True,
         text=True,
     ).stdout.splitlines()
+    retired_updater_name = "update-" + "devkit"
     offenders: list[str] = []
     for relpath in tracked_and_untracked:
-        if relpath.startswith("plugins/devkit/tests/"):
-            continue
         path = REPO_ROOT / relpath
         if not path.is_file():
             continue
@@ -75,7 +94,7 @@ def test_retired_update_devkit_mentions_are_allowlisted():
         except UnicodeDecodeError:
             continue
         for line_no, line in enumerate(lines, start=1):
-            if "update-devkit" not in line:
+            if retired_updater_name not in line:
                 continue
             patterns = allowed_line_patterns.get(relpath, ())
             if not any(re.search(pattern, line) for pattern in patterns):

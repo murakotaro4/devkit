@@ -40,6 +40,44 @@ def test_updater_self_refresh_defines_all_retired_name_prune_targets():
     assert '(Join-Path $localBin "update-devkit.cmd")' in powershell
 
 
+def test_updater_self_refresh_propagates_prune_failures():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    managed_section = shell.split("section_managed_copy()", 1)[1].split(
+        "codex_marketplace_section()", 1
+    )[0]
+    prune_loop = managed_section.split("local legacy_path", 1)[1]
+    assert 'rm -f -- "$legacy_path"' in prune_loop
+    assert 'if [[ -e "$legacy_path" || -L "$legacy_path" ]]' in prune_loop
+    assert 'echo "PRUNE_FAILED: $legacy_path" >&2' in prune_loop
+    assert 'ERRORS+=("DevKit managed file: failed to prune $legacy_path")' in prune_loop
+    assert "return 1" in prune_loop
+
+    powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
+    remove_helper = powershell.split("function Remove-DevKitPathOrThrow", 1)[1].split(
+        "function Get-DevKitLinkTargetPath", 1
+    )[0]
+    assert "Remove-Item -LiteralPath $Path" in remove_helper
+    assert "if (Test-DevKitPathPresent -Path $Path)" in remove_helper
+    assert 'throw "PRUNE_FAILED: $Path"' in remove_helper
+
+    for function_name, next_function in (
+        ("Remove-DevKitManagedSkillLinks", "Remove-DevKitLegacyCommandFile"),
+        ("Remove-DevKitLegacyCommandFile", "Remove-DevKitLegacyScheduledTask"),
+        ("Remove-DevKitLegacyAssets", None),
+    ):
+        function_body = powershell.split(f"function {function_name}", 1)[1]
+        if next_function is not None:
+            function_body = function_body.split(f"function {next_function}", 1)[0]
+        assert "Remove-Item" not in function_body
+
+    scheduled_task = powershell.split("function Remove-DevKitLegacyScheduledTask", 1)[1].split(
+        "function Clear-DevKitMarketplaceHooks", 1
+    )[0]
+    assert "Unregister-ScheduledTask" in scheduled_task
+    assert scheduled_task.count("Get-ScheduledTask") == 3
+    assert 'throw "PRUNE_FAILED: scheduled task DevKitSkillsDailyUpdate"' in scheduled_task
+
+
 def _probe_symlink_support() -> bool:
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:

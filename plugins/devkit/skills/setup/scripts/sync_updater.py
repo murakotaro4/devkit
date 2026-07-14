@@ -58,6 +58,20 @@ def _needs_executable(path: Path) -> bool:
     return path.stat().st_mode & executable_bits != executable_bits
 
 
+def _path_present(path: Path) -> bool:
+    return path.exists() or path.is_symlink()
+
+
+def _prune_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError as exc:
+        if _path_present(path):
+            raise RuntimeError(f"failed to prune updater remnant: {path}") from exc
+    if _path_present(path):
+        raise RuntimeError(f"failed to prune updater remnant: {path}")
+
+
 def sync_updater(
     home: Path,
     source_dir: Path,
@@ -115,7 +129,7 @@ def sync_updater(
     legacy_paths = [*(codex_bin / name for name in LEGACY_CODEX_BIN_FILES)]
     legacy_paths.extend(local_bin / name for name in LEGACY_LOCAL_BIN_FILES)
     for legacy_path in legacy_paths:
-        if legacy_path.exists() or legacy_path.is_symlink():
+        if _path_present(legacy_path):
             if legacy_path.is_dir() and not legacy_path.is_symlink():
                 raise SystemExit(f"refusing to prune directory: {legacy_path}")
             actions.append(f"prune:{legacy_path}")
@@ -143,8 +157,8 @@ def sync_updater(
         shim_path.chmod(shim_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     for legacy_path in legacy_paths:
-        if legacy_path.exists() or legacy_path.is_symlink():
-            legacy_path.unlink()
+        if _path_present(legacy_path):
+            _prune_file(legacy_path)
 
     return True, actions
 

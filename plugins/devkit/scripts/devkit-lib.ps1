@@ -145,6 +145,25 @@ function Install-DevKitShellShim([string]$ShimPath, [string]$TargetScriptPath) {
   Write-DevKitUtf8NoBom -Path $ShimPath -Content ($shimContent + "`n")
 }
 
+function Test-DevKitPathPresent([string]$Path) {
+  try {
+    return $null -ne (Get-Item -LiteralPath $Path -Force -ErrorAction Stop)
+  } catch [System.Management.Automation.ItemNotFoundException] {
+    return $false
+  }
+}
+
+function Remove-DevKitPathOrThrow([string]$Path, [switch]$Recurse) {
+  if (-not (Test-DevKitPathPresent -Path $Path)) {
+    return
+  }
+
+  Remove-Item -LiteralPath $Path -Force -Recurse:$Recurse -ErrorAction SilentlyContinue
+  if (Test-DevKitPathPresent -Path $Path) {
+    throw "PRUNE_FAILED: $Path"
+  }
+}
+
 function Get-DevKitLinkTargetPath([string]$Path) {
   $item = Get-Item -LiteralPath $Path -Force
   $target = $item.Target
@@ -401,9 +420,7 @@ function Install-DevKitManagedFiles([string]$RepoRoot, [string]$UserHome) {
     (Join-Path $localBin "update-devkit"),
     (Join-Path $localBin "update-devkit.cmd")
   )) {
-    if (Test-Path -LiteralPath $legacyPath) {
-      Remove-Item -LiteralPath $legacyPath -Force -ErrorAction SilentlyContinue
-    }
+    Remove-DevKitPathOrThrow -Path $legacyPath
   }
   [void](Ensure-DevKitUserPathContains -PathEntry $localBin)
 
@@ -439,7 +456,7 @@ function Remove-DevKitManagedSkillLinks([string]$SkillsRoot) {
   if (Test-DevKitReparsePoint $SkillsRoot) {
     $target = Get-DevKitLinkTargetPath $SkillsRoot
     if (Test-DevKitPathLooksManaged $target) {
-      Remove-Item -LiteralPath $SkillsRoot -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-DevKitPathOrThrow -Path $SkillsRoot -Recurse
       Ensure-DevKitDir $SkillsRoot
     }
     return
@@ -450,7 +467,7 @@ function Remove-DevKitManagedSkillLinks([string]$SkillsRoot) {
     [void]$managed.Add($skill)
   }
 
-  foreach ($entry in (Get-ChildItem -LiteralPath $SkillsRoot -Force -ErrorAction SilentlyContinue)) {
+  foreach ($entry in (Get-ChildItem -LiteralPath $SkillsRoot -Force -ErrorAction Stop)) {
     if (-not $managed.Contains($entry.Name)) {
       continue
     }
@@ -460,7 +477,7 @@ function Remove-DevKitManagedSkillLinks([string]$SkillsRoot) {
 
     $target = Get-DevKitLinkTargetPath $entry.FullName
     if (Test-DevKitPathLooksManaged $target) {
-      Remove-Item -LiteralPath $entry.FullName -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-DevKitPathOrThrow -Path $entry.FullName -Recurse
     }
   }
 }
@@ -470,9 +487,9 @@ function Remove-DevKitLegacyCommandFile([string]$Path) {
     return
   }
 
-  $content = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+  $content = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
   if ($content -and $content.Contains("runtime=opencode")) {
-    Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    Remove-DevKitPathOrThrow -Path $Path
   }
 }
 
@@ -484,6 +501,9 @@ function Remove-DevKitLegacyScheduledTask {
   $task = Get-ScheduledTask -TaskName "DevKitSkillsDailyUpdate" -ErrorAction SilentlyContinue
   if ($null -ne $task) {
     Unregister-ScheduledTask -TaskName "DevKitSkillsDailyUpdate" -Confirm:$false -ErrorAction SilentlyContinue
+    if ($null -ne (Get-ScheduledTask -TaskName "DevKitSkillsDailyUpdate" -ErrorAction SilentlyContinue)) {
+      throw "PRUNE_FAILED: scheduled task DevKitSkillsDailyUpdate"
+    }
   }
 }
 
@@ -526,7 +546,7 @@ function Remove-DevKitLegacyAssets([string]$UserHome, [string]$SourceRoot, [scri
 
   $legacyStateDir = Join-Path $UserHome ".config\opencode\devkit"
   if (Test-Path -LiteralPath $legacyStateDir) {
-    Remove-Item -LiteralPath $legacyStateDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-DevKitPathOrThrow -Path $legacyStateDir -Recurse
   }
 
   if (-not [string]::IsNullOrWhiteSpace($SourceRoot)) {
@@ -546,16 +566,12 @@ function Remove-DevKitLegacyAssets([string]$UserHome, [string]$SourceRoot, [scri
     "update-devkit.cmd"
   )) {
     $path = Join-Path $codexBin $fileName
-    if (Test-Path -LiteralPath $path) {
-      Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-    }
+    Remove-DevKitPathOrThrow -Path $path
   }
 
   foreach ($fileName in @("update-devkit", "update-devkit.cmd")) {
     $path = Join-Path $UserHome ".local\bin\$fileName"
-    if (Test-Path -LiteralPath $path) {
-      Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-    }
+    Remove-DevKitPathOrThrow -Path $path
   }
 
   Remove-DevKitLegacyScheduledTask

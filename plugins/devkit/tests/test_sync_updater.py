@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -27,6 +28,42 @@ def _source_tree(tmp_path: Path) -> Path:
     for name in (*sync_updater.POSIX_FILES, *sync_updater.WINDOWS_FILES):
         (source / name).write_text(f"source:{name}\n", encoding="utf-8")
     return source
+
+
+def _shell_shim_from_devkit_lib(target_script: Path) -> bytes:
+    source = DEVKIT_LIB_SH.read_text(encoding="utf-8")
+    match = re.search(
+        r'install_devkit_shell_shim\(\) \{.*?cat >"\$shim_path" <<EOF\n(?P<shim>.*?)\nEOF',
+        source,
+        re.DOTALL,
+    )
+    assert match, "devkit-lib.sh から shell shim の heredoc を抽出できない"
+    shim = match.group("shim")
+    assert "$target_script" in shim, "shell shim に target_script 展開がない"
+    return (shim.replace("$target_script", str(target_script)).replace(r"\$@", "$@") + "\n").encode()
+
+
+def _cmd_shim_from_devkit_lib(target_command: Path) -> bytes:
+    source = DEVKIT_LIB_PS1.read_text(encoding="utf-8")
+    function_match = re.search(
+        r"function Install-DevKitCommandShim\b(?P<body>.*?)\n}\n\nfunction Install-DevKitShellShim",
+        source,
+        re.DOTALL,
+    )
+    assert function_match, "devkit-lib.ps1 から Install-DevKitCommandShim を抽出できない"
+    array_match = re.search(
+        r'\$shimContent = @\(\n(?P<lines>.*?)\n\s*\) -join "`r`n"',
+        function_match.group("body"),
+        re.DOTALL,
+    )
+    assert array_match, "Install-DevKitCommandShim から shim 配列を抽出できない"
+    lines = []
+    for source_line in array_match.group("lines").splitlines():
+        line_match = re.fullmatch(r'\s*"(?P<value>.*)"[,]?', source_line)
+        assert line_match, f"PowerShell shim 行を抽出できない: {source_line}"
+        value = line_match.group("value").replace('`"', '"')
+        lines.append(value.replace("$TargetCommandPath", str(target_command)))
+    return ("\r\n".join(lines) + "\r\n").encode()
 
 
 def test_posix_sync_is_idempotent_and_uses_expected_targets(tmp_path):
@@ -67,33 +104,14 @@ def test_shims_match_devkit_lib_implementations(tmp_path):
     sync_updater.sync_updater(home, source, "posix", False)
 
     posix_target = home.resolve() / ".codex/bin/update-ccx.sh"
-    assert (home / ".local/bin/update-ccx").read_bytes() == (
-        b"#!/bin/bash\n"
-        b"set -euo pipefail\n"
-        + f'exec "{posix_target}" "$@"\n'.encode()
-    )
+    assert (home / ".local/bin/update-ccx").read_bytes() == _shell_shim_from_devkit_lib(posix_target)
 
     windows_home = tmp_path / "windows-home"
     sync_updater.sync_updater(windows_home, source, "windows", False)
     windows_target = windows_home.resolve() / ".codex/bin/update-ccx.cmd"
-    assert (windows_home / ".local/bin/update-ccx.cmd").read_bytes() == (
-        b"@echo off\r\n"
-        b"setlocal\r\n"
-        + f'call "{windows_target}" %*\r\n'.encode()
-        + b"exit /b %ERRORLEVEL%\r\n"
+    assert (windows_home / ".local/bin/update-ccx.cmd").read_bytes() == _cmd_shim_from_devkit_lib(
+        windows_target
     )
-
-    shell_implementation = DEVKIT_LIB_SH.read_text(encoding="utf-8").split(
-        "install_devkit_shell_shim()", 1
-    )[1].split("devkit_legacy_skill_entry_name()", 1)[0]
-    for contract_line in ('#!/bin/bash', 'set -euo pipefail', 'exec "$target_script" "\\$@"'):
-        assert contract_line in shell_implementation
-
-    cmd_implementation = DEVKIT_LIB_PS1.read_text(encoding="utf-8").split(
-        "function Install-DevKitCommandShim", 1
-    )[1].split("function Install-DevKitShellShim", 1)[0]
-    for contract_line in ("@echo off", "setlocal", 'call `"$TargetCommandPath`" %*', "exit /b %ERRORLEVEL%"):
-        assert contract_line in cmd_implementation
 
 
 def test_sync_replaces_managed_symlinks_without_touching_their_targets(tmp_path):
@@ -148,9 +166,30 @@ def test_sync_prunes_all_update_devkit_remnants_and_records_actions(tmp_path):
         assert f"prune:{path.resolve()}" in actions
 
 
+def test_sync_raises_when_updater_remnant_survives_prune(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    source = _source_tree(tmp_path)
+    legacy = home / ".codex/bin" / sync_updater.LEGACY_CODEX_BIN_FILES[0]
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("legacy\n", encoding="utf-8")
+    original_unlink = Path.unlink
+
+    def keep_legacy(path: Path, *args, **kwargs):
+        if path == legacy:
+            return None
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", keep_legacy)
+
+    with pytest.raises(RuntimeError, match=r"failed to prune updater remnant"):
+        sync_updater.sync_updater(home, source, "posix", False)
+
+    assert legacy.exists()
+
+
 def test_check_reports_changes_without_writing(tmp_path):
     home = tmp_path / "home"
-    legacy = home / ".codex/bin/update-devkit.sh"
+    legacy = home / ".codex/bin" / sync_updater.LEGACY_CODEX_BIN_FILES[0]
     source_root = home / ".codex/devkit/source-root.txt"
     legacy.parent.mkdir(parents=True)
     source_root.parent.mkdir(parents=True)

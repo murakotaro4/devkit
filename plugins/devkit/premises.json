@@ -15,7 +15,6 @@
     "exclude_prefixes": [
       ".claude/",
       "docs/reviews/",
-      "docs/goals/",
       "plugins/devkit/premises.json"
     ]
   },
@@ -64,6 +63,10 @@
         },
         {
           "path": "README.md",
+          "count": 3
+        },
+        {
+          "path": "docs/goals/2026-07-14-update-ccx-setup-sync.md",
           "count": 3
         },
         {
@@ -129,6 +132,10 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
+          "count": 2
+        },
+        {
+          "path": "docs/goals/2026-07-14-update-ccx-setup-sync.md",
           "count": 2
         },
         {
@@ -268,6 +275,10 @@
         {
           "path": "AGENTS.md",
           "count": 2
+        },
+        {
+          "path": "docs/goals/2026-07-14-update-ccx-setup-sync.md",
+          "count": 1
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",

@@ -1,6 +1,6 @@
 ---
 name: "setup"
-description: "対象リポジトリへ DevKit 標準ルールと対応環境設定を同期する。「セットアップして」「ルール同期して」「/setup」で起動"
+description: "対象リポジトリへ DevKit 標準ルールを、ユーザー環境へ updater を同期し旧 updater 名の残骸を prune する。「セットアップして」「ルール同期して」「/setup」で起動"
 argument-hint: "[target]"
 allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit", "AskUserQuestion", "request_user_input", "TaskCreate", "TaskUpdate"]
 ---
