@@ -7,6 +7,9 @@
 .claude/state/
 .claude/worktrees/
 
+# Legacy goal-file guard (docs/goals は v8.4.0 で出力先として廃止。旧 workflow の残置ファイルが未追跡として再浮上し premises 検査を妨害しないよう ignore を維持)
+docs/goals/
+
 # Python
 __pycache__/
 .pytest_cache/
