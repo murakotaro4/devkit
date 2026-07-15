@@ -8,7 +8,8 @@
 .claude/worktrees/
 
 # DevKit goal files (一時ファイル。実行後は .claude/goal-runs/ のレポートが成果物)
-docs/goals/
+docs/goals/*
+!docs/goals/.gitkeep
 
 # Python
 __pycache__/
