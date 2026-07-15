@@ -247,6 +247,7 @@ def test_prompt_template_and_self_check_contract():
         "step 6 の組み立て時に該当する具体名をこの節へ焼き込み",
         "`<basename>-2.md` からの連番",
         "「制約・非対象」や `write_scope` より優先する運用メタデータ領域として常に書き込みを許可",
+        "実際に保存したファイル名の連番を反映した `<slug>-N.md` をレポート名として優先する(実ファイル名が正)",
     ):
         assert required in completion_report
     step6 = _section(text, "### 6. 組み立て + セルフチェック")
