@@ -67,12 +67,12 @@ $ARGUMENTS
 
 | 形態 | 提示する起動プロンプト | 扱い |
 |------|------------------------|------|
-| 現セッション `/goal`(既定・インライン自己完結型) | `/goal 以下のゴール本文の成功条件を満たす or stop after <N> turns。開始時に本文全文を .claude/goal-runs/<slug>-goal.md へ保存し(ディレクトリと * 1 行の .gitignore が無ければ作成)、コンテキスト圧縮後はまずそれを読み直せ。自己保存に失敗しても停止せず、失敗を進捗ログへ記録して続行せよ。` + 空行 + ゴール本文全文 | 提示のみ。`/goal` プレフィックスを除いた objective 全文(ヘッダー・空行・本文込み)が Unicode 文字数で 4,000 字以内の場合だけ使う |
+| 現セッション `/goal`(既定・インライン自己完結型) | `/goal 以下のゴール本文の成功条件を満たす or stop after <N> turns。開始時に本文全文を .claude/goal-runs/<slug>-goal.md へ保存し(ディレクトリと * 1 行の .gitignore が無ければ作成)、コンテキスト圧縮後はまずそれを読み直せ。同名ファイルが既にある場合は上書きせず <slug>-2-goal.md からの連番で保存し、完了レポート名も同じ連番の basename に合わせよ。自己保存に失敗しても停止せず、失敗を進捗ログへ記録して続行せよ。` + 空行 + ゴール本文全文 | 提示のみ。`/goal` プレフィックスを除いた objective 全文(ヘッダー・空行・本文込み)が Unicode 文字数で 4,000 字以内の場合だけ使う |
 | 現セッション `/goal`(4,000 字超 fallback) | `/goal .claude/goal-runs/YYYY-MM-DD-<slug>-goal.md の成功条件を満たす or stop after <N> turns。まず .claude/goal-runs/YYYY-MM-DD-<slug>-goal.md を読め` | 提示のみ。親がゴール本文を保存してから repo 相対パスで参照する |
 | 別ターミナル `claude --bg` | `cd "<対象repo>" && claude --bg --permission-mode acceptEdits --allowedTools "..." "/goal <保存したゴールファイルの絶対パス> の成功条件を満たす or stop after <N> turns。まず <保存したゴールファイルの絶対パス> を読め" < /dev/null` | 提示のみ。親が `.claude/goal-runs/<slug>-goal.md` へ保存し、同じマシン・同じ checkout から絶対パスで参照する。実装系では検証コマンドと委譲用 `Bash(codex:*)` を、全タスクで完了レポート書き出し用の `Write` を `--allowedTools` に含めることを推奨する |
 | `/loop` | `/loop <interval> .claude/goal-runs/<file>-goal.md を読み、進捗管理の指示に従って条件を確認する` | 提示のみ。セッション依存の巡回向け |
 | `/schedule` | `/schedule <trigger> .claude/goal-runs/<file>-goal.md を読む` | 提示のみ。登録はユーザーの 1 アクションで行う |
-| Codex 貼付け(App / CLI 対話) | 不在自律実行ヘッダー + ゴール本文全文を 1 ブロックで提示 | 提示のみ。`/goal` と Claude 系のターン上限句は付けない。ヘッダー例: 「以下のゴールプロンプトを不在自律実行せよ。ユーザーは不在で応答しない。質問・確認・承認求めを出力せず、停止条件のいずれかを満たすまで自走せよ。上限停止: <Round 3 で確定した具体値>。開始時に本文全文を `.claude/goal-runs/<slug>-goal.md` へ保存し、ディレクトリと `*` 1 行の `.gitignore` が無ければ作成せよ。自己保存に失敗しても停止せず、失敗を進捗ログへ記録して続行せよ。」常に本文全文を続け、ファイル参照へ分岐しない |
+| Codex 貼付け(App / CLI 対話) | 不在自律実行ヘッダー + ゴール本文全文を 1 ブロックで提示 | 提示のみ。`/goal` と Claude 系のターン上限句は付けない。ヘッダー例: 「以下のゴールプロンプトを不在自律実行せよ。ユーザーは不在で応答しない。質問・確認・承認求めを出力せず、停止条件のいずれかを満たすまで自走せよ。上限停止: <Round 3 で確定した具体値>。開始時に本文全文を `.claude/goal-runs/<slug>-goal.md` へ保存し、ディレクトリと `*` 1 行の `.gitignore` が無ければ作成せよ。同名ファイルが既にある場合は上書きせず `<slug>-2-goal.md` からの連番で保存し、完了レポート名も同じ連番の basename に合わせよ。自己保存に失敗しても停止せず、失敗を進捗ログへ記録して続行せよ。」常に本文全文を続け、ファイル参照へ分岐しない |
 
 `.claude/goal-runs/` は gitignore 領域のため別 checkout・別 PC へ伝播しない。ファイル参照型(`/loop`・`/schedule`・別ターミナルの背景起動・fallback)は同じマシン・同じ checkout で実行する前提とする。loop 停止・schedule 解除までゴールファイルを削除しない。
 

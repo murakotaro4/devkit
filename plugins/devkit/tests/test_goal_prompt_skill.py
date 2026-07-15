@@ -281,6 +281,7 @@ def test_launch_command_table_and_codex_stdin_guard():
     assert "現セッション `/goal`(既定・インライン自己完結型)" in launch_guide
     assert "開始時に本文全文を .claude/goal-runs/<slug>-goal.md へ保存" in launch_guide
     assert "自己保存に失敗しても停止せず、失敗を進捗ログへ記録して続行せよ" in launch_guide
+    assert launch_guide.count("同名ファイルが既にある場合は上書きせず") >= 2
     assert "objective 全文(ヘッダー・空行・本文込み)が Unicode 文字数で 4,000 字以内" in launch_guide
     assert "現セッション `/goal`(4,000 字超 fallback)" in launch_guide
     assert ".claude/goal-runs/YYYY-MM-DD-<slug>-goal.md" in launch_guide
