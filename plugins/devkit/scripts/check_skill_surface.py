@@ -17,6 +17,7 @@ PLUGIN_DIR = ROOT / "plugins/devkit"
 EXPECTED_SKILLS = {
     "backlog",
     "catch-up",
+    "commit-push",
     "dig",
     "improve-skill",
     "setup",
