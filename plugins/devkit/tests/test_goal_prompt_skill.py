@@ -119,9 +119,15 @@ def test_write_contract_limits_writes_and_execution():
     assert "step 7 の独立レビュー運用" in text
     assert "`JOB_DIR` の作成とレビューログ書き込みは可" in text
     assert "対象 repo への書き込みは不可" in text
-    assert "step 9 は、ユーザーが保存を選択した場合に Write" in text
-    assert "docs/goals/YYYY-MM-DD-<slug>.md" in text
-    assert "同名ファイルは上書きせず" in text
+    assert "step 9 の Write 保存は、ファイルが必要な形態" in text
+    assert "4,000 字超 fallback の場合だけ" in text
+    assert "既定のインライン `/goal` と Codex 貼付けでは親はゴールファイルを作らない" in text
+    assert ".claude/goal-runs/YYYY-MM-DD-<slug>-goal.md" in text
+    assert "ゴールファイル `YYYY-MM-DD-<slug>[-N]-goal.md`" in text
+    assert "連番 `-N` は `-goal` サフィックスの前" in text
+    assert "同名は上書きしない" in text
+    assert "親が `.claude/goal-runs/` と `*` 1 行の `.gitignore` を ensure" in text
+    assert "インライン経路では実行エージェントが自己保存時に同じ ensure" in text
     assert "この skill は起動プロンプトを提示して終了する" in text
     assert "実行開始" in text and "行わない" in text
     assert "cron 登録" in text
@@ -212,9 +218,9 @@ def test_prompt_template_and_self_check_contract():
     assert "逸脱時ログ記録の 1 行" in text
     assert "戦略から逸脱が必要なら理由を進捗ログに記録して保守的に判断する" in text
     assert "TaskCreate / TaskUpdate" in text
-    assert "/goal` 条件文 4,000 字上限" in text
-    assert "長い本文はファイル参照" in text
-    assert "起動プロンプトは短い条件文だけ" in text
+    assert "インライン objective 全文が Unicode 文字数で 4,000 字以内" in text
+    assert "4,001 字以上なら `.claude/goal-runs/` へのファイル保存 + 参照型へ fallback" in text
+    assert "ファイル形態では参照パスが具体化済み" in text
     strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
     assert strategy.index("## 実行モード: 不在自律実行") < strategy.index("## 目的")
     progress_management = _section(strategy, "## 進捗管理")
@@ -234,7 +240,7 @@ def test_prompt_template_and_self_check_contract():
         "逸脱と判断ログ要約",
         "残課題",
         "変更ファイル一覧",
-        "未保存の貼り付け実行",
+        "末尾の `-goal` サフィックスを除いた basename",
         "英小文字・数字・ハイフンへスラッグ化",
         "`YYYY-MM-DD-<slug>.md`",
         "step 6 の組み立て時に該当する具体名をこの節へ焼き込み",
@@ -245,6 +251,8 @@ def test_prompt_template_and_self_check_contract():
     step6 = _section(text, "### 6. 組み立て + セルフチェック")
     assert "未保存なら短い名前から作る `YYYY-MM-DD-<slug>.md`" in step6
     assert "具体名をテンプレート本文へ焼き込む" in step6
+    assert "objective 全文(ヘッダー・空行・本文込み、`/goal` プレフィックスを除く)" in step6
+    assert "Unicode 文字数で数え、4,000 字以内ならインライン、4,001 字以上なら fallback" in step6
     assert strategy.index("- 並列方針:") < strategy.index("- モデル / effort:")
     assert '`-m gpt-5.6-sol` + `model_reasoning_effort="medium"` 固定' in strategy
     assert "spawn_agent など非対応経路は適用なし" in strategy
@@ -264,20 +272,32 @@ def test_launch_command_table_and_codex_stdin_guard():
         '<保存したゴールファイルの絶対パス> を読め" < /dev/null'
     ) in launch_guide
     assert '--allowedTools "..."' in launch_guide
-    assert "背景セッションは別 worktree で動く場合があるため、ファイル参照は必ず絶対パスにする" in launch_guide
-    assert "未コミットの新規ファイルは相対パスだと読めない" in launch_guide
+    assert "親が `.claude/goal-runs/<slug>-goal.md` へ保存" in launch_guide
+    assert "同じマシン・同じ checkout から絶対パスで参照" in launch_guide
     assert "絶対パス" in launch_guide
     assert "Bash(codex:*)" in launch_guide
     assert "or stop after <N> turns" in launch_guide
     assert "4,000 字以内" in launch_guide
+    assert "現セッション `/goal`(既定・インライン自己完結型)" in launch_guide
+    assert "開始時に本文全文を .claude/goal-runs/<slug>-goal.md へ保存" in launch_guide
+    assert "自己保存に失敗しても停止せず、失敗を進捗ログへ記録して続行せよ" in launch_guide
+    assert "objective 全文(ヘッダー・空行・本文込み)が Unicode 文字数で 4,000 字以内" in launch_guide
+    assert "現セッション `/goal`(4,000 字超 fallback)" in launch_guide
+    assert ".claude/goal-runs/YYYY-MM-DD-<slug>-goal.md" in launch_guide
+    assert "/loop <interval> .claude/goal-runs/<file>-goal.md" in launch_guide
+    assert "/schedule <trigger> .claude/goal-runs/<file>-goal.md" in launch_guide
+    assert "同じマシン・同じ checkout で実行する前提" in launch_guide
+    assert "loop 停止・schedule 解除までゴールファイルを削除しない" in launch_guide
     assert "登録はユーザーの 1 アクション" in launch_guide
     assert "codex exec" not in launch_guide
     assert "claude -p" not in launch_guide
     codex_paste_row = next(
         line for line in launch_guide.splitlines() if line.startswith("| Codex 貼付け")
     )
-    assert "docs/goals/<file>.md(repo 相対パス)" in codex_paste_row
-    assert "未同期なら本文全文を貼付ける" in codex_paste_row
+    assert "ゴール本文全文を 1 ブロックで提示" in codex_paste_row
+    assert "常に本文全文を続け、ファイル参照へ分岐しない" in codex_paste_row
+    assert "開始時に本文全文を `.claude/goal-runs/<slug>-goal.md` へ保存" in codex_paste_row
+    assert "自己保存に失敗しても停止せず" in codex_paste_row
     assert "以下のゴールプロンプトを不在自律実行せよ" in codex_paste_row
     assert "質問・確認・承認求めを出力せず" in codex_paste_row
     assert "絶対パス" not in codex_paste_row
@@ -346,20 +366,22 @@ def test_authoring_only_contract():
     concrete_review_efforts = re.findall(r'model_reasoning_effort="([^"<>]+)"', step7)
     assert {value.lower() for value in concrete_review_efforts} == {"medium"}
 
-    step9 = _section(text, "### 9. 保存 + 起動プロンプト提示")
-    assert "Write でゴールファイルを新規保存" in step9
+    step9 = _section(text, "### 9. 成果物提示(必要時のみ保存)")
+    assert "既定のインライン `/goal` と Codex 貼付けでは、親はゴールファイルを作らず" in step9
+    assert "レビュー済み本文全文を含む自己完結起動ブロック 1 個 + 代替 1" in step9
+    assert "ファイルが必要な形態" in step9
+    assert "4,000 字超 fallback" in step9
+    assert "`.claude/goal-runs/` へ Write でゴールファイルを新規保存" in step9
     assert "起動プロンプト" in step9 and "提示して終了" in step9
     assert "検収チェックリスト" in step9
-    assert "保存しない場合も、fallback の具体的なレポート名を焼き込んだ通常セッション貼付け用の本文" in step9
-    assert "そのレポート名を参照する同じ検収チェックリストを 1 ブロックで提示して終了する" in step9
-    assert "ファイル参照型の起動プロンプトは保存済みファイルが前提のため提示しない" in step9
+    assert "具体的な完了レポート名を本文へ焼き込み" in step9
+    assert "loop 停止・schedule 解除までゴールファイルを削除しない" in step9
     step8 = _section(text, "### 8. ユーザー最終確認")
     for step in (step8, step9):
         assert "Round 1 で Codex 貼付けを選択した場合" in step
         assert "不在自律実行ヘッダー付きの Codex 貼付け起動文を必ず含める" in step
-    assert "未保存時は本文全文貼付け" in step9
-    # 実行への言及は「実行終了後」「(検証コマンド)再実行」の検収文脈だけ許す(skill 自身は実行しない)
-    assert "起動" in step9 and "実行" not in step9.replace("実行終了後", "").replace("再実行", "").replace("不在自律実行", "")
+    # 実行への言及は複合語の契約文脈だけ許す(skill 自身は実行しない)
+    assert "起動" in step9 and "実行" not in step9.replace("再実行", "").replace("不在自律実行", "").replace("実行形態", "")
 
     assert "/goal` を付けるのは Claude 系の起動プロンプトだけ" in text
     assert "委譲先 codex exec には素の実装指示" in text
@@ -377,7 +399,7 @@ def test_dig_handoff_mode_contract():
     assert "権限、進捗管理、実装戦略" in text
     assert "commit / push 禁止" in text
     assert "実装後レビュー要件、どの停止種別でも書き出す完了レポート要件は転記必須項目" in text
-    assert "組み立て + セルフチェック 10 項目、独立レビュー、最終確認、保存 + 起動プロンプト提示" in text
+    assert "組み立て + セルフチェック 10 項目、独立レビュー、最終確認、成果物提示(必要時のみ保存)" in text
     assert "セルフチェック 10 項目" in text
 
 
@@ -405,6 +427,7 @@ def test_autonomous_execution_declaration_contract():
 
 def test_retired_goal_prompt_phrases_are_absent():
     text = _skill_text()
+    assert "docs" + "/goals" not in text
     for retired in (
         "`/goal` は" + "ユーザー" + "タイプ専用",
         "ユーザー" + "タイプ専用",

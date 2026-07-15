@@ -354,6 +354,28 @@
       ]
     },
     {
+      "id": "claude-goal-objective-limit",
+      "summary": "Claude Code 組み込み /goal の条件文(objective)上限文字数",
+      "current_value": "4000",
+      "value_patterns": [
+        "(?:^4000$|(?<![A-Za-z0-9_])4,000(?![A-Za-z0-9_]))"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "Claude Code 組み込み /goal への長文貼付けで実測、または公式 docs で確認",
+      "update_notes": "goal-prompt のインライン判定契約と契約テストを同時更新",
+      "last_verified": "2026-07-15",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
+          "count": 8
+        },
+        {
+          "path": "plugins/devkit/tests/test_goal_prompt_skill.py",
+          "count": 7
+        }
+      ]
+    },
+    {
       "id": "marketplace-name",
       "summary": "Claude Code / Codex の配布正本 marketplace 名",
       "current_value": "murakotaro4",

@@ -89,7 +89,7 @@ def test_backend_selection_contract():
     assert "backend 選択肢、CLI の effort、config 値にはしない" in claude_parent
     assert "sonnet" in text.lower(), "Claude サブエージェント(Sonnet)の選択肢がない"
     assert "ゴール化して自律実行" in text, "goal-prompt へ引き継ぐ実装 backend 選択肢がない"
-    assert "レビュー済みゴールファイル + 起動プロンプト" in text
+    assert "レビュー済みゴールプロンプト + 起動プロンプト(既定はインライン 1 ブロック)" in text
     assert "diff レビュー backend の質問を出さない" in text
     assert "haiku" not in text.lower(), "Haiku が選択肢として残っている(v5.1.0 で廃止済み)"
     assert "command -v codex" in text, "codex 不在時のフォールバック判定がない"
@@ -292,7 +292,7 @@ def test_goal_handoff_contract():
     assert "目的 / write_scope / 受け入れ条件 / 検証コマンド / 非対象" in text
     assert "commit / push 禁止" in text
     assert "実装後の独立レビュー要件" in text
-    assert "レビュー済みゴールファイル + 起動プロンプトを作成" in text
+    assert "レビュー済みゴールプロンプト + 起動プロンプト(既定はインライン 1 ブロック)を作成" in text
     assert "dig もそこで終了し、step 7-9 は実行しない" in text
     assert "diff レビュー backend の質問を出さない" in text
     assert "実装と別系統の独立レビュー(codex review 等)を実施し指摘ゼロ" in text
