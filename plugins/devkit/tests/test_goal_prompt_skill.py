@@ -142,7 +142,7 @@ def test_interview_rounds_are_present():
         assert heading in text
 
     for required in (
-        "形態(現セッション `/goal` / 別ターミナル `claude --bg` / `/loop` / `/schedule`)",
+        "形態(現セッション `/goal` / 別ターミナル `claude --bg` / `/loop` / `/schedule` / Codex 貼付け)",
         "タスク型(実装 / 調査 / 状態確認 / 文書化 / 整理)",
         "完了状態、検証方法、検証コマンド、品質バー",
         "非対象、上限停止の種類と値、行き詰まり時の扱い、破壊的操作の可否",
@@ -180,6 +180,7 @@ def test_failure_modes_and_stop_conditions():
 def test_prompt_template_and_self_check_contract():
     text = _skill_text()
     for section in (
+        "## 実行モード: 不在自律実行",
         "## 目的",
         "## 成功条件(検証可能)",
         "## 検証コマンド",
@@ -206,7 +207,7 @@ def test_prompt_template_and_self_check_contract():
         assert check in text
 
     self_check = _section(text, "## セルフチェック")
-    assert len(re.findall(r"^\d+\. ", self_check, re.MULTILINE)) == 9
+    assert len(re.findall(r"^\d+\. ", self_check, re.MULTILINE)) == 10
     assert "`実行戦略(実装系のみ)` と `実装後レビュー`" in text
     assert "逸脱時ログ記録の 1 行" in text
     assert "戦略から逸脱が必要なら理由を進捗ログに記録して保守的に判断する" in text
@@ -215,6 +216,7 @@ def test_prompt_template_and_self_check_contract():
     assert "長い本文はファイル参照" in text
     assert "起動プロンプトは短い条件文だけ" in text
     strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    assert strategy.index("## 実行モード: 不在自律実行") < strategy.index("## 目的")
     progress_management = _section(strategy, "## 進捗管理")
     assert "次にやること / 直近で決めた方針" in progress_management
     assert "コンテキスト圧縮後" in progress_management
@@ -252,9 +254,9 @@ def test_launch_command_table_and_codex_stdin_guard():
     text = _skill_text()
     assert "## 起動プロンプトの手引き" in text
     launch_guide = _section(text, "## 起動プロンプトの手引き")
-    for surface in ("現セッション `/goal`", "別ターミナル `claude --bg`", "`/loop`", "`/schedule`"):
+    for surface in ("現セッション `/goal`", "別ターミナル `claude --bg`", "`/loop`", "`/schedule`", "Codex 貼付け"):
         assert surface in launch_guide
-    assert launch_guide.count("提示のみ") >= 4
+    assert launch_guide.count("提示のみ") >= 5
     assert (
         'cd "<対象repo>" && claude --bg --permission-mode acceptEdits --allowedTools "..." '
         '"/goal <保存したゴールファイルの絶対パス> '
@@ -271,6 +273,15 @@ def test_launch_command_table_and_codex_stdin_guard():
     assert "登録はユーザーの 1 アクション" in launch_guide
     assert "codex exec" not in launch_guide
     assert "claude -p" not in launch_guide
+    codex_paste_row = next(
+        line for line in launch_guide.splitlines() if line.startswith("| Codex 貼付け")
+    )
+    assert "docs/goals/<file>.md(repo 相対パス)" in codex_paste_row
+    assert "未同期なら本文全文を貼付ける" in codex_paste_row
+    assert "以下のゴールプロンプトを不在自律実行せよ" in codex_paste_row
+    assert "質問・確認・承認求めを出力せず" in codex_paste_row
+    assert "絶対パス" not in codex_paste_row
+    assert "stop after" not in codex_paste_row
 
     offenders = [
         line for line in text.splitlines()
@@ -342,8 +353,13 @@ def test_authoring_only_contract():
     assert "保存しない場合も、fallback の具体的なレポート名を焼き込んだ通常セッション貼付け用の本文" in step9
     assert "そのレポート名を参照する同じ検収チェックリストを 1 ブロックで提示して終了する" in step9
     assert "ファイル参照型の起動プロンプトは保存済みファイルが前提のため提示しない" in step9
+    step8 = _section(text, "### 8. ユーザー最終確認")
+    for step in (step8, step9):
+        assert "Round 1 で Codex 貼付けを選択した場合" in step
+        assert "不在自律実行ヘッダー付きの Codex 貼付け起動文を必ず含める" in step
+    assert "未保存時は本文全文貼付け" in step9
     # 実行への言及は「実行終了後」「(検証コマンド)再実行」の検収文脈だけ許す(skill 自身は実行しない)
-    assert "起動" in step9 and "実行" not in step9.replace("実行終了後", "").replace("再実行", "")
+    assert "起動" in step9 and "実行" not in step9.replace("実行終了後", "").replace("再実行", "").replace("不在自律実行", "")
 
     assert "/goal` を付けるのは Claude 系の起動プロンプトだけ" in text
     assert "委譲先 codex exec には素の実装指示" in text
@@ -361,8 +377,30 @@ def test_dig_handoff_mode_contract():
     assert "権限、進捗管理、実装戦略" in text
     assert "commit / push 禁止" in text
     assert "実装後レビュー要件、どの停止種別でも書き出す完了レポート要件は転記必須項目" in text
-    assert "組み立て + セルフチェック、独立レビュー、最終確認、保存 + 起動プロンプト提示" in text
-    assert "セルフチェック 9 項目" in text
+    assert "組み立て + セルフチェック 10 項目、独立レビュー、最終確認、保存 + 起動プロンプト提示" in text
+    assert "セルフチェック 10 項目" in text
+
+
+def test_autonomous_execution_declaration_contract():
+    text = _skill_text()
+    strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    declaration = _section(strategy, "## 実行モード: 不在自律実行")
+    assert "OK なら OK と返答してください" in declaration
+    assert "承認求め" in declaration
+    assert "停止条件(3 種)と即停止条件が常に優先する" in declaration
+    assert "行き詰まり停止する(続行しない)" in declaration
+    assert declaration.index("進捗ログへ記録して続行する") < declaration.index(
+        "停止条件(3 種)と即停止条件が常に優先する"
+    )
+
+    failure_modes = _section(text, "## 排除する失敗モード")
+    assert "確認待ち停止" in failure_modes
+
+    execution_prerequisites = _section(strategy, "## 実行前提")
+    assert (
+        "確認・承認求め(「OK なら OK と返答してください」型を含む)も不可。"
+        "冒頭の「実行モード: 不在自律実行」節に従う。"
+    ) in execution_prerequisites
 
 
 def test_retired_goal_prompt_phrases_are_absent():
