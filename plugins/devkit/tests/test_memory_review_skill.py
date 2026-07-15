@@ -83,6 +83,7 @@ def test_audit_flow_contains_required_taxonomies_and_output_format():
         "危険な自動化",
         "参照設計",
         "テスト・検証",
+        "記憶候補抽出",
     ):
         assert viewpoint in text
 
@@ -102,7 +103,7 @@ def test_audit_flow_contains_required_taxonomies_and_output_format():
     assert "中: 判断ブレ、手戻り、テスト漏れ" in text
     assert "低: 重複、軽微な古さ、参照性低下" in text
 
-    for section in (
+    expected_sections = [
         "## 1. 結論(3件以内)",
         "## 2. 全体評価",
         "## 3. 重要な問題点",
@@ -112,9 +113,11 @@ def test_audit_flow_contains_required_taxonomies_and_output_format():
         "## 7. AI が勝手に決めると危険な点",
         "## 8. 修正案(文章レベル)",
         "## 9. 推奨する配置",
-        "## 10. 次アクション(3つ以内)",
-    ):
-        assert section in text
+        "## 10. 記憶候補(report-only)",
+        "## 11. 次アクション(3つ以内)",
+    ]
+    actual_sections = re.findall(r"^## \d+\. .+$", text, re.MULTILINE)
+    assert actual_sections == expected_sections
 
 
 def test_dig_handoff_contract():

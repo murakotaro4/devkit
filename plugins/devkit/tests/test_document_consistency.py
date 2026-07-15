@@ -19,6 +19,7 @@ DISTRIBUTED_SKILLS = (
     "handoff",
     "backlog",
     "catch-up",
+    "commit-push",
 )
 DELEGATING_SKILLS = ("dig", "improve-skill", "memory-review", "goal-prompt", "catch-up")
 PLUGIN_DESCRIPTION_SURFACES = (
@@ -30,6 +31,7 @@ PLUGIN_DESCRIPTION_SURFACES = (
     "goal-prompt",
     "handoff",
     "/catch-up",
+    "commit-push",
 )
 
 

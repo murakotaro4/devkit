@@ -22,6 +22,7 @@ def test_expected_skill_surface_matches_repository():
         "handoff",
         "backlog",
         "catch-up",
+        "commit-push",
     }
 
 

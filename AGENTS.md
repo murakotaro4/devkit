@@ -5,7 +5,7 @@
 ## Repo Context
 
 - このリポジトリは DevKit のセットアップ/更新スクリプト、skills、templates を管理する
-- v7 の配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/` の 9 つとする
+- v7 の配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/`、`plugins/devkit/skills/commit-push/` の 10 本とする
 - statusline 配布物は `plugins/devkit/statusline/` に同梱し、適用は setup workflow から行う
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
@@ -133,6 +133,7 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 - `plugins/devkit/skills/handoff/SKILL.md`: セッション引継ぎドキュメント書き出し workflow の正本
 - `plugins/devkit/skills/backlog/SKILL.md`: 残課題の横断棚卸し(read-only)・dig 引き継ぎ workflow の正本
 - `plugins/devkit/skills/catch-up/SKILL.md`: 外部前提の裏取り・影響棚卸し・追従更新 workflow の正本
+- `plugins/devkit/skills/commit-push/SKILL.md`: 論理グループ分割 commit + upstream push workflow の正本(secret 2 層検査・literal pathspec・明示単一 refspec)
 - `plugins/devkit/premises.json`: モデル名・CLI フラグ・ハーネス機能・marketplace 名の外部前提レジストリ
 - `plugins/devkit/statusline/`: plugin 同梱 statusline 実装と適用スクリプト
 - `plugins/devkit/templates/codex/`: Codex 設定テンプレート

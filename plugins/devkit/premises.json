@@ -203,6 +203,10 @@
           "count": 10
         },
         {
+          "path": "plugins/devkit/skills/commit-push/SKILL.md",
+          "count": 8
+        },
+        {
           "path": "plugins/devkit/skills/dig/SKILL.md",
           "count": 21
         },
@@ -241,6 +245,10 @@
         {
           "path": "plugins/devkit/tests/test_catch_up_skill.py",
           "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_commit_push_skill.py",
+          "count": 7
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",

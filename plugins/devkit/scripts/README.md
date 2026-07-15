@@ -1,6 +1,6 @@
 # devkit/scripts
 
-DevKit の setup / update / verification scripts を置くディレクトリです。v7 では marketplace 配布を正本にし、skill surface は `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` / `catch-up` を扱います。
+DevKit の setup / update / verification scripts を置くディレクトリです。v7 では marketplace 配布を正本にし、skill surface は `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` / `catch-up` / `commit-push` を扱います。
 
 ## Entry Points
 
@@ -103,7 +103,7 @@ git 追跡下の text metadata file に UTF-8 BOM が混入していないかを
 
 v7 の配布面を検査します。
 
-- `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` / `catch-up` と完全一致すること
+- `plugins/devkit/skills/` が `dig` / `improve-skill` / `setup` / `refactor` / `memory-review` / `goal-prompt` / `handoff` / `backlog` / `catch-up` / `commit-push` と完全一致すること
 - `plugins/devkit/statusline/statusline.js` と `plugins/devkit/statusline/install.js` が存在すること
 - `plugins/devkit/skills/setup/scripts/setup_terminal_font.py` が存在すること
 - `plugins/devkit/templates/codex/config.shared.toml` と `config.windows.toml` が存在すること
