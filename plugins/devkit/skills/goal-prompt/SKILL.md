@@ -58,6 +58,7 @@ $ARGUMENTS
 - step 9 の Write 保存は、ファイルが必要な形態(`/loop`・`/schedule`・別ターミナルの背景起動)または 4,000 字超 fallback の場合だけ行う。既定のインライン `/goal` と Codex 貼付けでは親はゴールファイルを作らない。
 - 親が保存するゴールファイルの既定パスは `.claude/goal-runs/YYYY-MM-DD-<slug>-goal.md`。命名規則はゴールファイル `YYYY-MM-DD-<slug>[-N]-goal.md`、完了レポート `YYYY-MM-DD-<slug>[-N].md` とし、連番 `-N` は `-goal` サフィックスの前に置く(`<slug>-goal-2.md` ではなく `<slug>-2-goal.md`)。同名は上書きしない。
 - 親がファイル保存する経路では、親が `.claude/goal-runs/` と `*` 1 行の `.gitignore` を ensure する。インライン経路では実行エージェントが自己保存時に同じ ensure を行う。このディレクトリと `.gitignore` の作成は step 9 の書き込み契約の例外とする。既存の `.gitignore` がある場合は内容を変更しない。
+- 親が保存した後は `git check-ignore` で ignore が効いているか検証する。効いていない場合は保存を維持したまま、起動プロンプト提示に「git 管理対象になっている」警告を添える(既存 `.gitignore` の内容は変更しない)。
 - この skill は起動プロンプトを提示して終了する。cron 登録、`/schedule` 登録、実行開始、commit、push はどの step でも行わない。
 - 保存前後を問わず、秘密情報、資格情報、トークン、個人情報をプロンプト本文へ転記しない。必要な場合は「環境に既に存在する設定を読む」と書き、値そのものは書かない。
 

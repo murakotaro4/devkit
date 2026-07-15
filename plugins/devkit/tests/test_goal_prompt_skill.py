@@ -128,6 +128,7 @@ def test_write_contract_limits_writes_and_execution():
     assert "同名は上書きしない" in text
     assert "親が `.claude/goal-runs/` と `*` 1 行の `.gitignore` を ensure" in text
     assert "インライン経路では実行エージェントが自己保存時に同じ ensure" in text
+    assert "親が保存した後は `git check-ignore` で ignore が効いているか検証する" in text
     assert "この skill は起動プロンプトを提示して終了する" in text
     assert "実行開始" in text and "行わない" in text
     assert "cron 登録" in text
