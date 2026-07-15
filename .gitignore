@@ -7,6 +7,9 @@
 .claude/state/
 .claude/worktrees/
 
+# DevKit goal files (一時ファイル。実行後は .claude/goal-runs/ のレポートが成果物)
+docs/goals/
+
 # Python
 __pycache__/
 .pytest_cache/

@@ -10,6 +10,7 @@
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
 - ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
+- `docs/goals/` のゴールファイルは一時ファイルとして gitignore 対象とする。commit せず、premises.json へ出現登録もしない(成果物は `.claude/goal-runs/` の完了レポート)
 
 ## Workflow
 

@@ -66,14 +66,6 @@
           "count": 3
         },
         {
-          "path": "docs/goals/2026-07-14-update-ccx-setup-sync.md",
-          "count": 3
-        },
-        {
-          "path": "docs/goals/2026-07-14-windows-ci-verification.md",
-          "count": 3
-        },
-        {
           "path": "plugins/devkit/scripts/README.md",
           "count": 2
         },
@@ -136,14 +128,6 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
-          "count": 2
-        },
-        {
-          "path": "docs/goals/2026-07-14-update-ccx-setup-sync.md",
-          "count": 2
-        },
-        {
-          "path": "docs/goals/2026-07-14-windows-ci-verification.md",
           "count": 2
         },
         {
@@ -291,14 +275,6 @@
         {
           "path": "AGENTS.md",
           "count": 2
-        },
-        {
-          "path": "docs/goals/2026-07-14-update-ccx-setup-sync.md",
-          "count": 1
-        },
-        {
-          "path": "docs/goals/2026-07-14-windows-ci-verification.md",
-          "count": 1
         },
         {
           "path": "plugins/devkit/skills/catch-up/SKILL.md",
