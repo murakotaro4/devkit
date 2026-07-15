@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit & Push"
+  short_description: "Split changes into safe commits and push upstream"
+  default_prompt: "Use $commit-push to split uncommitted changes into approved logical groups, create Japanese Conventional Commits, and push the current HEAD to its approved upstream with one explicit refspec."
