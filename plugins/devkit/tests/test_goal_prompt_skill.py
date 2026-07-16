@@ -219,7 +219,8 @@ def test_prompt_template_and_self_check_contract():
     assert "逸脱時ログ記録の 1 行" in text
     assert "戦略から逸脱が必要なら理由を進捗ログに記録して保守的に判断する" in text
     assert "TaskCreate / TaskUpdate" in text
-    assert "インライン objective 全文が Unicode 文字数で 4,000 字以内" in text
+    assert "現セッション `/goal` ではインライン objective 全文が Unicode 文字数で 4,000 字以内" in text
+    assert "Codex 貼付けは字数に関わらず全文 1 ブロックのまま" in text
     assert "4,001 字以上なら `.claude/goal-runs/` へのファイル保存 + 参照型へ fallback" in text
     assert "ファイル形態では参照パスが具体化済み" in text
     strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
@@ -255,6 +256,7 @@ def test_prompt_template_and_self_check_contract():
     assert "具体名をテンプレート本文へ焼き込む" in step6
     assert "objective 全文(ヘッダー・空行・本文込み、`/goal` プレフィックスを除く)" in step6
     assert "Unicode 文字数で数え、4,000 字以内ならインライン、4,001 字以上なら fallback" in step6
+    assert "Codex 貼付けは字数に関わらず常に全文 1 ブロックとし、ファイル fallback へ分岐しない" in step6
     assert strategy.index("- 並列方針:") < strategy.index("- モデル / effort:")
     assert '`-m gpt-5.6-sol` + `model_reasoning_effort="medium"` 固定' in strategy
     assert "spawn_agent など非対応経路は適用なし" in strategy
