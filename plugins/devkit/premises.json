@@ -371,7 +371,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_goal_prompt_skill.py",
-          "count": 7
+          "count": 8
         }
       ]
     },

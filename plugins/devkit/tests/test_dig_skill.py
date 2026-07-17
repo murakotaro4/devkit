@@ -89,7 +89,8 @@ def test_backend_selection_contract():
     assert "backend 選択肢、CLI の effort、config 値にはしない" in claude_parent
     assert "sonnet" in text.lower(), "Claude サブエージェント(Sonnet)の選択肢がない"
     assert "ゴール化して自律実行" in text, "goal-prompt へ引き継ぐ実装 backend 選択肢がない"
-    assert "レビュー済みゴールプロンプト + 起動プロンプト(既定はインライン 1 ブロック)" in text
+    assert "既定では goal-prompt が同一セッションで実行移行し、完了レポートまで完遂する" in text
+    assert "例外形態をユーザーが明示した場合のみ起動プロンプト提示で終了" in text
     assert "diff レビュー backend の質問を出さない" in text
     assert "haiku" not in text.lower(), "Haiku が選択肢として残っている(v5.1.0 で廃止済み)"
     assert "command -v codex" in text, "codex 不在時のフォールバック判定がない"
@@ -288,15 +289,16 @@ def test_goal_handoff_contract():
     assert "ゴール化して自律実行" in text
     assert "ゴール化引き継ぎ" in text
     assert 'Skill(skill: "devkit:goal-prompt"' in text
-    assert "commit・push 禁止 / 実装後の独立レビュー要件" in text
+    assert "commit・push の扱い / 実装後の独立レビュー要件" in text
     assert "目的 / write_scope / 受け入れ条件 / 検証コマンド / 非対象" in text
-    assert "commit / push 禁止" in text
+    assert "commit / push は承認済み計画の統合方法として許可された範囲でのみ" in text
     assert "実装後の独立レビュー要件" in text
-    assert "レビュー済みゴールプロンプト + 起動プロンプト(既定はインライン 1 ブロック)を作成" in text
-    assert "dig もそこで終了し、step 7-9 は実行しない" in text
+    assert "既定では `goal-prompt` が実行移行から完了レポートまで完遂する" in text
+    assert "dig は引き継ぎで終了し、step 7-9 は実行しない" in text
     assert "diff レビュー backend の質問を出さない" in text
     assert "実装と別系統の独立レビュー(codex review 等)を実施し指摘ゼロ" in text
-    assert "commit / push 禁止と合わせて転記必須項目" in text
+    assert "commit / push の扱いと合わせて転記必須項目" in text
+    assert "worktree 運用・節目 commit・統合方法・version bump" in text
     assert "監視または引き渡し" not in text
     assert "step 7(自レビュー)以降を続行" not in text
     assert ".claude/worktrees/" not in text
@@ -308,6 +310,7 @@ def test_worktree_integration_contract():
 
     assert "非 git repo" in worktree
     assert "ゴール化して自律実行" in worktree
+    assert "goal 本文の実行戦略が worktree 運用を持ち、goal 実行側が作成する" in worktree
     assert "調査のみの dig" in worktree
     assert 'git symbolic-ref --short refs/remotes/origin/HEAD' in worktree
     assert "結果から `origin/` プレフィックスを取り除いた名前を `<default>`" in worktree
@@ -358,7 +361,8 @@ def test_worktree_integration_contract():
     assert "統合方法も 1 問で確認" in backend_selection
     assert "既定推奨は「直接統合」" in backend_selection
     assert "`command -v gh` が通らない場合" in backend_selection
-    assert "「ゴール化して自律実行」の場合と非 git repo" in backend_selection
+    assert "ゴール化して自律実行でも統合方法(直接統合 / PR)を確定" in backend_selection
+    assert "非 git repo ではこの質問を出さない" in backend_selection
     assert "または origin なし repo では PR 選択肢を出さない" in backend_selection
 
     claude_parent = _between(text, "#### Claude 親の選択肢", "#### Codex 親の選択肢")

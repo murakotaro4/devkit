@@ -10,7 +10,7 @@
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
 - ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
-- 作成側(goal-prompt の親)はゴールファイルを保存しないのが既定(インライン起動プロンプト)。実行エージェントは実行時に本文を gitignore 済みの `.claude/goal-runs/` へ自己保存し、ファイルが必要な形態では親が同領域へ保存する。いずれも commit も premises.json への出現登録もしない(検収の成果物は `.claude/goal-runs/` の完了レポート)
+- 既定(現セッション自動実行)では goal-prompt の親が実行移行時にゴール本文を gitignore 済みの `.claude/goal-runs/` へ保存する(圧縮復帰点)。例外形態では実行エージェントが自己保存し、ファイルが必要な形態では親が同領域へ保存する。いずれも commit も premises.json への出現登録もしない(検収の成果物は `.claude/goal-runs/` の完了レポート)
 
 ## Workflow
 
@@ -46,9 +46,9 @@ worktree 統合の rebase で発生する既知の機械的衝突は、以下の
 使い分けの軸はタスク規模ではなく自律度とする。
 
 - `dig` はその場で完成させる工程。成果物は実装済み diff。ユーザーが同席し、判断をリアルタイムに供給する
-- `goal-prompt` は不在実行に耐える指示書を作る工程。成果物はレビュー済みゴールプロンプト + 起動プロンプト(既定はインライン 1 ブロック)。実行はユーザーの 1 アクションに分離する
+- `goal-prompt` は判断を前倒しして焼き込んだゴールプロンプトを作り、既定ではレビュー後そのまま同一セッションで自律実行して完遂する工程。起動プロンプト提示はユーザーが明示した例外形態のみ
 - 実装系で計画がまだ無い場合の正道は `dig` で調査・write_scope・受け入れ条件を確定し、必要なら「ゴール化して自律実行」で `goal-prompt` へ引き継ぐ
-- ゴール化を選んだ `dig` は、goal-prompt が作るレビュー済みゴールプロンプト + 起動プロンプト(既定はインライン 1 ブロック)を提示して終了する。実装後レビューはゴール本文の要件として焼き込む
+- ゴール化を選んだ `dig` は goal-prompt へ引き継いだ時点で終了し、既定では goal-prompt が実行移行から完了レポートまで完遂する。検収は goal 側の完了報告が担い、ユーザーが例外形態を明示した場合だけ起動プロンプト提示で終了する
 - 定期ループは `goal-prompt` で `.claude/goal-runs/` に保存したゴールファイルを参照する `/loop` 起動プロンプトを提示する
 
 ## Maintenance Rules
@@ -130,7 +130,7 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 - `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / python3)・thought-db 接続同期・updater 同期・旧 updater 名の残骸 prune・statusline 適用・Windows Terminal フォント適用 workflow の正本
 - `plugins/devkit/skills/refactor/SKILL.md`: 負債棚卸し・優先順位付け・計画作成 workflow の正本
 - `plugins/devkit/skills/memory-review/SKILL.md`: AI メモリ棚卸し・前提監査 workflow の正本
-- `plugins/devkit/skills/goal-prompt/SKILL.md`: 自律実行・ループ・大タスク完走向けゴールプロンプト作成 workflow の正本
+- `plugins/devkit/skills/goal-prompt/SKILL.md`: ゴールプロンプト作成・既定の同一セッション自律実行 workflow の正本
 - `plugins/devkit/skills/handoff/SKILL.md`: セッション引継ぎドキュメント書き出し workflow の正本
 - `plugins/devkit/skills/backlog/SKILL.md`: 残課題の横断棚卸し(read-only)・dig 引き継ぎ workflow の正本
 - `plugins/devkit/skills/catch-up/SKILL.md`: 外部前提の裏取り・影響棚卸し・追従更新 workflow の正本

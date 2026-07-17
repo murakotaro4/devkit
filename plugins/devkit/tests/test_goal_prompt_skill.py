@@ -70,12 +70,13 @@ def test_skill_frontmatter_contract():
         "TaskUpdate",
         "TaskOutput",
         "Write",
+        "Edit",
         "Skill",
         "Agent",
     ]
     actual_tools = re.findall(r'"([^"]+)"', allowed_tools)
     assert actual_tools == expected_tools
-    assert "Edit" not in actual_tools
+    assert "Edit" in actual_tools
 
 
 def test_harness_and_task_list_contract():
@@ -113,35 +114,37 @@ def test_codex_model_effort_contract():
     assert concrete_efforts == {"medium"}, f"medium 以外の effort が残っている: {concrete_efforts}"
 
 
-def test_write_contract_limits_writes_and_execution():
+def test_phase_and_execution_contract():
     text = _skill_text()
-    assert "step 1-8 は対象 repo に対して read-only" in text
+    assert "作成フェーズ(step 1-7)と実行フェーズ(step 8-9、既定のみ)" in text
+    assert "step 1-7 は対象 repo に対して read-only" in text
     assert "step 7 の独立レビュー運用" in text
     assert "`JOB_DIR` の作成とレビューログ書き込みは可" in text
     assert "対象 repo への書き込みは不可" in text
-    assert "step 9 の Write 保存は、ファイルが必要な形態" in text
+    assert "例外形態では、step 9 の Write 保存はファイルが必要な形態" in text
     assert "4,000 字超 fallback の場合だけ" in text
-    assert "既定のインライン `/goal` と Codex 貼付けでは親はゴールファイルを作らない" in text
+    assert "例外形態のインライン `/goal` と Codex 貼付けでは親はゴールファイルを作らず" in text
+    assert "既定(現セッション自動実行)でも、親は実行開始前にゴール本文全文" in text
+    assert "保存に失敗した場合は実行を開始せず停止・報告する" in text
     assert ".claude/goal-runs/YYYY-MM-DD-<slug>-goal.md" in text
     assert "ゴールファイル `YYYY-MM-DD-<slug>[-N]-goal.md`" in text
     assert "連番 `-N` は `-goal` サフィックスの前" in text
     assert "同名は上書きしない" in text
     assert "親が `.claude/goal-runs/` と `*` 1 行の `.gitignore` を ensure" in text
-    assert "インライン経路では実行エージェントが自己保存時に同じ ensure" in text
+    assert "例外形態のインライン経路では実行エージェントが自己保存時に同じ ensure" in text
     assert "親が保存した後は `git check-ignore` で ignore が効いているか検証する" in text
-    assert "この skill は起動プロンプトを提示して終了する" in text
-    assert "実行開始" in text and "行わない" in text
-    assert "cron 登録" in text
-    assert "`/schedule` 登録" in text
-    assert "commit、push" in text
-    assert "step 9 は、ユーザーが実行を選択した場合のみ実行" not in text
-    assert "実行できる経路" not in text
+    assert "既定では実行直前の通知と最終報告、例外形態では起動プロンプト提示" in text
+    assert "既定では step 8 で実行へ移行する" in text
+    assert "cron 登録・`/schedule` 登録はどの step でも行わない" in text
+    assert "直起動の書き込み・破壊的操作・外部状態変更は Round 3 の明示回答" in text
+    assert "commit / push は承認済み計画(dig 経由)または実装系 Round 4 の commit・統合に対する明示回答" in text
+    assert "無回答・曖昧な回答から書き込み・破壊的操作・外部状態変更・commit / push の許可を推定しない" in text
 
 
 def test_interview_rounds_are_present():
     text = _skill_text()
     for heading in (
-        "Round 1: 実行形態と対象",
+        "Round 1: 対象とタスク型",
         "Round 2: ゴール定義",
         "Round 3: 境界と停止条件",
         "Round 4: 運用と実行戦略",
@@ -149,17 +152,20 @@ def test_interview_rounds_are_present():
         assert heading in text
 
     for required in (
-        "形態(現セッション `/goal` / 別ターミナル `claude --bg` / `/loop` / `/schedule` / Codex 貼付け)",
+        "対象 repo または対象ファイル",
         "タスク型(実装 / 調査 / 状態確認 / 文書化 / 整理)",
         "完了状態、検証方法、検証コマンド、品質バー",
-        "非対象、上限停止の種類と値、行き詰まり時の扱い、破壊的操作の可否",
-        "実装系のみ委譲先・並列方針・トークン効率方針",
+        "書き込み範囲(write_scope)、非対象、上限停止の種類と値、行き詰まり時の扱い、破壊的操作の可否、外部状態変更の具体的な対象・操作と可否",
+        "実装系のみ委譲先・並列方針・トークン効率方針・worktree 分離・節目 commit・統合方法",
     ):
         assert required in text
 
     assert "エンジン選択" not in text
     assert "実行エンジン" not in text
     assert "`gpt-5.6-sol` / `medium` 固定のため質問しない" in text
+    assert "既定は現セッション自動実行" in text
+    assert "ユーザーが定期実行・別ターミナル・別 PC・後で実行・白紙コンテキスト実行を明示した場合だけ" in text
+    assert "独立レビュー通過後、追加確認なしでこのセッションが実行を開始する" in text
 
 
 def test_failure_modes_and_stop_conditions():
@@ -219,7 +225,7 @@ def test_prompt_template_and_self_check_contract():
     assert "逸脱時ログ記録の 1 行" in text
     assert "戦略から逸脱が必要なら理由を進捗ログに記録して保守的に判断する" in text
     assert "TaskCreate / TaskUpdate" in text
-    assert "現セッション `/goal` ではインライン objective 全文が Unicode 文字数で 4,000 字以内" in text
+    assert "インライン `/goal` 提示では objective 全文が Unicode 文字数で 4,000 字以内" in text
     assert "Codex 貼付けは字数に関わらず全文 1 ブロックのまま" in text
     assert "4,001 字以上なら `.claude/goal-runs/` へのファイル保存 + 参照型へ fallback" in text
     assert "ファイル形態では参照パスが具体化済み" in text
@@ -282,7 +288,10 @@ def test_launch_command_table_and_codex_stdin_guard():
     assert "Bash(codex:*)" in launch_guide
     assert "or stop after <N> turns" in launch_guide
     assert "4,000 字以内" in launch_guide
-    assert "現セッション `/goal`(既定・インライン自己完結型)" in launch_guide
+    assert "既定は現セッション自動実行" in launch_guide
+    assert "現セッション `/goal`(インライン自己完結型)" in launch_guide
+    assert "白紙コンテキストで実行したい場合" in launch_guide
+    assert "4,000 字判定と fallback も例外形態だけ" in launch_guide
     assert "開始時に本文全文を .claude/goal-runs/<slug>-goal.md へ保存" in launch_guide
     assert "自己保存に失敗しても停止せず、失敗を進捗ログへ記録して続行せよ" in launch_guide
     assert launch_guide.count("同名ファイルが既にある場合は上書きせず") >= 2
@@ -328,7 +337,7 @@ def test_launch_command_table_and_codex_stdin_guard():
     assert not model_offenders, f"gpt-5.6-sol 以外のモデル焼き込みがある: {model_offenders}"
 
 
-def test_authoring_only_contract():
+def test_review_and_execution_flow_contract():
     text = _skill_text()
     for retired in (
         "tmux",
@@ -371,22 +380,21 @@ def test_authoring_only_contract():
     concrete_review_efforts = re.findall(r'model_reasoning_effort="([^"<>]+)"', step7)
     assert {value.lower() for value in concrete_review_efforts} == {"medium"}
 
-    step9 = _section(text, "### 9. 成果物提示(必要時のみ保存)")
-    assert "既定のインライン `/goal` と Codex 貼付けでは、親はゴールファイルを作らず" in step9
-    assert "レビュー済み本文全文を含む自己完結起動ブロック 1 個 + 代替 1" in step9
-    assert "ファイルが必要な形態" in step9
+    step9 = _section(text, "### 9. 実行と完了報告(既定) / 例外形態の成果物提示")
+    assert "ゴール本文の契約(停止条件 3 種・blocker プロトコル・進捗ログ復帰点・終了前読み返し)" in step9
+    assert "例外形態では従来どおり" in step9
+    assert "親保存が必要な形態" in step9
     assert "4,000 字超 fallback" in step9
     assert "`.claude/goal-runs/` へ Write でゴールファイルを新規保存" in step9
     assert "起動プロンプト" in step9 and "提示して終了" in step9
     assert "検収チェックリスト" in step9
-    assert "具体的な完了レポート名を本文へ焼き込み" in step9
-    assert "loop 停止・schedule 解除までゴールファイルを削除しない" in step9
-    step8 = _section(text, "### 8. ユーザー最終確認")
+    step8 = _section(text, "### 8. 実行移行(既定) / 例外形態の最終確認")
+    assert "承認待ちなし" in step8
+    assert "直ちに実行を開始する" in step8
+    assert "保存に失敗した場合は実行を開始せず停止・報告する" in step8
     for step in (step8, step9):
         assert "Round 1 で Codex 貼付けを選択した場合" in step
         assert "不在自律実行ヘッダー付きの Codex 貼付け起動文を必ず含める" in step
-    # 実行への言及は複合語の契約文脈だけ許す(skill 自身は実行しない)
-    assert "起動" in step9 and "実行" not in step9.replace("再実行", "").replace("不在自律実行", "").replace("実行形態", "")
 
     assert "/goal` を付けるのは Claude 系の起動プロンプトだけ" in text
     assert "委譲先 codex exec には素の実装指示" in text
@@ -402,10 +410,28 @@ def test_dig_handoff_mode_contract():
     assert "行き詰まり停止の扱い" in text
     assert "破壊的操作の可否" in text
     assert "権限、進捗管理、実装戦略" in text
-    assert "commit / push 禁止" in text
+    assert "commit / push の扱い(承認済み計画の統合方法に従う。許可転記がなければ禁止)" in text
     assert "実装後レビュー要件、どの停止種別でも書き出す完了レポート要件は転記必須項目" in text
-    assert "組み立て + セルフチェック 10 項目、独立レビュー、最終確認、成果物提示(必要時のみ保存)" in text
+    assert "組み立て + セルフチェック 10 項目、独立レビューを経て、既定では step 8 の実行移行" in text
+    assert "worktree 運用・節目 commit・統合方法・version bump" in text
     assert "セルフチェック 10 項目" in text
+
+
+def test_auto_execution_transition_contract():
+    text = _skill_text()
+    step8 = _section(text, "### 8. 実行移行(既定) / 例外形態の最終確認")
+    step9 = _section(text, "### 9. 実行と完了報告(既定) / 例外形態の成果物提示")
+    assert "完成プロンプト全文を通知として提示" in step8
+    assert "コンテキスト圧縮後の復帰点" in step8
+    assert "承認待ちなし" in step8
+    assert "どの停止種別でも" in step9
+    assert "commit・統合の実施状況" in step9
+    assert "write_scope(実装系では必須。これ以外への変更禁止)" in text
+    assert "具体的な対象と操作が許可として書かれていない破壊的操作・外部状態変更" in text
+    assert "直起動の書き込み・破壊的操作・外部状態変更では Round 3" in step8
+    assert "直起動の commit・統合では実装系 Round 4" in step8
+    assert "外部状態変更の具体的な対象・操作と可否を聞く" in text
+    assert "例外形態では従来どおり" in step9
 
 
 def test_autonomous_execution_declaration_contract():

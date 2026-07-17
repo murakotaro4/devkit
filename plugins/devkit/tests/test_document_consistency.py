@@ -442,6 +442,38 @@ def test_dig_goal_prompt_switching_terms_stay_in_sync():
         assert "起動プロンプト" in text, f"{doc_name} に goal-prompt 境界語(起動プロンプト)がない"
 
 
+def test_goal_prompt_auto_execution_contract_stays_in_sync():
+    documents = {
+        "AGENTS.md": _read("AGENTS.md"),
+        "README.md": _read("README.md"),
+        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
+        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
+            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        ),
+    }
+    for doc_name, text in documents.items():
+        assert any(
+            all(token in line for token in ("既定", "同一セッション", "自律実行", "完遂"))
+            for line in text.splitlines()
+        ), (
+            f"{doc_name} に既定の同一セッション自律実行契約がない"
+        )
+        assert any(
+            all(token in line for token in ("起動プロンプト提示", "例外形態"))
+            for line in text.splitlines()
+        ), (
+            f"{doc_name} に起動プロンプト提示を例外形態へ限定する契約がない"
+        )
+        for retired in (
+            "実行はユーザーの 1 アクションに分離",
+            "作成側はゴールファイルを保存しないのが既定",
+            "既定成果物は本文全文を含むインライン 1 ブロック",
+            "起動プロンプトと回収手順を提示して終了",
+            "成果物はレビュー済みの `/goal` 自己完結起動ブロック 1 個(既定)",
+        ):
+            assert retired not in text, f"{doc_name} に旧既定契約が残っている: {retired}"
+
+
 def test_rebase_conflict_resolution_contract_stays_in_sync():
     agents = _read("AGENTS.md")
     heading = "### 統合時 rebase 衝突の標準解消手順"
