@@ -410,11 +410,14 @@ def test_pr_merge_completion_contract_is_baked_into_goal_strategy():
     for contract in (strategy, step6):
         assert "対象 repo の CI 有無" in contract
         assert "チェック 0 件の扱い" in contract
+        assert "数分おきの期限管理付きポーリング" in contract
         assert "`bucket`" in contract
         assert "`pass`" in contract and "`skipping`" in contract
         assert "CI 待機上限(既定 30 分)" in contract
         assert "merge queue" in contract
-        assert "auto-merge を有効化せず停止" in contract
+        assert "auto-merge" in contract
+        assert "merge 実行前に検出" in contract
+        assert "state 変更コマンドを実行せず停止" in contract
         assert "--match-head-commit <SHA>" in contract
         assert "`MERGED` 確認" in contract
         assert "PR を open のまま停止" in contract

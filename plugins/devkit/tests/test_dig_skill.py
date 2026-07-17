@@ -340,35 +340,72 @@ def test_worktree_integration_contract():
     pr_contract = _between(worktree, "4. PR 経路", "5. 後始末")
     assert "gh pr create --base <default> --head <branch> --title" in pr_contract
     assert "PR URL / 番号を記録" in pr_contract
-    assert "gh pr checks <PR番号> --watch" in pr_contract
-    assert "待機上限は計画に記載した値(既定 30 分)" in pr_contract
-    assert "上限到達時は merge せず停止・報告" in pr_contract
+    assert "--watch" not in pr_contract
+    assert "gh pr checks <PR番号> --json bucket,name" in pr_contract
+    assert "進捗可視化契約の間隔(数分おき)" in pr_contract
+    assert "親が開始時刻を記録" in pr_contract
+    assert "開始時刻からの経過時間を待機上限" in pr_contract
+    assert "期限超過時点で merge せず停止・報告" in pr_contract
     assert "`no checks reported` エラー" in pr_contract
     assert "数分の猶予を置いて再試行" in pr_contract
-    assert "gh pr checks <PR番号> --json bucket,name" in pr_contract
+    assert "CI 待機ポーリングの最終結果" in pr_contract
     assert "全件 `pass`(`skipping` は許容)" in pr_contract
     assert "API・認証エラーをチェック 0 件の成功と混同せず" in pr_contract
     assert "CI なし repo は checks 待ちを省略して merge 可" in pr_contract
     assert "CI あり repo で 0 件が続く場合は停止・報告" in pr_contract
     assert "gh pr merge <PR番号> --merge --match-head-commit <SHA>" in pr_contract
-    assert "merge queue / auto-merge の有効化が要求される branch" in pr_contract
-    assert "auto-merge を有効化せず停止・報告" in pr_contract
+    assert "state 変更コマンドを実行する前に merge queue preflight" in pr_contract
+    assert "gh api repos/<owner>/<repo>/rules/branches/<default>" in pr_contract
+    assert "`type` が `merge_queue` の rule" in pr_contract
+    assert "gh api graphql" in pr_contract
+    assert "pullRequest(number:$number){mergeQueueEntry{id}}" in pr_contract
+    assert "`mergeQueueEntry` が空で queue 未投入" in pr_contract
+    assert "gh pr view <PR番号> --json autoMergeRequest" in pr_contract
+    assert "auto-merge 未有効化" in pr_contract
+    assert "isInMergeQueue" not in pr_contract
+    assert "preflight の API・認証エラー時" in pr_contract
+    assert "`gh pr merge` を実行せず停止・報告" in pr_contract
+    assert pr_contract.index("gh api repos/<owner>/<repo>/rules/branches/<default>") < pr_contract.index(
+        "gh pr merge <PR番号> --merge --match-head-commit <SHA>"
+    )
     assert "gh pr view <PR番号> --json state,mergedAt" in pr_contract
     assert "`MERGED` を確認して初めて統合完了" in pr_contract
     assert "merge は人間が行い" not in worktree
     assert "step 8(修正ループ)へ自動では戻らない" in pr_contract
     assert "PR を open のまま残し" in pr_contract
 
-    cleanup_tokens = (
+    common_cleanup = (
         "`MERGED` 確認",
         "`git fetch origin`",
+        "ローカルの作業 branch tip を記録",
+    )
+    common_positions = [pr_contract.index(token) for token in common_cleanup]
+    assert common_positions == sorted(common_positions)
+
+    merge_commit_cleanup = (
         "git merge-base --is-ancestor <branch-tip> origin/<default>",
         "git worktree remove <worktree>",
         "git branch -d <branch>",
         "git push origin --delete <branch>",
     )
-    cleanup_positions = [pr_contract.index(token) for token in cleanup_tokens]
-    assert cleanup_positions == sorted(cleanup_positions)
+    merge_commit_positions = [pr_contract.index(token) for token in merge_commit_cleanup]
+    assert merge_commit_positions == sorted(merge_commit_positions)
+
+    assert "repo ルールが squash / rebase 方式を定める場合は ancestor 前提を使わず" in pr_contract
+    assert "gh pr view <PR番号> --json state,mergedAt,headRefOid" in pr_contract
+    assert "`state` が `MERGED`" in pr_contract
+    assert "`mergedAt` が非空" in pr_contract
+    assert "`headRefOid` が記録したローカル branch tip と一致" in pr_contract
+    squash_cleanup = (
+        "git worktree remove <worktree>",
+        "git branch -D <branch>",
+        "git push origin --delete <branch>",
+    )
+    squash_start = pr_contract.index("repo ルールが squash / rebase 方式を定める場合")
+    squash_contract = pr_contract[squash_start:]
+    squash_positions = [squash_contract.index(token) for token in squash_cleanup]
+    assert squash_positions == sorted(squash_positions)
+    assert "必要な確認が取れない場合は削除せず「統合成功・cleanup 未完了」" in pr_contract
     assert "統合成功・cleanup 未完了" in pr_contract
     assert "変更を破棄しない" in worktree
     assert "統合完了前の失敗では worktree・ブランチ・commit をそのまま残し" in worktree
