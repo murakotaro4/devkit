@@ -10,7 +10,7 @@
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
 - ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
-- ゴールファイルは作らないのが既定(インライン起動プロンプト)。ファイルが必要な形態では gitignore 済みの `.claude/goal-runs/` に保存し、commit も premises.json への出現登録もしない(成果物は `.claude/goal-runs/` の完了レポート)
+- 作成側(goal-prompt の親)はゴールファイルを保存しないのが既定(インライン起動プロンプト)。実行エージェントは実行時に本文を gitignore 済みの `.claude/goal-runs/` へ自己保存し、ファイルが必要な形態では親が同領域へ保存する。いずれも commit も premises.json への出現登録もしない(検収の成果物は `.claude/goal-runs/` の完了レポート)
 
 ## Workflow
 
