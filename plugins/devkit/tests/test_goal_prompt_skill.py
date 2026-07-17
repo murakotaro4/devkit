@@ -398,6 +398,10 @@ def test_dig_handoff_mode_contract():
 
 def test_auto_execution_transition_contract():
     text = _skill_text()
+    strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    progress_management = _section(strategy, "## 進捗管理")
+    completion_report = _section(strategy, "## 完了レポート")
+    step6 = _section(text, "### 6. 組み立て + セルフチェック")
     step8 = _section(text, "### 8. 実行移行(既定) / 例外形態の最終確認")
     step9 = _section(text, "### 9. 実行と完了報告(既定) / 例外形態の成果物提示")
     assert "完成プロンプト全文を通知として提示" in step8
@@ -411,6 +415,22 @@ def test_auto_execution_transition_contract():
     assert "直起動の commit・統合では実装系 Round 4" in step8
     assert "外部状態変更の具体的な対象・操作と可否を聞く" in text
     assert "例外形態では従来どおり" in step9
+    assert "起動元 checkout(スキルを起動した repo の主 worktree)" in text
+    assert "使い捨て worktree 内には置かない" in text
+    assert "step 6 の組み立て時に起動元 checkout 基準の具体パスへ解決" in text
+    assert "進捗ログ・完了レポートの保存先は起動元 checkout の `.claude/goal-runs/` に固定" in progress_management
+    assert "作業 worktree 内に置かない" in progress_management
+    assert "実行開始の宣言に保存済みゴールファイルの具体パスを明記" in step8
+    assert "コンテキスト圧縮後はまずそのファイルを読み直してから進捗ログ冒頭の復帰点を読む" in step8
+    goal_reread = progress_management.index("まず保存済みゴールファイル")
+    progress_reread = progress_management.index("次に進捗ログ冒頭の復帰点")
+    assert goal_reread < progress_reread
+    assert "起動元 checkout を確定し、ゴールファイル・進捗ログ・完了レポートの 3 パス" in step6
+    assert "`.claude/goal-runs/` 基準の具体パスへ解決してテンプレート本文へ焼き込む" in step6
+    assert "起動元 checkout 基準で組み立て時に確定した" in completion_report
+    assert "作業 worktree の相対パスへ置き換えない" in completion_report
+    assert "起動元 checkout 基準の確定済み `.claude/goal-runs/`" in completion_report
+    assert "起動元 checkout 基準で確定済みの `.claude/goal-runs/<レポート名>` の具体パス" in step9
 
 
 def test_autonomous_execution_declaration_contract():
