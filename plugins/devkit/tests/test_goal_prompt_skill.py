@@ -53,30 +53,9 @@ def test_skill_frontmatter_contract():
     assert "/goal-prompt" in frontmatter
     assert 'argument-hint: "[task]"' in frontmatter
     assert '"/goal"' not in frontmatter
-
-    allowed_tools_match = re.search(r"allowed-tools:\s*\[(.*?)\]", frontmatter)
-    assert allowed_tools_match, "allowed-tools が見つからない"
-    allowed_tools = allowed_tools_match.group(1)
-    expected_tools = [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
-        "AskUserQuestion",
-        "request_user_input",
-        "spawn_agent",
-        "wait_agent",
-        "TaskCreate",
-        "TaskUpdate",
-        "TaskOutput",
-        "Write",
-        "Edit",
-        "Skill",
-        "Agent",
-    ]
-    actual_tools = re.findall(r'"([^"]+)"', allowed_tools)
-    assert actual_tools == expected_tools
-    assert "Edit" in actual_tools
+    assert "allowed-tools:" not in frontmatter
+    for tool_name in ("AskUserQuestion", "spawn_agent", "request_user_input"):
+        assert tool_name not in frontmatter
 
 
 def test_harness_and_task_list_contract():
@@ -482,3 +461,6 @@ def test_agents_openai_yaml_exists_and_mentions_goal_prompt_and_dig():
     assert 'display_name: "Goal Prompt"' in text
     assert "$goal-prompt" in text
     assert "$dig" in text
+    assert "by default continue in the same session to execute autonomously through a completion report" in text
+    assert "Only provide a launch command when the user explicitly requests an exception form" in text
+    assert "recommend the right launch command" not in text

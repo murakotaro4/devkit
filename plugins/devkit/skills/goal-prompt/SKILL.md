@@ -2,7 +2,6 @@
 name: "goal-prompt"
 description: "自律・長時間実行 / 定期ループ実行 / 大タスク完走依頼向けのゴールプロンプトを選択肢付きインタビューで組み立て、既定では独立レビュー後に同一セッションで自律実行して完遂する。「ゴールプロンプトを作って」「夜間実行の指示書を作って」「ループ用プロンプトを作って」「/goal-prompt」で起動"
 argument-hint: "[task]"
-allowed-tools: ["Read", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user_input", "spawn_agent", "wait_agent", "TaskCreate", "TaskUpdate", "TaskOutput", "Write", "Edit", "Skill", "Agent"]
 ---
 
 # /goal-prompt - ゴールプロンプト作成
@@ -56,6 +55,8 @@ $ARGUMENTS
 ## 書き込み契約
 
 作成フェーズ(step 1-7)と実行フェーズ(step 8-9、既定のみ)を分ける。作成フェーズは対象 repo に対して read-only、実行フェーズはゴール本文の契約(write_scope・制約・停止条件・実行戦略)に従って書き込み・委譲を行う。
+
+実行フェーズのツール面を事前制限しないため、frontmatter には `allowed-tools: ["TaskCreate", "TaskUpdate", "TaskOutput"]` のような許可リストを置かない。作成フェーズでは、実行環境に存在する `AskUserQuestion`、`spawn_agent`、`request_user_input` なども以下の read-only 契約に従って使う。
 
 - step 1-7 は対象 repo に対して read-only。Bash は `command -v`、`git status`、`rg`、`ls`、`find`、テスト・lint コマンドの存在確認など読み取り用途だけに使う。対象 repo への Bash 書き込み、mkdir、touch、ファイル編集は行わない。
 - 例外は step 7 の独立レビュー運用だけ。`mktemp` による一時領域 `JOB_DIR` の作成とレビューログ書き込みは可とする。対象 repo への書き込みは不可。

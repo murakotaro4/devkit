@@ -1,4 +1,4 @@
 interface:
   display_name: "Goal Prompt"
-  short_description: "Build goal prompts for autonomous runs"
-  default_prompt: "Use $goal-prompt to interview for a verifiable goal prompt, recommend the right launch command, and hand implementation-heavy session work to $dig when appropriate."
+  short_description: "Build goal prompts and run them to completion"
+  default_prompt: "Use $goal-prompt to interview for a verifiable goal, independently review it, and by default continue in the same session to execute autonomously through a completion report. Only provide a launch command when the user explicitly requests an exception form. Hand implementation-heavy in-session work to $dig when appropriate."
