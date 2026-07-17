@@ -61,7 +61,7 @@ $ARGUMENTS
 - step 1-7 は対象 repo に対して read-only。Bash は `command -v`、`git status`、`rg`、`ls`、`find`、テスト・lint コマンドの存在確認など読み取り用途だけに使う。対象 repo への Bash 書き込み、mkdir、touch、ファイル編集は行わない。
 - 例外は step 7 の独立レビュー運用だけ。`mktemp` による一時領域 `JOB_DIR` の作成とレビューログ書き込みは可とする。対象 repo への書き込みは不可。
 - 既定(現セッション自動実行)でも、親は実行開始前にゴール本文全文を `.claude/goal-runs/YYYY-MM-DD-<slug>-goal.md` へ保存する。この保存はコンテキスト圧縮後の復帰点であり、保存に失敗した場合は実行を開始せず停止・報告する。
-- 既定経路のゴールファイル・進捗ログ・完了レポートは、実行中に作業 worktree を作る場合でも常に起動元 checkout(スキルを起動した repo の主 worktree)の `.claude/goal-runs/` を保存先とし、使い捨て worktree 内には置かない。step 6 の組み立て時に起動元 checkout 基準の具体パスへ解決して本文へ焼き込む。
+- 既定経路のゴールファイル・進捗ログ・完了レポートは、実行中に作業 worktree を作る場合でも常に起動元 checkout(スキル起動時の cwd を含む checkout)の `.claude/goal-runs/` を保存先とし、使い捨て worktree 内には置かない。step 6 の組み立て時に起動元 checkout 基準の具体パスへ解決して本文へ焼き込む。
 - 例外形態では、step 9 の Write 保存はファイルが必要な形態(`/loop`・`/schedule`・別ターミナルの背景起動)または 4,000 字超 fallback の場合だけ行う。例外形態のインライン `/goal` と Codex 貼付けでは親はゴールファイルを作らず、実行側の自己保存(best-effort)契約を維持する。
 - 親が保存するゴールファイルの既定パスは `.claude/goal-runs/YYYY-MM-DD-<slug>-goal.md`。命名規則はゴールファイル `YYYY-MM-DD-<slug>[-N]-goal.md`、完了レポート `YYYY-MM-DD-<slug>[-N].md` とし、連番 `-N` は `-goal` サフィックスの前に置く(`<slug>-goal-2.md` ではなく `<slug>-2-goal.md`)。同名は上書きしない。
 - 親がファイル保存する経路では、親が `.claude/goal-runs/` と `*` 1 行の `.gitignore` を ensure する。例外形態のインライン経路では実行エージェントが自己保存時に同じ ensure を行う。このディレクトリと `.gitignore` の作成は実行移行・成果物保存の書き込み契約の例外とする。既存の `.gitignore` がある場合は内容を変更しない。
@@ -92,7 +92,7 @@ $ARGUMENTS
 2. `git diff` と成功条件を突き合わせる
 3. 検証コマンドを再実行する
 4. 独立レビューの指摘がゼロであることを確認する
-5. commit するかはユーザーが判断する
+5. commit・統合はゴール本文の統合方法に従う(許可転記がなければユーザーが判断する)
 6. loop 停止・schedule 解除までゴールファイルを削除しない
 ```
 

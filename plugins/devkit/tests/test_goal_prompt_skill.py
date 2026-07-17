@@ -282,6 +282,8 @@ def test_launch_command_table_and_codex_stdin_guard():
     assert "同じマシン・同じ checkout で実行する前提" in launch_guide
     assert "loop 停止・schedule 解除までゴールファイルを削除しない" in launch_guide
     assert "登録はユーザーの 1 アクション" in launch_guide
+    assert "commit・統合はゴール本文の統合方法に従う(許可転記がなければユーザーが判断する)" in launch_guide
+    assert "commit するかはユーザーが判断する" not in launch_guide
     assert "codex exec" not in launch_guide
     assert "claude -p" not in launch_guide
     codex_paste_row = next(
@@ -415,7 +417,7 @@ def test_auto_execution_transition_contract():
     assert "直起動の commit・統合では実装系 Round 4" in step8
     assert "外部状態変更の具体的な対象・操作と可否を聞く" in text
     assert "例外形態では従来どおり" in step9
-    assert "起動元 checkout(スキルを起動した repo の主 worktree)" in text
+    assert "起動元 checkout(スキル起動時の cwd を含む checkout)" in text
     assert "使い捨て worktree 内には置かない" in text
     assert "step 6 の組み立て時に起動元 checkout 基準の具体パスへ解決" in text
     assert "進捗ログ・完了レポートの保存先は起動元 checkout の `.claude/goal-runs/` に固定" in progress_management
