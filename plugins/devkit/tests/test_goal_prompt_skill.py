@@ -108,10 +108,12 @@ def test_phase_and_execution_contract():
     assert ".claude/goal-runs/YYYY-MM-DD-<slug>-goal.md" in text
     assert "ゴールファイル `YYYY-MM-DD-<slug>[-N]-goal.md`" in text
     assert "連番 `-N` は `-goal` サフィックスの前" in text
-    assert "同名は上書きしない" in text
+    assert "既定経路は step 6 で衝突しない最終 basename を確定" in text
+    assert "例外形態の自己保存では同名を上書きせず連番へ進む" in text
     assert "親が `.claude/goal-runs/` と `*` 1 行の `.gitignore` を ensure" in text
     assert "例外形態のインライン経路では実行エージェントが自己保存時に同じ ensure" in text
-    assert "親が保存した後は `git check-ignore` で ignore が効いているか検証する" in text
+    assert "git 管理下では、親が保存した後に `git check-ignore`" in text
+    assert "非 git では検証不能のためこの検証を skip" in text
     assert "既定では実行直前の通知と最終報告、例外形態では起動プロンプト提示" in text
     assert "既定では step 8 で実行へ移行する" in text
     assert "cron 登録・`/schedule` 登録はどの step でも行わない" in text
@@ -427,12 +429,22 @@ def test_auto_execution_transition_contract():
     goal_reread = progress_management.index("まず保存済みゴールファイル")
     progress_reread = progress_management.index("次に進捗ログ冒頭の復帰点")
     assert goal_reread < progress_reread
-    assert "起動元 checkout を確定し、ゴールファイル・進捗ログ・完了レポートの 3 パス" in step6
-    assert "`.claude/goal-runs/` 基準の具体パスへ解決してテンプレート本文へ焼き込む" in step6
+    assert "起動元 checkout(非 git ではスキル起動時の cwd)" in step6
+    assert "ゴールファイル・進捗ログ・完了レポートの 3 パス" in step6
+    assert "基準ディレクトリ内の具体パスへ解決してテンプレート本文へ焼き込む" in step6
     assert "起動元 checkout 基準で組み立て時に確定した" in completion_report
     assert "作業 worktree の相対パスへ置き換えない" in completion_report
     assert "起動元 checkout 基準の確定済み `.claude/goal-runs/`" in completion_report
     assert "起動元 checkout 基準で確定済みの `.claude/goal-runs/<レポート名>` の具体パス" in step9
+    assert "衝突しない最終 basename(必要なら連番込み)を先に確定する" in step6
+    assert "既存ファイルを組み立て時に確認" in step6
+    assert "保存時に組み立て後の新たな衝突を検出した場合" in step8
+    assert "黙って連番保存へ逃げず" in step8
+    assert "3 パスを確定し直して本文へ反映してから保存・実行する" in step8
+    assert "対象が git 管理下にない場合" in text
+    assert "スキル起動時の cwd を基準ディレクトリ" in text
+    assert "非 git では基準ディレクトリをスキル起動時の cwd" in step8
+    assert "検証不能のため `git check-ignore` を行わず skip" in text
 
 
 def test_autonomous_execution_declaration_contract():
@@ -442,6 +454,9 @@ def test_autonomous_execution_declaration_contract():
     assert "OK なら OK と返答してください" in declaration
     assert "承認求め" in declaration
     assert "停止条件(3 種)と即停止条件が常に優先する" in declaration
+    assert "ハーネスが出すツール実行の許可プロンプトへの応答待ち" in declaration
+    assert "ここで禁止する質問・確認には該当しない" in declaration
+    assert "許可はユーザーまたはハーネス設定が与える。待機してよい" in declaration
     assert "行き詰まり停止する(続行しない)" in declaration
     assert declaration.index("進捗ログへ記録して続行する") < declaration.index(
         "停止条件(3 種)と即停止条件が常に優先する"
@@ -455,6 +470,9 @@ def test_autonomous_execution_declaration_contract():
         "確認・承認求め(「OK なら OK と返答してください」型を含む)も不可。"
         "冒頭の「実行モード: 不在自律実行」節に従う。"
     ) in execution_prerequisites
+    step8 = _section(text, "### 8. 実行移行(既定) / 例外形態の最終確認")
+    assert "実行エージェントによる質問・確認には該当せず待機してよい" in step8
+    assert "事前にハーネス側の許可設定を整えることを推奨する" in step8
 
 
 def test_retired_goal_prompt_phrases_are_absent():
