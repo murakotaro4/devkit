@@ -418,7 +418,11 @@ def test_pr_merge_completion_contract_is_baked_into_goal_strategy():
         assert "auto-merge" in contract
         assert "merge 実行前に検出" in contract
         assert "state 変更コマンドを実行せず停止" in contract
-        assert "--match-head-commit <SHA>" in contract
+        assert "green 判定時点で束縛した検証済み SHA" in contract
+        assert "`--match-head-commit`" in contract
+        assert "merge 直前の head SHA 再確認で不一致なら停止" in contract
+        assert "remote branch 削除は期待 tip と検証済み SHA の一致確認 + lease 付き削除" in contract
+        assert "不一致・lease 失敗なら cleanup 未完了" in contract
         assert "`MERGED` 確認" in contract
         assert "PR を open のまま停止" in contract
         assert "PR URL・失敗チェック・残存状態" in contract

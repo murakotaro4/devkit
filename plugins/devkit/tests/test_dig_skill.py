@@ -348,12 +348,21 @@ def test_worktree_integration_contract():
     assert "期限超過時点で merge せず停止・報告" in pr_contract
     assert "`no checks reported` エラー" in pr_contract
     assert "数分の猶予を置いて再試行" in pr_contract
-    assert "CI 待機ポーリングの最終結果" in pr_contract
+    assert pr_contract.count("gh pr view <PR番号> --json headRefOid") >= 3
+    assert "ポーリング前の head SHA" in pr_contract
+    assert "ポーリング後の head SHA" in pr_contract
+    assert "前後の SHA が一致する場合だけ checks と head SHA を同じ判定対象" in pr_contract
+    assert "前後で不一致ならその checks 結果を破棄" in pr_contract
+    assert "CI 待機ポーリングの同じ判定対象" in pr_contract
     assert "全件 `pass`(`skipping` は許容)" in pr_contract
+    assert "安定した head SHA を「検証済み SHA」として記録" in pr_contract
     assert "API・認証エラーをチェック 0 件の成功と混同せず" in pr_contract
-    assert "CI なし repo は checks 待ちを省略して merge 可" in pr_contract
+    assert "CI なし repo は checks 待ちを省略してその時点の安定した head SHA を検証済み SHA" in pr_contract
     assert "CI あり repo で 0 件が続く場合は停止・報告" in pr_contract
-    assert "gh pr merge <PR番号> --merge --match-head-commit <SHA>" in pr_contract
+    assert "merge 直前に `gh pr view <PR番号> --json headRefOid` を再取得" in pr_contract
+    assert "検証済み SHA と一致することを確認" in pr_contract
+    assert "green だった checks は旧 head のものなので merge せず停止・報告" in pr_contract
+    assert "gh pr merge <PR番号> --merge --match-head-commit <検証済みSHA>" in pr_contract
     assert "state 変更コマンドを実行する前に merge queue preflight" in pr_contract
     assert "gh api repos/<owner>/<repo>/rules/branches/<default>" in pr_contract
     assert "`type` が `merge_queue` の rule" in pr_contract
@@ -365,9 +374,10 @@ def test_worktree_integration_contract():
     assert "isInMergeQueue" not in pr_contract
     assert "preflight の API・認証エラー時" in pr_contract
     assert "`gh pr merge` を実行せず停止・報告" in pr_contract
-    assert pr_contract.index("gh api repos/<owner>/<repo>/rules/branches/<default>") < pr_contract.index(
-        "gh pr merge <PR番号> --merge --match-head-commit <SHA>"
-    )
+    merge_step = pr_contract[pr_contract.index("4. merge"):pr_contract.index("5. 完了確認")]
+    assert merge_step.index("gh api repos/<owner>/<repo>/rules/branches/<default>") < merge_step.index(
+        "merge 直前に `gh pr view <PR番号> --json headRefOid` を再取得"
+    ) < merge_step.index("gh pr merge <PR番号> --merge --match-head-commit <検証済みSHA>")
     assert "gh pr view <PR番号> --json state,mergedAt" in pr_contract
     assert "`MERGED` を確認して初めて統合完了" in pr_contract
     assert "merge は人間が行い" not in worktree
@@ -378,6 +388,7 @@ def test_worktree_integration_contract():
         "`MERGED` 確認",
         "`git fetch origin`",
         "ローカルの作業 branch tip を記録",
+        "fetch 済みの `origin/<branch>` tip が検証済み SHA(merge した head)と一致",
     )
     common_positions = [pr_contract.index(token) for token in common_cleanup]
     assert common_positions == sorted(common_positions)
@@ -386,7 +397,6 @@ def test_worktree_integration_contract():
         "git merge-base --is-ancestor <branch-tip> origin/<default>",
         "git worktree remove <worktree>",
         "git branch -d <branch>",
-        "git push origin --delete <branch>",
     )
     merge_commit_positions = [pr_contract.index(token) for token in merge_commit_cleanup]
     assert merge_commit_positions == sorted(merge_commit_positions)
@@ -399,13 +409,18 @@ def test_worktree_integration_contract():
     squash_cleanup = (
         "git worktree remove <worktree>",
         "git branch -D <branch>",
-        "git push origin --delete <branch>",
     )
     squash_start = pr_contract.index("repo ルールが squash / rebase 方式を定める場合")
     squash_contract = pr_contract[squash_start:]
     squash_positions = [squash_contract.index(token) for token in squash_cleanup]
     assert squash_positions == sorted(squash_positions)
-    assert "必要な確認が取れない場合は削除せず「統合成功・cleanup 未完了」" in pr_contract
+    lease_delete = "git push --force-with-lease=refs/heads/<branch>:<検証済みSHA> origin :refs/heads/<branch>"
+    assert lease_delete in pr_contract
+    assert pr_contract.index("git branch -d <branch>") < pr_contract.index(lease_delete)
+    assert squash_contract.index("git branch -D <branch>") < squash_contract.index(lease_delete)
+    assert "remote tip が不一致なら削除へ進まず" in pr_contract
+    assert "remote に新 commit が残っている旨" in pr_contract
+    assert "lease 失敗時は remote branch を削除せず「統合成功・cleanup 未完了」" in pr_contract
     assert "統合成功・cleanup 未完了" in pr_contract
     assert "変更を破棄しない" in worktree
     assert "統合完了前の失敗では worktree・ブランチ・commit をそのまま残し" in worktree
