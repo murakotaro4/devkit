@@ -388,10 +388,23 @@ def test_worktree_integration_contract():
         "`MERGED` 確認",
         "`git fetch origin`",
         "ローカルの作業 branch tip を記録",
-        "fetch 済みの `origin/<branch>` tip が検証済み SHA(merge した head)と一致",
+        "git ls-remote --heads origin refs/heads/<branch>",
     )
     common_positions = [pr_contract.index(token) for token in common_cleanup]
     assert common_positions == sorted(common_positions)
+    assert "完全refを指定" in pr_contract
+    assert "0件(remote不在)または厳密1件(remote存在)だけを受け入れ" in pr_contract
+    assert "複数件は確認不能" in pr_contract
+    assert "`ls-remote` 自体の失敗(API・認証・通信エラー等)を空結果と混同せず" in pr_contract
+    assert "remote branch が存在しない(`ls-remote` が成功かつ空結果)" in pr_contract
+    assert "gh pr view <PR番号> --json state,mergedAt,headRefOid" in pr_contract
+    assert "`headRefOid` が記録したローカル branch tip(検証済み SHA)と一致" in pr_contract
+    assert "remote 削除は GitHub 側で完了済み" in pr_contract
+    assert "cleanup 未完了にはせず" in pr_contract
+    assert "merge方式別ローカルcleanupを続行" in pr_contract
+    assert "不一致または確認不能なら削除へ進まず" in pr_contract
+    assert "remote branch が存在する場合" in pr_contract
+    assert "`ls-remote` で得たremote tipが検証済み SHA(merge した head)と一致" in pr_contract
 
     merge_commit_cleanup = (
         "git merge-base --is-ancestor <branch-tip> origin/<default>",
@@ -418,7 +431,7 @@ def test_worktree_integration_contract():
     assert lease_delete in pr_contract
     assert pr_contract.index("git branch -d <branch>") < pr_contract.index(lease_delete)
     assert squash_contract.index("git branch -D <branch>") < squash_contract.index(lease_delete)
-    assert "remote tip が不一致なら削除へ進まず" in pr_contract
+    assert "不一致なら削除へ進まず" in pr_contract
     assert "remote に新 commit が残っている旨" in pr_contract
     assert "lease 失敗時は remote branch を削除せず「統合成功・cleanup 未完了」" in pr_contract
     assert "統合成功・cleanup 未完了" in pr_contract

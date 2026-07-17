@@ -421,8 +421,19 @@ def test_pr_merge_completion_contract_is_baked_into_goal_strategy():
         assert "green 判定時点で束縛した検証済み SHA" in contract
         assert "`--match-head-commit`" in contract
         assert "merge 直前の head SHA 再確認で不一致なら停止" in contract
-        assert "remote branch 削除は期待 tip と検証済み SHA の一致確認 + lease 付き削除" in contract
-        assert "不一致・lease 失敗なら cleanup 未完了" in contract
+        assert "remote branch" in contract
+        assert "期待 tip" in contract and "検証済み SHA" in contract
+        assert "lease" in contract
+        assert "不一致" in contract and "lease 失敗" in contract
+        assert "cleanup 未完了" in contract
+        assert "git ls-remote --heads origin refs/heads/<branch>" in contract
+        assert "成功かつ空結果だけをGitHub側削除済み" in contract
+        assert "API・認証・通信エラー" in contract
+        assert "複数結果はcleanup未完了で停止" in contract
+        assert "GitHub 側で削除済み" in contract
+        assert "`headRefOid`" in contract
+        assert "remote 削除完了扱い" in contract
+        assert "ローカルcleanupを続行" in contract
         assert "`MERGED` 確認" in contract
         assert "PR を open のまま停止" in contract
         assert "PR URL・失敗チェック・残存状態" in contract
