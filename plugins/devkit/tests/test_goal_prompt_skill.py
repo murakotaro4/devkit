@@ -396,8 +396,29 @@ def test_dig_handoff_mode_contract():
     assert "commit / push の扱い(承認済み計画の統合方法に従う。許可転記がなければ禁止)" in text
     assert "実装後レビュー要件、どの停止種別でも書き出す完了レポート要件は転記必須項目" in text
     assert "組み立て + セルフチェック 10 項目、独立レビューを経て、既定では step 8 の実行移行" in text
-    assert "worktree 運用・節目 commit・統合方法・version bump" in text
+    assert "worktree 運用・節目 commit・統合契約(PR 経由の場合は CI 判定・merge・失敗時契約を含む)・version bump" in text
     assert "セルフチェック 10 項目" in text
+
+
+def test_pr_merge_completion_contract_is_baked_into_goal_strategy():
+    text = _skill_text()
+    strategy = _between(text, "## プロンプトテンプレート", "## セルフチェック")
+    step6 = _section(text, "### 6. 組み立て + セルフチェック")
+    label = "PR 経由(提出 + CI green 確認 + merge まで)"
+
+    assert text.count(label) >= 3
+    for contract in (strategy, step6):
+        assert "対象 repo の CI 有無" in contract
+        assert "チェック 0 件の扱い" in contract
+        assert "`bucket`" in contract
+        assert "`pass`" in contract and "`skipping`" in contract
+        assert "CI 待機上限(既定 30 分)" in contract
+        assert "merge queue" in contract
+        assert "auto-merge を有効化せず停止" in contract
+        assert "--match-head-commit <SHA>" in contract
+        assert "`MERGED` 確認" in contract
+        assert "PR を open のまま停止" in contract
+        assert "PR URL・失敗チェック・残存状態" in contract
 
 
 def test_auto_execution_transition_contract():

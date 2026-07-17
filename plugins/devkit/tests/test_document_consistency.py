@@ -442,6 +442,25 @@ def test_dig_goal_prompt_switching_terms_stay_in_sync():
         assert "起動プロンプト" in text, f"{doc_name} に goal-prompt 境界語(起動プロンプト)がない"
 
 
+def test_pr_merge_completion_contract_stays_in_sync():
+    documents = {
+        "AGENTS.md": _read("AGENTS.md"),
+        "README.md": _read("README.md"),
+        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
+        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
+            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        ),
+    }
+    retired_contracts = ("merge は人間", "PR 提出まで", "PR 提出完了")
+
+    for doc_name, text in documents.items():
+        assert "PR" in text, f"{doc_name} に PR 経路の記載がない"
+        assert "CI green" in text, f"{doc_name} に CI green 判定の記載がない"
+        assert "merge" in text, f"{doc_name} に PR merge 完遂の記載がない"
+        for retired in retired_contracts:
+            assert retired not in text, f"{doc_name} に旧 PR 統合契約が残っている: {retired}"
+
+
 def test_goal_prompt_auto_execution_contract_stays_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),

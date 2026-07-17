@@ -298,7 +298,7 @@ def test_goal_handoff_contract():
     assert "diff レビュー backend の質問を出さない" in text
     assert "実装と別系統の独立レビュー(codex review 等)を実施し指摘ゼロ" in text
     assert "commit / push の扱いと合わせて転記必須項目" in text
-    assert "worktree 運用・節目 commit・統合方法・version bump" in text
+    assert "worktree 運用・節目 commit・統合契約(PR 経由の場合は CI 判定・merge・失敗時契約を含む)・version bump" in text
     assert "監視または引き渡し" not in text
     assert "step 7(自レビュー)以降を続行" not in text
     assert ".claude/worktrees/" not in text
@@ -337,11 +337,43 @@ def test_worktree_integration_contract():
     assert 'merge --ff-only <branch>' in worktree
     assert 'push origin <default>' in worktree
     assert "PR 経路" in worktree
-    assert "gh pr create" in worktree
-    assert "CI 確認まで" in worktree
-    assert "PR 提出完了" in worktree
-    assert "merge は人間が行い" in worktree
+    pr_contract = _between(worktree, "4. PR 経路", "5. 後始末")
+    assert "gh pr create --base <default> --head <branch> --title" in pr_contract
+    assert "PR URL / 番号を記録" in pr_contract
+    assert "gh pr checks <PR番号> --watch" in pr_contract
+    assert "待機上限は計画に記載した値(既定 30 分)" in pr_contract
+    assert "上限到達時は merge せず停止・報告" in pr_contract
+    assert "`no checks reported` エラー" in pr_contract
+    assert "数分の猶予を置いて再試行" in pr_contract
+    assert "gh pr checks <PR番号> --json bucket,name" in pr_contract
+    assert "全件 `pass`(`skipping` は許容)" in pr_contract
+    assert "API・認証エラーをチェック 0 件の成功と混同せず" in pr_contract
+    assert "CI なし repo は checks 待ちを省略して merge 可" in pr_contract
+    assert "CI あり repo で 0 件が続く場合は停止・報告" in pr_contract
+    assert "gh pr merge <PR番号> --merge --match-head-commit <SHA>" in pr_contract
+    assert "merge queue / auto-merge の有効化が要求される branch" in pr_contract
+    assert "auto-merge を有効化せず停止・報告" in pr_contract
+    assert "gh pr view <PR番号> --json state,mergedAt" in pr_contract
+    assert "`MERGED` を確認して初めて統合完了" in pr_contract
+    assert "merge は人間が行い" not in worktree
+    assert "step 8(修正ループ)へ自動では戻らない" in pr_contract
+    assert "PR を open のまま残し" in pr_contract
+
+    cleanup_tokens = (
+        "`MERGED` 確認",
+        "`git fetch origin`",
+        "git merge-base --is-ancestor <branch-tip> origin/<default>",
+        "git worktree remove <worktree>",
+        "git branch -d <branch>",
+        "git push origin --delete <branch>",
+    )
+    cleanup_positions = [pr_contract.index(token) for token in cleanup_tokens]
+    assert cleanup_positions == sorted(cleanup_positions)
+    assert "統合成功・cleanup 未完了" in pr_contract
     assert "変更を破棄しない" in worktree
+    assert "統合完了前の失敗では worktree・ブランチ・commit をそのまま残し" in worktree
+    assert "cleanup 途中の失敗では完了済みの cleanup 操作を巻き戻さず" in worktree
+    assert "未完了の残存物と再開コマンドを報告" in worktree
     assert "git rebase --abort" in worktree
     assert "`--force` せず" in worktree
     assert "git worktree remove" in worktree
@@ -361,7 +393,8 @@ def test_worktree_integration_contract():
     assert "統合方法も 1 問で確認" in backend_selection
     assert "既定推奨は「直接統合」" in backend_selection
     assert "`command -v gh` が通らない場合" in backend_selection
-    assert "ゴール化して自律実行でも統合方法(直接統合 / PR)を確定" in backend_selection
+    assert "ゴール化して自律実行でも統合方法(直接統合 / PR 経由(提出 + CI green 確認 + merge まで))を確定" in backend_selection
+    assert "対象 repo の CI 有無と CI 待機上限(既定 30 分)を計画へ記載" in backend_selection
     assert "非 git repo ではこの質問を出さない" in backend_selection
     assert "または origin なし repo では PR 選択肢を出さない" in backend_selection
 
