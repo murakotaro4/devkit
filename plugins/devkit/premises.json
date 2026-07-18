@@ -475,7 +475,7 @@
         },
         {
           "path": "plugins/devkit/scripts/check_skill_surface.py",
-          "count": 58
+          "count": 67
         },
         {
           "path": "plugins/devkit/scripts/devkit-lib.ps1",
@@ -487,11 +487,11 @@
         },
         {
           "path": "plugins/devkit/scripts/update-ccx.ps1",
-          "count": 19
+          "count": 21
         },
         {
           "path": "plugins/devkit/scripts/update-ccx.sh",
-          "count": 16
+          "count": 20
         },
         {
           "path": "plugins/devkit/tests/test_check_skill_surface.py",
@@ -499,7 +499,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
-          "count": 8
+          "count": 10
         }
       ]
     },

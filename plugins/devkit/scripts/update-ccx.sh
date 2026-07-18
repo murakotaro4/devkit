@@ -623,7 +623,7 @@ run_plugin_command() {
     return 1
 }
 
-claude_marketplace_registered() {
+claude_marketplace_state() {
     local output
     if ! output="$(claude plugin marketplace list --json </dev/null 2>&1)"; then
         return 1
@@ -642,7 +642,14 @@ except Exception:
 
 if not isinstance(data, list):
     sys.exit(2)
-print("registered" if any(isinstance(item, dict) and item.get("name") == "murakotaro4" for item in data) else "missing")
+
+matching = [item for item in data if isinstance(item, dict) and item.get("name") == "murakotaro4"]
+if not matching:
+    print("missing")
+elif any(item.get("source") == "github" and item.get("repo") == "murakotaro4/devkit" for item in matching):
+    print("ok")
+else:
+    print("replace")
 ')"; then
             printf '%s\n' "$parsed_state"
             return 0
@@ -654,10 +661,23 @@ print("registered" if any(isinstance(item, dict) and item.get("name") == "murako
         fi
     fi
 
-    if grep -Eq '"name"[[:space:]]*:[[:space:]]*"murakotaro4"' <<<"$output"; then
-        echo "registered"
-    else
+    local marketplace_entries
+    marketplace_entries="$(
+        printf '%s\n' "$output" |
+            tr '\n' ' ' |
+            sed -E 's/}[[:space:]]*,[[:space:]]*[{]/}\
+{/g' |
+            grep -E '"name"[[:space:]]*:[[:space:]]*"murakotaro4"'
+    )"
+
+    if [[ -z "$marketplace_entries" ]]; then
         echo "missing"
+    elif printf '%s\n' "$marketplace_entries" |
+        grep -E '"source"[[:space:]]*:[[:space:]]*"github"' |
+        grep -Eq '"repo"[[:space:]]*:[[:space:]]*"murakotaro4/devkit"'; then
+        echo "ok"
+    else
+        echo "replace"
     fi
 }
 
@@ -842,7 +862,7 @@ section_claude_plugin() {
     fi
 
     local marketplace_state marketplace_status
-    marketplace_state="$(claude_marketplace_registered)"
+    marketplace_state="$(claude_marketplace_state)"
     marketplace_status=$?
     if [[ $marketplace_status -ne 0 ]]; then
         if [[ $marketplace_status -eq 1 ]]; then
@@ -853,15 +873,26 @@ section_claude_plugin() {
         return 1
     fi
 
-    if [[ "$marketplace_state" == "registered" ]]; then
-        run_plugin_command \
-            "Updating Claude marketplace" \
-            claude plugin marketplace update murakotaro4 || return 1
-    else
-        run_plugin_command \
-            "Adding Claude marketplace" \
-            claude plugin marketplace add murakotaro4/devkit || return 1
-    fi
+    case "$marketplace_state" in
+        ok)
+            run_plugin_command \
+                "Updating Claude marketplace" \
+                claude plugin marketplace update murakotaro4 || return 1
+            ;;
+        replace)
+            run_plugin_command \
+                "Removing unexpected Claude marketplace" \
+                claude plugin marketplace remove murakotaro4 || return 1
+            run_plugin_command \
+                "Adding Claude marketplace" \
+                claude plugin marketplace add murakotaro4/devkit || return 1
+            ;;
+        missing)
+            run_plugin_command \
+                "Adding Claude marketplace" \
+                claude plugin marketplace add murakotaro4/devkit || return 1
+            ;;
+    esac
 
     local plugin_state plugin_status
     plugin_state="$(claude_plugin_devkit_state)"

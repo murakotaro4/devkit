@@ -1468,19 +1468,27 @@ function Update-DevKitClaudePlugin {
     return
   }
 
-  $marketplaceRegistered = $false
+  $marketplaceState = "missing"
   foreach ($marketplace in @($marketplaces)) {
     if ($null -ne $marketplace -and [string]$marketplace.name -eq "murakotaro4") {
-      $marketplaceRegistered = $true
-      break
+      $marketplaceState = "replace"
+      if ([string]$marketplace.source -eq "github" -and [string]$marketplace.repo -eq "murakotaro4/devkit") {
+        $marketplaceState = "ok"
+        break
+      }
     }
   }
 
-  if ($marketplaceRegistered) {
+  if ($marketplaceState -eq "ok") {
     if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "update", "murakotaro4") -FailureMessage "Claude plugin marketplace update failed")) {
       return
     }
   } else {
+    if ($marketplaceState -eq "replace") {
+      if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "remove", "murakotaro4") -FailureMessage "Claude plugin marketplace remove failed")) {
+        return
+      }
+    }
     if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "add", "murakotaro4/devkit") -FailureMessage "Claude plugin marketplace add failed")) {
       return
     }

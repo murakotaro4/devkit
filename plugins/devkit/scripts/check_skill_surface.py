@@ -224,7 +224,15 @@ if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ] && [ "$4
     exit 1
   fi
   if [ "${DEVKIT_FAKE_CLAUDE_MARKETPLACE:-1}" = "1" ]; then
-    printf '[{"name":"murakotaro4","source":"github","repo":"murakotaro4/devkit"}]\\n'
+    if [ "${DEVKIT_FAKE_CLAUDE_MARKETPLACE_SHAPE:-ok}" = "ok" ]; then
+      printf '[{"name":"murakotaro4","source":"github","repo":"murakotaro4/devkit"}]\\n'
+    else
+      printf '%s\\n' \
+        '[' \
+        '  {"name":"murakotaro4","source":"local","repo":"other/devkit"},' \
+        '  {"name":"other","source":"github","repo":"murakotaro4/devkit"}' \
+        ']'
+    fi
   else
     printf '[]\\n'
   fi
@@ -298,6 +306,7 @@ def run_update_devkit_smoke(
     available_shape: str = "installed",
     force_shell_fallback: bool = False,
     claude_marketplace: bool = True,
+    claude_marketplace_shape: str = "ok",
     claude_installed: bool = True,
     claude_scope: str = "user",
     claude_list_fail: bool = False,
@@ -331,6 +340,7 @@ def run_update_devkit_smoke(
                 "DEVKIT_FAKE_CODEX_AVAILABLE": "1" if available else "0",
                 "DEVKIT_FAKE_CODEX_AVAILABLE_SHAPE": available_shape,
                 "DEVKIT_FAKE_CLAUDE_MARKETPLACE": "1" if claude_marketplace else "0",
+                "DEVKIT_FAKE_CLAUDE_MARKETPLACE_SHAPE": claude_marketplace_shape,
                 "DEVKIT_FAKE_CLAUDE_INSTALLED": "1" if claude_installed else "0",
                 "DEVKIT_FAKE_CLAUDE_SCOPE": claude_scope,
                 "DEVKIT_FAKE_CLAUDE_LIST_FAIL": "1" if claude_list_fail else "0",
@@ -422,6 +432,7 @@ def assert_powershell_claude_plugin_update_contract(problems: list[str]) -> None
             block,
             [
                 '@("plugin", "marketplace", "update", "murakotaro4")',
+                '@("plugin", "marketplace", "remove", "murakotaro4")',
                 '@("plugin", "marketplace", "add", "murakotaro4/devkit")',
                 '@("plugin", "update", "--scope", "user", "devkit@murakotaro4")',
                 '@("plugin", "install", "--scope", "user", "devkit@murakotaro4")',
@@ -552,6 +563,27 @@ def run_codex_marketplace_smoke_checks() -> None:
 
 
 def run_claude_plugin_smoke_checks() -> None:
+    replace = run_update_devkit_smoke(
+        "claude-marketplace-replace",
+        config_body='[marketplaces.murakotaro4]\nsource_type = "git"\nsource = "murakotaro4/devkit"\n',
+        installed=True,
+        force_shell_fallback=True,
+        claude_marketplace_shape="replace",
+    )
+    assert_ordered_subset(
+        replace.calls,
+        [
+            "claude plugin marketplace list --json",
+            "claude plugin marketplace remove murakotaro4",
+            "claude plugin marketplace add murakotaro4/devkit",
+            "claude plugin list --json",
+            "claude plugin update --scope user devkit@murakotaro4",
+        ],
+        "unexpected Claude marketplace replacement",
+    )
+    if "claude plugin marketplace update murakotaro4" in replace.calls:
+        raise AssertionError(f"unexpected Claude marketplace was updated in place: {replace.calls}")
+
     missing = run_update_devkit_smoke(
         "claude-missing",
         config_body='[marketplaces.murakotaro4]\nsource_type = "git"\nsource = "murakotaro4/devkit"\n',
