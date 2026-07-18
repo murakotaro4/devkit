@@ -230,6 +230,63 @@ def test_user_file_in_retired_skill_directory_is_preserved(tmp_path):
     assert retired.parent.is_dir()
 
 
+def test_managed_file_to_directory_replacement_completes_in_one_sync(tmp_path):
+    source = make_source(tmp_path)
+    source_path = source / "templates/rules/replaced"
+    source_path.write_bytes(b"old file\n")
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    sync(target, source)
+    source_path.unlink()
+    source_path.mkdir()
+    (source_path / "new.txt").write_bytes(b"new nested file\n")
+
+    result = sync(target, source)
+
+    assert "prune:templates/rules/replaced" in result["actions"]
+    assert "copy:templates/rules/replaced/new.txt" in result["actions"]
+    assert (target / "templates/rules/replaced/new.txt").read_bytes() == b"new nested file\n"
+
+
+def test_managed_directory_to_file_replacement_completes_in_one_sync(tmp_path):
+    source = make_source(tmp_path)
+    source_path = source / "templates/rules/replaced"
+    source_path.mkdir()
+    (source_path / "old.txt").write_bytes(b"old nested file\n")
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    sync(target, source)
+    shutil.rmtree(source_path)
+    source_path.write_bytes(b"new file\n")
+
+    result = sync(target, source)
+
+    assert "prune:templates/rules/replaced/old.txt" in result["actions"]
+    assert "copy:templates/rules/replaced" in result["actions"]
+    assert (target / "templates/rules/replaced").read_bytes() == b"new file\n"
+
+
+def test_directory_to_file_replacement_preserves_user_file_and_skips(tmp_path):
+    source = make_source(tmp_path)
+    source_path = source / "templates/rules/replaced"
+    source_path.mkdir()
+    (source_path / "old.txt").write_bytes(b"old nested file\n")
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    sync(target, source)
+    user_file = target / "templates/rules/replaced/user.txt"
+    user_file.write_bytes(b"user file\n")
+    shutil.rmtree(source_path)
+    source_path.write_bytes(b"new file\n")
+
+    result = sync(target, source)
+
+    assert "skip_irregular:templates/rules/replaced" in result["actions"]
+    assert "prune:templates/rules/replaced/old.txt" in result["actions"]
+    assert user_file.read_bytes() == b"user file\n"
+    assert (target / "templates/rules/replaced").is_dir()
+
+
 def test_missing_manifest_adopts_exact_files_and_preserves_custom_skill(tmp_path):
     source = make_source(tmp_path)
     target = tmp_path / ".cursor"
@@ -367,10 +424,11 @@ def test_invalid_manifest_path_is_rejected_without_touching_external_file(tmp_pa
     }
     (target / SYNC.MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
 
-    result = sync(target, source)
+    result = run_cli(target, source)
 
-    assert result["changed"] is False
-    assert result["reason"] == "manifest is not a valid regular file"
+    assert result.returncode != 0
+    assert "invalid Cursor sync manifest" in result.stderr
+    assert "delete the manifest" in result.stderr
     assert external.read_text(encoding="utf-8") == "keep\n"
     assert not (target / "skills").exists()
 
@@ -393,12 +451,57 @@ def test_manifest_path_aliases_are_rejected_before_prune(tmp_path):
     original_manifest = json.dumps(payload)
     (target / SYNC.MANIFEST_NAME).write_text(original_manifest, encoding="utf-8")
 
-    result = sync(target, source)
+    result = run_cli(target, source)
 
-    assert result["changed"] is False
-    assert result["reason"] == "manifest is not a valid regular file"
+    assert result.returncode != 0
+    assert "invalid Cursor sync manifest" in result.stderr
+    assert "delete the manifest" in result.stderr
     assert retired.read_text(encoding="utf-8") == "keep\n"
     assert (target / SYNC.MANIFEST_NAME).read_text(encoding="utf-8") == original_manifest
+
+
+@pytest.mark.parametrize(
+    "manifest_text",
+    [
+        "{not-json\n",
+        json.dumps({"version": 999, "files": {}}),
+    ],
+)
+def test_corrupt_or_unsupported_manifest_is_rejected(tmp_path, manifest_text):
+    source = make_source(tmp_path)
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    manifest_path = target / SYNC.MANIFEST_NAME
+    manifest_path.write_text(manifest_text, encoding="utf-8")
+
+    result = run_cli(target, source)
+
+    assert result.returncode != 0
+    assert "invalid Cursor sync manifest" in result.stderr
+    assert "delete the manifest" in result.stderr
+    assert manifest_path.read_text(encoding="utf-8") == manifest_text
+    assert not (target / "skills").exists()
+
+
+def test_manifest_symlink_is_rejected_without_touching_external_file(tmp_path):
+    if not hasattr(os, "symlink"):
+        pytest.skip("symlink is unavailable")
+    source = make_source(tmp_path)
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    external = tmp_path / "external-manifest.json"
+    original = '{"version": 1, "files": {}}\n'
+    external.write_text(original, encoding="utf-8")
+    (target / SYNC.MANIFEST_NAME).symlink_to(external)
+
+    result = run_cli(target, source)
+
+    assert result.returncode != 0
+    assert "invalid Cursor sync manifest" in result.stderr
+    assert "delete the manifest" in result.stderr
+    assert (target / SYNC.MANIFEST_NAME).is_symlink()
+    assert external.read_text(encoding="utf-8") == original
+    assert not (target / "skills").exists()
 
 
 @pytest.mark.parametrize("damage", ["skill", "asset"])

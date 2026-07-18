@@ -194,6 +194,65 @@ def _path_kind(target: Path, destination: Path) -> str:
     return "regular"
 
 
+def _directory_is_empty_after_prunes(target: Path, directory: Path, prunes: set[str]) -> bool:
+    pending = [directory]
+    while pending:
+        current = pending.pop()
+        try:
+            children = list(current.iterdir())
+        except OSError:
+            return False
+        for child in children:
+            try:
+                mode = child.lstat().st_mode
+            except OSError:
+                return False
+            if stat.S_ISLNK(mode):
+                return False
+            if stat.S_ISDIR(mode):
+                pending.append(child)
+                continue
+            if not stat.S_ISREG(mode) or child.relative_to(target).as_posix() not in prunes:
+                return False
+    return True
+
+
+def _path_kind_after_prunes(
+    target: Path,
+    destination: Path,
+    prunes: set[str],
+) -> tuple[str, bool]:
+    relative = destination.relative_to(target)
+    current = target
+    removed_parent = False
+    for part in relative.parts[:-1]:
+        current = current / part
+        if removed_parent:
+            continue
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISDIR(mode) and not stat.S_ISLNK(mode):
+            continue
+        if stat.S_ISREG(mode) and current.relative_to(target).as_posix() in prunes:
+            removed_parent = True
+            continue
+        return "irregular", False
+    if removed_parent:
+        return "missing", False
+    try:
+        mode = destination.lstat().st_mode
+    except FileNotFoundError:
+        return "missing", False
+    if stat.S_ISREG(mode):
+        return "regular", False
+    if stat.S_ISDIR(mode) and not stat.S_ISLNK(mode):
+        removable = _directory_is_empty_after_prunes(target, destination, prunes)
+        return ("missing", True) if removable else ("irregular", False)
+    return "irregular", False
+
+
 def _manifest_bytes(files: dict[str, str]) -> bytes:
     payload = {"version": MANIFEST_VERSION, "files": dict(sorted(files.items()))}
     return (json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -208,6 +267,18 @@ def _remove_empty_managed_dirs(target: Path, start: Path) -> None:
         except OSError:
             break
         current = current.parent
+
+
+def _remove_empty_tree(directory: Path) -> None:
+    if not directory.exists() or directory.is_symlink() or not directory.is_dir():
+        return
+    directories = [path for path in directory.rglob("*") if path.is_dir() and not path.is_symlink()]
+    for path in sorted(directories, key=lambda item: len(item.parts), reverse=True):
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+    directory.rmdir()
 
 
 def sync_cursor_skills(
@@ -235,16 +306,36 @@ def sync_cursor_skills(
     manifest_present = manifest_path.exists() or manifest_path.is_symlink()
     previous = _read_manifest(manifest_path)
     if manifest_present and previous is None:
-        return False, [f"skip_irregular:{MANIFEST_NAME}"], "manifest is not a valid regular file"
+        raise SystemExit(
+            f"invalid Cursor sync manifest: {manifest_path}; "
+            "delete the manifest to retry the safe adoption flow"
+        )
 
     actions: list[str] = []
     writes: dict[str, bytes] = {}
     prunes: list[str] = []
+    replacement_dirs: set[Path] = set()
     next_manifest: dict[str, str] = {}
+
+    prune_decisions: dict[str, str] = {}
+    if previous is not None:
+        for relpath in sorted(set(previous) - set(desired)):
+            destination = target / relpath
+            kind = _path_kind(target, destination)
+            if kind == "missing":
+                prune_decisions[relpath] = "missing"
+            elif kind == "irregular":
+                prune_decisions[relpath] = "skip_irregular"
+            elif _sha256(destination.read_bytes()) != previous[relpath]:
+                prune_decisions[relpath] = "skip_prune_modified"
+            else:
+                prune_decisions[relpath] = "prune"
+                prunes.append(relpath)
+    planned_prunes = set(prunes)
 
     for relpath, content in sorted(desired.items()):
         destination = target / relpath
-        kind = _path_kind(target, destination)
+        kind, replace_directory = _path_kind_after_prunes(target, destination, planned_prunes)
         desired_hash = _sha256(content)
         if kind == "irregular":
             actions.append(f"skip_irregular:{relpath}")
@@ -269,24 +360,24 @@ def sync_cursor_skills(
         if existing != content:
             actions.append(f"copy:{relpath}")
             writes[relpath] = content
+            if replace_directory:
+                replacement_dirs.add(destination)
         next_manifest[relpath] = desired_hash
 
     if previous is not None:
         for relpath in sorted(set(previous) - set(desired)):
-            destination = target / relpath
-            kind = _path_kind(target, destination)
-            if kind == "missing":
+            decision = prune_decisions[relpath]
+            if decision == "missing":
                 continue
-            if kind == "irregular":
+            if decision == "skip_irregular":
                 actions.append(f"skip_irregular:{relpath}")
                 next_manifest[relpath] = previous[relpath]
                 continue
-            if _sha256(destination.read_bytes()) != previous[relpath]:
+            if decision == "skip_prune_modified":
                 actions.append(f"skip_prune_modified:{relpath}")
                 next_manifest[relpath] = previous[relpath]
                 continue
             actions.append(f"prune:{relpath}")
-            prunes.append(relpath)
 
     desired_manifest = _manifest_bytes(next_manifest)
     existing_manifest = manifest_path.read_bytes() if previous is not None else None
@@ -302,6 +393,9 @@ def sync_cursor_skills(
         destination = target / relpath
         destination.unlink()
         _remove_empty_managed_dirs(target, destination.parent)
+
+    for directory in sorted(replacement_dirs, key=lambda item: len(item.parts), reverse=True):
+        _remove_empty_tree(directory)
 
     for relpath, content in writes.items():
         destination = target / relpath
