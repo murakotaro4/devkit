@@ -461,6 +461,8 @@ def test_worktree_integration_contract():
     assert "統合方法は質問しない" in backend_selection
     assert "既定は PR 経由(提出 + CI green 確認 + merge まで)" in backend_selection
     assert "`command -v gh` が通らない場合" in backend_selection
+    assert "origin が `gh` で扱えない場合" in backend_selection
+    assert "`gh repo view` の成否" in backend_selection
     assert "直接統合へ自動フォールバック" in backend_selection
     assert "ゴール化して自律実行でも同じ規則で統合方法(既定は PR 経由(提出 + CI green 確認 + merge まで))を確定して goal 本文へ転記" in backend_selection
     assert "対象 repo の CI 有無と CI 待機上限(既定 30 分)を計画へ記載" in backend_selection

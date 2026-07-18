@@ -148,6 +148,7 @@ def test_interview_rounds_are_present():
     assert "既定は現セッション自動実行" in text
     assert "ユーザーが定期実行・別ターミナル・別 PC・後で実行・白紙コンテキスト実行を明示した場合だけ" in text
     assert "独立レビュー通過後、追加確認なしでこのセッションが実行を開始する" in text
+    assert "gh 不在 / origin なし / origin が gh で扱えない repo は直接統合へ自動フォールバック" in text
 
 
 def test_failure_modes_and_stop_conditions():
