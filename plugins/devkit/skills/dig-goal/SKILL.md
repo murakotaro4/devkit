@@ -160,7 +160,7 @@ codex 経路は Claude 親限定でモデル / effort を固定する: モデル
 - Max は対応 surface の最深推論、Ultra は並列オーケストレーションを表す。この skill では説明にだけ用い、backend 選択肢、CLI の effort、config 値にはしない
 - 並列化の判断はモデル / effort と独立に行い、step 6 の実装委譲の並列化契約に従う
 - `command -v codex` が通らない場合は codex の選択肢を除外し、残りの選択肢(cursor-agent・Claude サブエージェント)を提示する
-- Claude 親では Codex の実装 backend を提示する前に `command -v python3` も確認する。通らない場合は thread_id 抽出に必要な prerequisite 不足としてユーザーへ報告し、Codex の実装 backend だけを除外する。python3 を使わない Codex の計画レビュー / diff レビュー選択肢は残し、黙って別 backend へ fallback しない
+- Claude 親では Codex の実装 backend を提示する前に `command -v uv` も確認する。通らない場合は thread_id 抽出に必要な prerequisite 不足としてユーザーへ報告し、Codex の実装 backend だけを除外する。uv を使わない Codex の計画レビュー / diff レビュー選択肢は残し、黙って別 backend へ fallback しない
 - cursor-agent は --model composer-2.5 を明示する(auto はサードパーティモデルへルーティングされうるため使わない)。Composer の新版が出たら SKILL.md のモデル名を更新する
 - `command -v cursor-agent` が通らない場合は cursor-agent の選択肢を除外する(codex ゲートと同形式。Claude 親・Codex 親の両テーブルに適用)
 
@@ -273,7 +273,7 @@ origin なし repo では fetch / push / PR 経路を省略する。直接統合
 - Claude 親 + codex:
   1. `JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-codex-job.XXXXXX") && echo "JOB_DIR=$JOB_DIR"` でジョブ専用領域を作り、echo された JOB_DIR を親が記録する。
   2. `JOB_DIR=<echo された記録済みのパス> && set -o pipefail && codex -a never exec -C "<worktree>" --sandbox workspace-write -m gpt-5.6-sol -c model_reasoning_effort="medium" --json "<実装指示>" < /dev/null | tee "$JOB_DIR/codex-events.jsonl"` を Bash `run_in_background` で起動する。`tee` により JSONL stdout を TaskOutput へ可視化しながらジョブ専用 event log に保存し、`pipefail` で codex / tee いずれの失敗も検出する。
-  3. 完了自動通知後、記録済みパスを使い `JOB_DIR=<echo された記録済みのパス> && python3 -c 'import json,sys; ids=[event.get("thread_id") for line in open(sys.argv[1], encoding="utf-8") if line.strip() for event in [json.loads(line)] if event.get("type") == "thread.started"]; (len(ids) == 1 and isinstance(ids[0], str) and ids[0]) or sys.exit("expected exactly one non-empty thread.started thread_id"); print(ids[0])' "$JOB_DIR/codex-events.jsonl" > "$JOB_DIR/thread-id.txt" && test -s "$JOB_DIR/thread-id.txt"` を実行する。全 event を保持せず `thread.started` の ID だけを収集し、厳密に 1 件で thread_id が非空の場合だけ保存する。失敗時は resume せず委譲失敗として報告する。
+  3. 完了自動通知後、記録済みパスを使い `JOB_DIR=<echo された記録済みのパス> && uv run --no-project python -c 'import json,sys; ids=[event.get("thread_id") for line in open(sys.argv[1], encoding="utf-8") if line.strip() for event in [json.loads(line)] if event.get("type") == "thread.started"]; (len(ids) == 1 and isinstance(ids[0], str) and ids[0]) or sys.exit("expected exactly one non-empty thread.started thread_id"); print(ids[0])' "$JOB_DIR/codex-events.jsonl" > "$JOB_DIR/thread-id.txt" && test -s "$JOB_DIR/thread-id.txt"` を実行する。全 event を保持せず `thread.started` の ID だけを収集し、厳密に 1 件で thread_id が非空の場合だけ保存する。失敗時は resume せず委譲失敗として報告する。
 - Claude 親 + cursor-agent: `JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-goal-job.XXXXXX") && CHAT_ID="$(cursor-agent create-chat | tr -d '\r\n')" && test -n "$CHAT_ID" && printf '%s\n' "$CHAT_ID" > "$JOB_DIR/chat-id.txt" && echo "JOB_DIR=$JOB_DIR"` で chatId を保存してから `JOB_DIR=<echo された記録済みのパス> && cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model composer-2.5 --workspace "<worktree>" --output-format text "<実装指示>"` を Bash `run_in_background` で起動し、完了自動通知で回収する(echo された JOB_DIR のパスを親が記録し、step 8 の修正ループでは記録済みのパスを使う。シェル変数はツール呼び出し間で失われるため。test -n 失敗 = create-chat 失敗として委譲を中止し親が報告する。Claude 親では出力を TaskOutput で確認するためログリダイレクトは付けない)
 - Claude 親 + Claude サブエージェント: Agent(general-purpose、選択モデル)に同じ指示ブロックを渡す
 - Codex 親: `spawn_agent`(worker) に同じ指示ブロックを渡し、`wait_agent` で回収する。`close_agent` は修正ループ完了まで遅延する
