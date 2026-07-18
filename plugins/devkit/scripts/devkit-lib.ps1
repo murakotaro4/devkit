@@ -494,6 +494,19 @@ function Remove-DevKitLegacyCommandFile([string]$Path) {
   }
 }
 
+function Remove-DevKitV9RetiredSkillDirs([string]$UserHome) {
+  foreach ($skillsRoot in @(
+    (Join-Path $UserHome ".agents\skills"),
+    (Join-Path $UserHome ".codex\skills"),
+    (Join-Path $UserHome ".agent\skills"),
+    (Join-Path $UserHome ".config\opencode\skills")
+  )) {
+    foreach ($retiredName in @("dig", "goal-prompt")) {
+      Remove-DevKitPathOrThrow -Path (Join-Path $skillsRoot $retiredName) -Recurse
+    }
+  }
+}
+
 function Remove-DevKitLegacyScheduledTask {
   if (-not (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue)) {
     return
@@ -527,12 +540,18 @@ function Clear-DevKitMarketplaceHooks([string]$UserHome) {
 function Remove-DevKitLegacyAssets([string]$UserHome, [string]$SourceRoot, [scriptblock]$Logger) {
   $codexDevKit = Join-Path $UserHome ".codex\devkit"
   $markerPath = Join-Path $codexDevKit ".migrated-v6"
+  $v9MarkerPath = Join-Path $codexDevKit ".migrated-v9-dig-goal"
+
+  Ensure-DevKitDir $codexDevKit
+  if (-not (Test-Path -LiteralPath $v9MarkerPath)) {
+    Remove-DevKitV9RetiredSkillDirs -UserHome $UserHome
+    Write-DevKitUtf8NoBom -Path $v9MarkerPath -Content "migrated-v9-dig-goal`n"
+  }
+
   if (Test-Path -LiteralPath $markerPath) {
     Invoke-DevKitLogger $Logger "Legacy migration marker already exists."
     return
   }
-
-  Ensure-DevKitDir $codexDevKit
 
   foreach ($skillsRoot in @(
     (Join-Path $UserHome ".agents\skills"),

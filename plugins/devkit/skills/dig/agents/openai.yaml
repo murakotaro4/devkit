@@ -1,4 +1,0 @@
-interface:
-  display_name: "Dig"
-  short_description: "Deepen requirements and orchestrate implementation"
-  default_prompt: "Use $dig to clarify requirements, plan, delegate, review, and report implementation work."

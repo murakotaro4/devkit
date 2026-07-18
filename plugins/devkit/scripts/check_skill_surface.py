@@ -18,12 +18,11 @@ EXPECTED_SKILLS = {
     "backlog",
     "catch-up",
     "commit-push",
-    "dig",
+    "dig-goal",
     "improve-skill",
     "setup",
     "refactor",
     "memory-review",
-    "goal-prompt",
     "handoff",
 }
 REQUIRED_PATHS = {
@@ -458,7 +457,7 @@ def run_prune_smoke_checks() -> None:
 
     with tempfile.TemporaryDirectory(prefix="devkit-prune-home-") as home:
         home_path = Path(home)
-        legacy_target = PLUGIN_DIR / "skills/dig"
+        legacy_target = PLUGIN_DIR / "skills/dig-goal"
         for root in (
             ".agents/skills",
             ".codex/skills",
@@ -510,7 +509,11 @@ def run_prune_smoke_checks() -> None:
         marker.write_text("migrated-v6\n", encoding="utf-8")
         skills_root = home_path / ".agent/skills"
         skills_root.mkdir(parents=True)
-        (skills_root / "dig").symlink_to(PLUGIN_DIR / "skills/dig", target_is_directory=True)
+        for retired_name in ("dig", "goal-prompt"):
+            retired_skill = skills_root / retired_name
+            retired_skill.mkdir()
+            (retired_skill / "SKILL.md").write_text("retired\n", encoding="utf-8")
+        (skills_root / "custom-keep").mkdir()
 
         env = os.environ.copy()
         env.update({"HOME": home, "DEVKIT_SOURCE_ROOT": str(ROOT)})
@@ -523,8 +526,13 @@ def run_prune_smoke_checks() -> None:
             ]
         )
         run_checked([resolve_bash(), "-lc", script], env=env)
-        if not (skills_root / "dig").is_symlink():
-            raise AssertionError("marker no-op should leave legacy links untouched")
+        for retired_name in ("dig", "goal-prompt"):
+            if (skills_root / retired_name).exists():
+                raise AssertionError(f"retired live skill was not pruned: {retired_name}")
+        if not (skills_root / "custom-keep").is_dir():
+            raise AssertionError("v9 prune removed a user skill directory")
+        if not (home_path / ".codex/devkit/.migrated-v9-dig-goal").is_file():
+            raise AssertionError("v9 dig-goal migration marker was not written")
 
 
 def run_powershell_smoke_checks() -> None:

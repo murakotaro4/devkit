@@ -78,6 +78,134 @@ def test_updater_self_refresh_propagates_prune_failures():
     assert 'throw "PRUNE_FAILED: scheduled task DevKitSkillsDailyUpdate"' in scheduled_task
 
 
+def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
+    shell = (SCRIPTS / "devkit-lib.sh").read_text(encoding="utf-8")
+    powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
+
+    retired_names = ("dig", "goal-" + "prompt")
+    for text in (shell, powershell):
+        assert ".migrated-v9-dig-goal" in text
+        for retired_name in retired_names:
+            assert retired_name in text
+    shell_migration = shell.split("prune_legacy_devkit_assets()", 1)[1]
+    assert shell_migration.index('if [[ ! -f "$v9_marker" ]]') < shell_migration.index(
+        'if [[ -f "$marker" ]]'
+    )
+    powershell_migration = powershell.split("function Remove-DevKitLegacyAssets", 1)[1]
+    assert powershell_migration.index("if (-not (Test-Path -LiteralPath $v9MarkerPath))") < (
+        powershell_migration.index("if (Test-Path -LiteralPath $markerPath)")
+    )
+
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        return
+
+    # One runtime probe covers marker-missing prune/create and marker-present no-op.
+    home = tmp_path / "pwsh-home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    retired_name = "goal-" + "prompt"
+    retired = home / ".codex" / "skills" / retired_name
+    retired.mkdir(parents=True)
+    powershell_path = str(SCRIPTS / "devkit-lib.ps1").replace("'", "''")
+    home_path = str(home).replace("'", "''")
+    root_path = str(ROOT).replace("'", "''")
+    invoke = (
+        f". '{powershell_path}'; "
+        f"Remove-DevKitLegacyAssets -UserHome '{home_path}' -SourceRoot '{root_path}' "
+        "-Logger {}"
+    )
+
+    first = subprocess.run(
+        [pwsh, "-NoProfile", "-Command", invoke],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert not retired.exists()
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
+
+    sentinel = home / ".codex" / "skills" / retired_name / "sentinel"
+    sentinel.parent.mkdir(parents=True)
+    sentinel.write_text("keep\n", encoding="utf-8")
+    second = subprocess.run(
+        [pwsh, "-NoProfile", "-Command", invoke],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert second.returncode == 0, second.stderr + second.stdout
+    assert sentinel.is_file()
+
+
+def test_v9_shell_migration_prunes_once_and_writes_marker(tmp_path):
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    retired_paths = []
+    # These directories intentionally model the retired live-skill surface.
+    for root in (
+        home / ".agents" / "skills",
+        home / ".codex" / "skills",
+        home / ".agent" / "skills",
+        home / ".config" / "opencode" / "skills",
+    ):
+        for name in ("dig", "goal-" + "prompt"):
+            path = root / name
+            path.mkdir(parents=True)
+            (path / "sentinel").write_text("retired\n", encoding="utf-8")
+            retired_paths.append(path)
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
+    assert all(not path.exists() for path in retired_paths)
+
+
+def test_v9_shell_migration_is_noop_when_marker_exists(tmp_path):
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    (marker_dir / ".migrated-v9-dig-goal").write_text(
+        "migrated-v9-dig-goal\n", encoding="utf-8"
+    )
+    sentinel = home / ".codex" / "skills" / "dig" / "sentinel"
+    sentinel.parent.mkdir(parents=True)
+    sentinel.write_text("keep\n", encoding="utf-8")
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert sentinel.is_file()
+
+
 def _probe_symlink_support() -> bool:
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:

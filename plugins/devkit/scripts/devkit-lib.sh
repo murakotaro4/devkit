@@ -380,6 +380,21 @@ devkit_prune_legacy_skill_roots() {
   done
 }
 
+devkit_prune_v9_retired_skill_dirs() {
+  local user_home="$1"
+  local skills_root retired_name
+  for skills_root in \
+    "$user_home/.agents/skills" \
+    "$user_home/.codex/skills" \
+    "$user_home/.agent/skills" \
+    "$user_home/.config/opencode/skills"
+  do
+    for retired_name in dig goal-prompt; do
+      rm -rf -- "$skills_root/$retired_name" || return 1
+    done
+  done
+}
+
 devkit_prune_legacy_command_assets() {
   local user_home="$1"
   local legacy_config_root="$user_home/.config/opencode"
@@ -440,6 +455,13 @@ prune_legacy_devkit_assets() {
   local user_home="${1:-$HOME}"
   local repo_root="${2:-}"
   local marker="$user_home/.codex/devkit/.migrated-v6"
+  local v9_marker="$user_home/.codex/devkit/.migrated-v9-dig-goal"
+
+  ensure_devkit_dir "$(dirname "$v9_marker")" || return 1
+  if [[ ! -f "$v9_marker" ]]; then
+    devkit_prune_v9_retired_skill_dirs "$user_home" || return 1
+    printf 'migrated-v9-dig-goal\n' >"$v9_marker" || return 1
+  fi
 
   if [[ -f "$marker" ]]; then
     return 0
@@ -449,7 +471,6 @@ prune_legacy_devkit_assets() {
     repo_root="$(ensure_devkit_repo_root_cached)"
   fi
 
-  ensure_devkit_dir "$(dirname "$marker")"
   devkit_prune_legacy_skill_roots "$user_home"
   devkit_prune_legacy_command_assets "$user_home"
   devkit_persist_codex_source_root "$user_home" "$repo_root"
