@@ -270,9 +270,13 @@ def test_v9_shell_migration_handles_dangling_symlink_provenance(tmp_path):
     managed_link.parent.mkdir(parents=True)
     managed_target = ROOT / "plugins" / "devkit" / "skills" / "dig"
     assert not managed_target.exists()
-    managed_link.symlink_to(
-        os.path.relpath(managed_target, start=managed_link.parent), target_is_directory=True
-    )
+    try:
+        managed_link_target = os.path.relpath(managed_target, start=managed_link.parent)
+    except ValueError:
+        # Windows runners may place the repo and tmp_path on different drives.
+        # An absolute dangling target still verifies that DevKit-source provenance is pruned.
+        managed_link_target = managed_target
+    managed_link.symlink_to(managed_link_target, target_is_directory=True)
 
     unmanaged_link = home / ".codex" / "skills" / ("goal-" + "prompt")
     unmanaged_link.parent.mkdir(parents=True)
