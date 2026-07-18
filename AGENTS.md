@@ -30,6 +30,8 @@
 - 複数機能・複数ブランチの並行開発は worktree を分離する。単一機能内の並列実装委譲は dig-goal 契約に従い、同一 worktree で write_scope を互いに素にし、節目 commit はパス限定で行う
 - dig-goal の実装系は常に worktree を使う(正本は `plugins/devkit/skills/dig-goal/SKILL.md`)
 - `plugins/devkit/**` に触る作業の開始時と version bump 直前に `git fetch origin` で origin/main との差を確認し、遅れていれば先に取り込む(v7.5.0 の version 衝突・rebase コンフリクトの再発予防)
+- 他セッション由来の worktree・ブランチ・open PR は常に存在しうる進行中の正常な作業として扱う。削除・checkout・rebase・「残骸がある」等の報告の対象にしない。後始末は自セッションが作成した worktree・ブランチ・PR に限り、他 worktree の調査・掃除はユーザーが明示依頼した場合のみ行う
+- origin/main は他 worktree の PR が順に merge されて進む前提で運用する。統合前の fetch + rebase・version 再計算・push reject からのやり直し・rebase 標準解消手順は、この前提での通常運転であり異常として扱わない(標準解消手順の対象外の衝突のみ従来どおり停止・報告)
 
 ### 統合時 rebase 衝突の標準解消手順
 
