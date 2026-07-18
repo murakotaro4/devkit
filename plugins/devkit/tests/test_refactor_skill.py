@@ -1,4 +1,4 @@
-"""refactor スキル(技術的負債棚卸し + dig 引き継ぎ)の契約テスト."""
+"""refactor スキル(技術的負債棚卸し + dig-goal 引き継ぎ)の契約テスト."""
 
 from __future__ import annotations
 
@@ -57,13 +57,13 @@ def test_skill_frontmatter_read_only_contract():
     assert "Edit" not in actual_tools, "read-only 契約に反して Edit が含まれている"
 
 
-def test_dig_handoff_contract():
+def test_dig_goal_handoff_contract():
     text = _skill_text()
-    assert "plugins/devkit/skills/dig/SKILL.md" in text
-    assert "dig の step 2" in text
+    assert "plugins/devkit/skills/dig-goal/SKILL.md" in text
+    assert "dig-goal の step 2" in text
     assert "計画草案" in text
     assert "Skill ツール" in text
-    assert "$dig" in text
+    assert "$dig-goal" in text
     assert "実装・backend 選択・レビュー" in text
 
 
@@ -101,4 +101,4 @@ def test_agents_openai_yaml_exists():
     text = OPENAI_YAML_PATH.read_text(encoding="utf-8")
     assert 'display_name: "Refactor"' in text
     assert "$refactor" in text
-    assert "$dig" in text
+    assert "$dig-goal" in text

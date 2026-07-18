@@ -10,25 +10,23 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DISTRIBUTED_SKILLS = (
-    "dig",
+    "dig-goal",
     "improve-skill",
     "setup",
     "refactor",
     "memory-review",
-    "goal-prompt",
     "handoff",
     "backlog",
     "catch-up",
     "commit-push",
 )
-DELEGATING_SKILLS = ("dig", "improve-skill", "memory-review", "goal-prompt", "catch-up")
+DELEGATING_SKILLS = ("dig-goal", "improve-skill", "memory-review", "catch-up")
 PLUGIN_DESCRIPTION_SURFACES = (
-    "/dig",
+    "/dig-goal",
     "skill 改善",
     "setup",
     "refactor",
     "memory-review",
-    "goal-prompt",
     "handoff",
     "/catch-up",
     "commit-push",
@@ -379,6 +377,12 @@ def test_delegating_skills_have_progress_visibility_contract():
             f"{skill_name} の SKILL.md が AGENTS.md の進捗可視化契約を参照していない"
         )
 
+        if skill_name == "dig-goal":
+            frontmatter = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+            assert frontmatter
+            assert "allowed-tools" not in frontmatter.group(1)
+            continue
+
         allowed_tools_match = re.search(r'allowed-tools:\s*\[(.*?)\]', text)
         assert allowed_tools_match, f"{skill_name} の SKILL.md に allowed-tools がない"
         allowed_tools = re.findall(r'"([^"]+)"', allowed_tools_match.group(1))
@@ -406,9 +410,8 @@ def test_codex_model_pinned_to_current_generation():
 def test_codex_model_and_effort_contract_stays_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
-        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
-        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
-            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
+            "plugins/devkit/skills/dig-goal/SKILL.md"
         ),
     }
     for doc_name, text in documents.items():
@@ -427,28 +430,26 @@ def test_codex_model_and_effort_contract_stays_in_sync():
         )
 
 
-def test_dig_goal_prompt_switching_terms_stay_in_sync():
+def test_dig_goal_execution_mode_terms_stay_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
         "README.md": _read("README.md"),
-        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
-        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
-            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
+            "plugins/devkit/skills/dig-goal/SKILL.md"
         ),
     }
     for doc_name, text in documents.items():
         assert "自律度" in text, f"{doc_name} に使い分け軸(自律度)がない"
-        assert "ゴール化" in text, f"{doc_name} に dig 連携語(ゴール化)がない"
-        assert "起動プロンプト" in text, f"{doc_name} に goal-prompt 境界語(起動プロンプト)がない"
+        assert "現セッション自律実行" in text, f"{doc_name} に自律実行形態がない"
+        assert "起動プロンプト提示" in text, f"{doc_name} に例外形態がない"
 
 
 def test_pr_merge_completion_contract_stays_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
         "README.md": _read("README.md"),
-        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
-        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
-            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
+            "plugins/devkit/skills/dig-goal/SKILL.md"
         ),
     }
     retired_contracts = (
@@ -471,40 +472,32 @@ def test_pr_merge_completion_contract_stays_in_sync():
         for retired in retired_contracts:
             assert retired not in text, f"{doc_name} に旧 PR 統合契約が残っている: {retired}"
 
-    for doc_name in (
-        "plugins/devkit/skills/dig/SKILL.md",
-        "plugins/devkit/skills/goal-prompt/SKILL.md",
-    ):
+    for doc_name in ("plugins/devkit/skills/dig-goal/SKILL.md",):
         assert "直接統合へ自動フォールバック" in documents[doc_name], (
             f"{doc_name} に直接統合への自動フォールバック契約がない"
         )
     assert "別の統合方法へ黙って切り替えない" in documents[
-        "plugins/devkit/skills/dig/SKILL.md"
+        "plugins/devkit/skills/dig-goal/SKILL.md"
     ]
 
 
-def test_goal_prompt_auto_execution_contract_stays_in_sync():
+def test_dig_goal_auto_execution_contract_stays_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
         "README.md": _read("README.md"),
-        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
-        "plugins/devkit/skills/goal-prompt/SKILL.md": _read(
-            "plugins/devkit/skills/goal-prompt/SKILL.md"
+        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
+            "plugins/devkit/skills/dig-goal/SKILL.md"
         ),
     }
     for doc_name, text in documents.items():
         assert any(
-            all(token in line for token in ("既定", "同一セッション", "自律実行", "完遂"))
+            all(token in line for token in ("現セッション自律実行", "同一セッション", "完遂"))
             for line in text.splitlines()
-        ), (
-            f"{doc_name} に既定の同一セッション自律実行契約がない"
-        )
+        ), f"{doc_name} に同一行の現セッション自律実行契約がない"
         assert any(
             all(token in line for token in ("起動プロンプト提示", "例外形態"))
             for line in text.splitlines()
-        ), (
-            f"{doc_name} に起動プロンプト提示を例外形態へ限定する契約がない"
-        )
+        ), f"{doc_name} に同一行の例外形態契約がない"
         for retired in (
             "実行はユーザーの 1 アクションに分離",
             "作成側はゴールファイルを保存しないのが既定",
@@ -524,7 +517,7 @@ def test_rebase_conflict_resolution_contract_stays_in_sync():
     for keyword in ("追加のみ", "和集合", "削除", "停止", "git rebase --abort", "verify-full", "片側"):
         assert keyword in contract, f"rebase 衝突の標準解消手順に契約キーワードがない: {keyword}"
 
-    dig = _read("plugins/devkit/skills/dig/SKILL.md")
-    integration = dig.split("### 統合(step 9、終了条件達成後)", 1)[1].split("\n### ", 1)[0]
+    dig_goal = _read("plugins/devkit/skills/dig-goal/SKILL.md")
+    integration = dig_goal.split("### 統合(step 9、終了条件達成後)", 1)[1].split("\n### ", 1)[0]
     assert "標準解消手順" in integration, "dig の統合手順が標準解消手順を参照していない"
     assert "git rebase --abort" in integration, "dig の統合手順に未知の衝突時の abort fallback がない"

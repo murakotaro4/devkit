@@ -12,7 +12,16 @@ from tempfile import TemporaryDirectory
 
 ROOT = Path.cwd()
 LEGACY_PATTERNS = [
-    r"/devkit:dig\b",
+    r"/dig(?!-goal)\b",
+    r"/devkit:dig(?!-goal)\b",
+    r"\$dig(?!-goal)\b",
+    r"plugins/devkit/skills/dig/",
+    r"/goal-prompt\b",
+    r"devkit:goal-prompt\b",
+    r"\$goal-prompt\b",
+    r"skills/goal-prompt",
+    r"devkit-dig-wt",
+    r"devkit-dig-job",
     r"/prompts:devkit-dig\b",
     r"/devkit:codex(?!-)\b",
     r"/devkit:agent-orch-(core|openai|anthropic|google)\b",
@@ -129,7 +138,7 @@ def scan_text_file(abs_path: Path, rel_path: str) -> list[dict[str, object]]:
                     "path": rel_path,
                     "line": index,
                     "token": match.group(0),
-                    "replacement": "Use the new /dig skill (deep-dive + implementation delegation)",
+                    "replacement": "Use the new /dig-goal skill (deep-dive + execution orchestration)",
                 }
             )
 

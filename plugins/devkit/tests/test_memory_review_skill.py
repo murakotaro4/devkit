@@ -120,11 +120,11 @@ def test_audit_flow_contains_required_taxonomies_and_output_format():
     assert actual_sections == expected_sections
 
 
-def test_dig_handoff_contract():
+def test_dig_goal_handoff_contract():
     text = _skill_text()
-    assert "plugins/devkit/skills/dig/SKILL.md" in text
-    assert "dig step 2 計画草案" in text
-    assert "$dig" in text
+    assert "plugins/devkit/skills/dig-goal/SKILL.md" in text
+    assert "dig-goal step 2 計画草案" in text
+    assert "$dig-goal" in text
     assert "大きい変更" in text
     assert "構成変更を伴う大きい修正" in text
 
@@ -156,4 +156,4 @@ def test_agents_openai_yaml_exists():
     text = OPENAI_YAML_PATH.read_text(encoding="utf-8")
     assert 'display_name: "Memory Review"' in text
     assert "$memory-review" in text
-    assert "$dig" in text
+    assert "$dig-goal" in text

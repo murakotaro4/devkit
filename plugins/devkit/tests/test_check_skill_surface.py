@@ -13,12 +13,11 @@ def test_expected_skill_surface_matches_repository():
     actual = {path.name for path in skills_dir.iterdir() if path.is_dir()}
 
     assert actual == check_skill_surface.EXPECTED_SKILLS == {
-        "dig",
+        "dig-goal",
         "improve-skill",
         "setup",
         "refactor",
         "memory-review",
-        "goal-prompt",
         "handoff",
         "backlog",
         "catch-up",

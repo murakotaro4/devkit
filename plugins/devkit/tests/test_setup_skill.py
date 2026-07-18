@@ -92,8 +92,8 @@ def test_skill_contract_mentions_environment_prerequisites():
     for cmd in ("claude", "codex", "cursor-agent", "node", "python3"):
         assert cmd in text, f"環境前提チェックに {cmd} がない"
     assert "tmux" not in text
-    assert "goal-prompt の `claude --bg` 起動プロンプト候補" in text
-    assert "goal-prompt の独立レビュー候補" in text
+    assert "dig-goal の起動プロンプト提示形態における `claude --bg` 候補" in text
+    assert "自律実行用ゴール本文の独立レビュー候補" in text
     assert "インストール自体はこのスキルでは行わない" in text
     assert "`python3` が `MISSING` の場合" in text
     assert "この時点で停止し、step 3 以降は実行しない" in text
@@ -160,7 +160,7 @@ def test_rules_template_contract():
 
     assert "このセクションは devkit の /setup により自動管理される" in text
     assert "手動編集は上書きされる" in text
-    assert "`/dig`" in text
+    assert "`/dig-goal`" in text
     assert "Conventional Commits" in text
     assert "`summary` は日本語" in text
     assert "独立した review" in text
@@ -175,7 +175,7 @@ def test_sync_rules_script_is_idempotent_and_preserves_user_content(tmp_path):
     _git(repo, "init")
     (repo / "AGENTS.md").write_text("# Project Rules\n\nKeep this line.\n", encoding="utf-8")
     template = tmp_path / "agents-rules.md"
-    template.write_text("Managed rules v1\n\n- Use /dig.\n", encoding="utf-8")
+    template.write_text("Managed rules v1\n\n- Use /dig-goal.\n", encoding="utf-8")
 
     first = _run_sync_json(repo, template)
 

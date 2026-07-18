@@ -78,6 +78,258 @@ def test_updater_self_refresh_propagates_prune_failures():
     assert 'throw "PRUNE_FAILED: scheduled task DevKitSkillsDailyUpdate"' in scheduled_task
 
 
+def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
+    shell = (SCRIPTS / "devkit-lib.sh").read_text(encoding="utf-8")
+    powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
+
+    retired_names = ("dig", "goal-" + "prompt")
+    for text in (shell, powershell):
+        assert ".migrated-v9-dig-goal" in text
+        for retired_name in retired_names:
+            assert retired_name in text
+    shell_migration = shell.split("prune_legacy_devkit_assets()", 1)[1]
+    assert shell_migration.index('if [[ ! -f "$v9_marker" ]]') < shell_migration.index(
+        'if [[ -f "$marker" ]]'
+    )
+    powershell_migration = powershell.split("function Remove-DevKitLegacyAssets", 1)[1]
+    assert powershell_migration.index("if (-not (Test-Path -LiteralPath $v9MarkerPath))") < (
+        powershell_migration.index("if (Test-Path -LiteralPath $markerPath)")
+    )
+    shell_provenance = shell.split("devkit_v9_retired_skill_entry_is_managed()", 1)[1].split(
+        "devkit_prune_v9_retired_skill_dirs()", 1
+    )[0]
+    assert "devkit_path_is_devkit_source" in shell_provenance
+    assert "devkit リポジトリの `AGENTS.md`" in shell_provenance
+    powershell_provenance = powershell.split(
+        "function Test-DevKitV9RetiredSkillEntryManaged", 1
+    )[1].split("function Remove-DevKitV9RetiredSkillDirs", 1)[0]
+    assert "Test-DevKitPathLooksManaged" in powershell_provenance
+    assert "devkit リポジトリの `AGENTS.md`" in powershell_provenance
+    powershell_reparse = powershell.split("function Test-DevKitReparsePoint", 1)[1].split(
+        "function Test-DevKitFileContentEqual", 1
+    )[0]
+    assert "Test-DevKitPathPresent" in powershell_reparse
+    assert "Test-Path" not in powershell_reparse
+
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        return
+
+    # One runtime probe covers marker-missing prune/create and marker-present no-op.
+    home = tmp_path / "pwsh-home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    retired_name = "goal-" + "prompt"
+    retired = home / ".codex" / "skills" / retired_name
+    retired.mkdir(parents=True)
+    (retired / "SKILL.md").write_text(
+        f'---\nname: "{retired_name}"\n---\n正本は devkit リポジトリの `AGENTS.md`。\n',
+        encoding="utf-8",
+    )
+    user_skill = home / ".codex" / "skills" / "dig"
+    user_skill.mkdir(parents=True)
+    (user_skill / "SKILL.md").write_text(
+        '---\nname: "dig"\ndescription: devkit リポジトリの `AGENTS.md` を参考\n---\n'
+        "ユーザー所有スキル。\n",
+        encoding="utf-8",
+    )
+    duplicate_name_user_skill = home / ".agent" / "skills" / "dig"
+    duplicate_name_user_skill.mkdir(parents=True)
+    (duplicate_name_user_skill / "SKILL.md").write_text(
+        '---\nname: "dig"\nname: [custom]\n---\n'
+        "本文で devkit リポジトリの `AGENTS.md` を参照。\n",
+        encoding="utf-8",
+    )
+    powershell_path = str(SCRIPTS / "devkit-lib.ps1").replace("'", "''")
+    home_path = str(home).replace("'", "''")
+    root_path = str(ROOT).replace("'", "''")
+    invoke = (
+        f". '{powershell_path}'; "
+        f"Remove-DevKitLegacyAssets -UserHome '{home_path}' -SourceRoot '{root_path}' "
+        "-Logger {}"
+    )
+
+    first = subprocess.run(
+        [pwsh, "-NoProfile", "-Command", invoke],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert not retired.exists()
+    assert (user_skill / "SKILL.md").is_file()
+    assert (duplicate_name_user_skill / "SKILL.md").is_file()
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
+
+    sentinel = home / ".codex" / "skills" / retired_name / "sentinel"
+    sentinel.parent.mkdir(parents=True)
+    sentinel.write_text("keep\n", encoding="utf-8")
+    second = subprocess.run(
+        [pwsh, "-NoProfile", "-Command", invoke],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert second.returncode == 0, second.stderr + second.stdout
+    assert sentinel.is_file()
+
+
+def test_v9_shell_migration_prunes_once_and_writes_marker(tmp_path):
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    retired_paths = []
+    # These directories intentionally model the retired live-skill surface.
+    for root in (
+        home / ".agents" / "skills",
+        home / ".codex" / "skills",
+        home / ".agent" / "skills",
+        home / ".config" / "opencode" / "skills",
+    ):
+        for name in ("dig", "goal-" + "prompt"):
+            path = root / name
+            path.mkdir(parents=True)
+            (path / "SKILL.md").write_text(
+                f'---\nname: "{name}"\n---\n正本は devkit リポジトリの `AGENTS.md`。\n',
+                encoding="utf-8",
+            )
+            retired_paths.append(path)
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
+    assert all(not path.exists() for path in retired_paths)
+
+
+def test_v9_shell_migration_preserves_unmanaged_same_name_skills(tmp_path):
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    user_skill_files = []
+    skills_root = home / ".codex" / "skills"
+    for name in ("dig", "goal-" + "prompt"):
+        skill_file = skills_root / name / "SKILL.md"
+        skill_file.parent.mkdir(parents=True)
+        if name == "dig":
+            content = (
+                '---\nname: "dig"\n'
+                'description: devkit リポジトリの `AGENTS.md` を参考\n---\n'
+                "ユーザー所有スキル。\n"
+            )
+        else:
+            content = (
+                f'---\nname: "{name}"\nname: [custom]\n---\n'
+                "本文で devkit リポジトリの `AGENTS.md` を参照。\n"
+            )
+        skill_file.write_text(content, encoding="utf-8")
+        user_skill_files.append(skill_file)
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
+    assert all(skill_file.is_file() for skill_file in user_skill_files)
+
+
+def test_v9_shell_migration_handles_dangling_symlink_provenance(tmp_path):
+    if not _probe_symlink_support():
+        pytest.skip("symlinks are unavailable")
+
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+
+    managed_link = home / ".agents" / "skills" / "dig"
+    managed_link.parent.mkdir(parents=True)
+    managed_target = ROOT / "plugins" / "devkit" / "skills" / "dig"
+    assert not managed_target.exists()
+    try:
+        managed_link_target = os.path.relpath(managed_target, start=managed_link.parent)
+    except ValueError:
+        # Windows runners may place the repo and tmp_path on different drives.
+        # An absolute dangling target still verifies that DevKit-source provenance is pruned.
+        managed_link_target = managed_target
+    managed_link.symlink_to(managed_link_target, target_is_directory=True)
+
+    unmanaged_link = home / ".codex" / "skills" / ("goal-" + "prompt")
+    unmanaged_link.parent.mkdir(parents=True)
+    unmanaged_target = tmp_path / "unrelated-user-skills" / ("goal-" + "prompt")
+    assert not unmanaged_target.exists()
+    unmanaged_link.symlink_to(unmanaged_target, target_is_directory=True)
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not managed_link.is_symlink()
+    assert unmanaged_link.is_symlink()
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
+
+
+def test_v9_shell_migration_is_noop_when_marker_exists(tmp_path):
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    (marker_dir / ".migrated-v9-dig-goal").write_text(
+        "migrated-v9-dig-goal\n", encoding="utf-8"
+    )
+    sentinel = home / ".codex" / "skills" / "dig" / "sentinel"
+    sentinel.parent.mkdir(parents=True)
+    sentinel.write_text("keep\n", encoding="utf-8")
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert sentinel.is_file()
+
+
 def _probe_symlink_support() -> bool:
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
