@@ -1378,13 +1378,27 @@ function Update-DevKitCodexPlugin {
   }
 }
 
-function Sync-DevKitCursorSkills([string]$RepoRoot) {
+function Remove-DevKitLegacyCursorSync([string]$RepoRoot) {
   Write-Host ""
-  Write-Host "=== [Cursor Skills] ==="
+  Write-Host "=== [Cursor Legacy Sync Migration] ==="
 
   $cursorRoot = Join-Path $env:USERPROFILE ".cursor"
   if (-not (Test-Path -LiteralPath $cursorRoot -PathType Container)) {
     Write-Host "SKIPPED: Cursor user directory not found"
+    return
+  }
+  $manifestPath = Join-Path $cursorRoot ".devkit-sync-manifest.json"
+  try {
+    $manifestEntry = Get-ChildItem -LiteralPath $cursorRoot -Force -ErrorAction Stop |
+      Where-Object { $_.Name -eq ".devkit-sync-manifest.json" } |
+      Select-Object -First 1
+  } catch {
+    Write-Host "FAILED: Legacy Cursor sync manifest inspection"
+    Add-ResultError ("Cursor legacy sync manifest inspection failed: {0}" -f $_.Exception.Message)
+    return
+  }
+  if (-not $manifestEntry) {
+    Write-Host "SKIPPED: Legacy Cursor sync manifest not found"
     return
   }
 
@@ -1422,27 +1436,26 @@ function Sync-DevKitCursorSkills([string]$RepoRoot) {
   }
 
   if (-not $pythonCommand) {
-    Add-ResultWarning "Cursor skills: Python 3.10 or newer not available; sync skipped."
+    Add-ResultWarning "Cursor legacy sync: Python 3.10 or newer not available; prune skipped."
     Write-Host "SKIPPED: Python 3.10 or newer not found"
     return
   }
 
-  $syncScript = Join-Path $RepoRoot "plugins/devkit/skills/setup/scripts/sync_cursor_skills.py"
-  $pluginRoot = Join-Path $RepoRoot "plugins/devkit"
+  $pruneScript = Join-Path $RepoRoot "plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py"
   try {
-    $syncOutput = & $pythonCommand @pythonPrefix $syncScript --source $pluginRoot --target $cursorRoot --format json 2>&1
+    $pruneOutput = & $pythonCommand @pythonPrefix $pruneScript --target $cursorRoot --format json 2>&1
   } catch {
-    Write-Host "FAILED: Cursor skills sync"
-    Add-ResultError ("Cursor skills sync failed: {0}" -f $_.Exception.Message)
+    Write-Host "FAILED: Legacy Cursor sync prune"
+    Add-ResultError ("Cursor legacy sync prune failed: {0}" -f $_.Exception.Message)
     return
   }
   if ($LASTEXITCODE -ne 0) {
-    $detail = ($syncOutput -join "`n").Trim()
-    Write-Host "FAILED: Cursor skills sync"
-    Add-ResultError ("Cursor skills sync failed: {0}" -f $detail)
+    $detail = ($pruneOutput -join "`n").Trim()
+    Write-Host "FAILED: Legacy Cursor sync prune"
+    Add-ResultError ("Cursor legacy sync prune failed: {0}" -f $detail)
     return
   }
-  $syncOutput | ForEach-Object { Write-Host $_ }
+  $pruneOutput | ForEach-Object { Write-Host $_ }
 }
 
 
@@ -1541,7 +1554,7 @@ function Section-DevKit {
     $repoRoot = Get-DevKitRepoRoot -UserHome $env:USERPROFILE -Logger $logger
     $managed = Install-DevKitManagedFiles -RepoRoot $repoRoot -UserHome $env:USERPROFILE
     Remove-DevKitLegacyAssets -UserHome $env:USERPROFILE -SourceRoot $repoRoot -Logger $logger
-    Sync-DevKitCursorSkills -RepoRoot $repoRoot
+    Remove-DevKitLegacyCursorSync -RepoRoot $repoRoot
 
     . (Join-Path $managed.CodexBin "devkit-codex-config.ps1")
     $configResult = Install-DevKitCodexConfig -UserHome $env:USERPROFILE -OsName "windows"

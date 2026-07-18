@@ -937,41 +937,44 @@ section_prune_legacy_assets() {
     fi
 }
 
-section_cursor_skills() {
+section_prune_cursor_sync() {
     echo ""
-    echo "=== [Cursor Skills] ==="
+    echo "=== [Cursor Legacy Sync Migration] ==="
 
     if [[ ! -d "$HOME/.cursor" ]]; then
         echo "SKIP Cursor user directory is not available"
         return 0
     fi
+    if [[ ! -e "$HOME/.cursor/.devkit-sync-manifest.json" && ! -L "$HOME/.cursor/.devkit-sync-manifest.json" ]]; then
+        echo "SKIP legacy Cursor sync manifest is not available"
+        return 0
+    fi
     if ! command -v python3 &>/dev/null; then
-        echo "WARN python3 is not available; skipping Cursor skills sync"
-        WARNINGS+=("Cursor skills: python3 not available; sync skipped")
+        echo "WARN python3 is not available; skipping legacy Cursor sync prune"
+        WARNINGS+=("Cursor legacy sync: python3 not available; prune skipped")
         return 0
     fi
     if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
-        echo "WARN Python 3.10 or newer is not available; skipping Cursor skills sync"
-        WARNINGS+=("Cursor skills: Python 3.10 or newer not available; sync skipped")
+        echo "WARN Python 3.10 or newer is not available; skipping legacy Cursor sync prune"
+        WARNINGS+=("Cursor legacy sync: Python 3.10 or newer not available; prune skipped")
         return 0
     fi
 
-    local repo_root sync_output
+    local repo_root prune_output
     if ! repo_root="$(ensure_devkit_repo_root_cached)"; then
-        ERRORS+=("Cursor skills: DevKit checkout unavailable")
+        ERRORS+=("Cursor legacy sync: DevKit checkout unavailable")
         return 1
     fi
 
-    if ! sync_output="$(python3 "$repo_root/plugins/devkit/skills/setup/scripts/sync_cursor_skills.py" \
-        --source "$repo_root/plugins/devkit" \
+    if ! prune_output="$(python3 "$repo_root/plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py" \
         --target "$HOME/.cursor" \
         --format json)"; then
-        echo "FAILED Cursor skills sync"
-        ERRORS+=("Cursor skills: sync failed")
+        echo "FAILED legacy Cursor sync prune"
+        ERRORS+=("Cursor legacy sync: prune failed")
         return 1
     fi
 
-    echo "$sync_output"
+    echo "$prune_output"
 }
 
 main() {
@@ -1000,7 +1003,7 @@ main() {
 
     if [[ "$CLI_ONLY" != true ]]; then
         section_prune_legacy_assets
-        section_cursor_skills
+        section_prune_cursor_sync
         section_codex_plugin
         section_claude_plugin
     fi

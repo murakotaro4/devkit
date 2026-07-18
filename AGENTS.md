@@ -134,7 +134,7 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 - `plugins/devkit/scripts/`: setup / update 系スクリプト
 - `plugins/devkit/skills/dig-goal/SKILL.md`: 深掘り・計画・実行オーケストレーション・自律実行 workflow の正本
 - `plugins/devkit/skills/improve-skill/SKILL.md`: skill 改善 workflow の正本
-- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / uv)・thought-db 接続同期・updater 同期・Cursor skills 同期・旧 updater 名の残骸 prune・statusline 適用・Windows Terminal フォント適用 workflow の正本
+- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / uv)・thought-db 接続同期・updater 同期・旧 updater 名の残骸 prune・statusline 適用・Windows Terminal フォント適用 workflow の正本
 - `plugins/devkit/skills/refactor/SKILL.md`: 負債棚卸し・優先順位付け・計画作成 workflow の正本
 - `plugins/devkit/skills/memory-review/SKILL.md`: AI メモリ棚卸し・前提監査 workflow の正本
 - `plugins/devkit/skills/handoff/SKILL.md`: セッション引継ぎドキュメント書き出し workflow の正本
