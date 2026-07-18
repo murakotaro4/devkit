@@ -1046,7 +1046,7 @@ def test_update_ccx_ps1_dangling_cursor_manifest_symlink_is_not_skipped(tmp_path
             "-NoProfile",
             "-File",
             str(SCRIPTS / "update-ccx.ps1"),
-            "-DevKitOnly",
+            "--devkit-only",
         ],
         check=False,
         capture_output=True,
