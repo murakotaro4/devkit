@@ -1323,8 +1323,8 @@ function Test-DevKitCodexPluginEnabled {
   return $false
 }
 
-function Invoke-DevKitCodexCommand([string[]]$Arguments, [string]$FailureMessage) {
-  $result = Invoke-Tool -Command "codex" -Arguments $Arguments -CaptureOutput
+function Invoke-DevKitCliCommand([string]$Command, [string[]]$Arguments, [string]$FailureMessage) {
+  $result = Invoke-Tool -Command $Command -Arguments $Arguments -CaptureOutput
   if ($result.ExitCode -eq 0) {
     return $true
   }
@@ -1352,14 +1352,14 @@ function Update-DevKitCodexPlugin {
   if (-not (Test-DevKitCodexMarketplaceExpected -State $state)) {
     if ($state.Exists) {
       Write-Host "Re-registering Codex plugin marketplace murakotaro4..."
-      if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "marketplace", "remove", "murakotaro4") -FailureMessage "Codex plugin marketplace remove failed")) {
+      if (-not (Invoke-DevKitCliCommand -Command "codex" -Arguments @("plugin", "marketplace", "remove", "murakotaro4") -FailureMessage "Codex plugin marketplace remove failed")) {
         return
       }
     } else {
       Write-Host "Registering Codex plugin marketplace murakotaro4..."
     }
 
-    if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "marketplace", "add", "murakotaro4/devkit") -FailureMessage "Codex plugin marketplace add failed")) {
+    if (-not (Invoke-DevKitCliCommand -Command "codex" -Arguments @("plugin", "marketplace", "add", "murakotaro4/devkit") -FailureMessage "Codex plugin marketplace add failed")) {
       return
     }
   } else {
@@ -1367,13 +1367,13 @@ function Update-DevKitCodexPlugin {
   }
 
   Write-Host "Upgrading Codex plugin marketplace murakotaro4..."
-  if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "marketplace", "upgrade", "murakotaro4") -FailureMessage "Codex plugin marketplace upgrade failed")) {
+  if (-not (Invoke-DevKitCliCommand -Command "codex" -Arguments @("plugin", "marketplace", "upgrade", "murakotaro4") -FailureMessage "Codex plugin marketplace upgrade failed")) {
     return
   }
   Write-Host "OK: Codex plugin marketplace upgraded"
 
   Write-Host "Installing devkit plugin for Codex..."
-  if (-not (Invoke-DevKitCodexCommand -Arguments @("plugin", "add", "devkit@murakotaro4") -FailureMessage "Codex plugin add failed")) {
+  if (-not (Invoke-DevKitCliCommand -Command "codex" -Arguments @("plugin", "add", "devkit@murakotaro4") -FailureMessage "Codex plugin add failed")) {
     return
   }
 }
@@ -1445,6 +1445,81 @@ function Sync-DevKitCursorSkills([string]$RepoRoot) {
   $syncOutput | ForEach-Object { Write-Host $_ }
 }
 
+
+function Update-DevKitClaudePlugin {
+  Write-Host ""
+  Write-Host "=== [Claude Plugin] ==="
+
+  if (-not (Test-CommandAvailable "claude")) {
+    Write-Host "SKIPPED: Claude Code not found"
+    return
+  }
+
+  $marketplaceResult = Invoke-Tool -Command "claude" -Arguments @("plugin", "marketplace", "list", "--json") -CaptureOutput
+  if ($marketplaceResult.ExitCode -ne 0) {
+    Add-ResultError ("Claude plugin marketplace list failed (exit code {0})" -f $marketplaceResult.ExitCode)
+    return
+  }
+
+  $marketplaceOutput = ($marketplaceResult.Output -join "`n").Trim()
+  $marketplaces = Convert-DevKitJsonFromToolOutput -Output $marketplaceResult.Output
+  if ($null -eq $marketplaces -and $marketplaceOutput -ne "[]") {
+    Add-ResultError "Claude plugin marketplace list JSON parse failed"
+    return
+  }
+
+  $marketplaceRegistered = $false
+  foreach ($marketplace in @($marketplaces)) {
+    if ($null -ne $marketplace -and [string]$marketplace.name -eq "murakotaro4") {
+      $marketplaceRegistered = $true
+      break
+    }
+  }
+
+  if ($marketplaceRegistered) {
+    if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "update", "murakotaro4") -FailureMessage "Claude plugin marketplace update failed")) {
+      return
+    }
+  } else {
+    if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "add", "murakotaro4/devkit") -FailureMessage "Claude plugin marketplace add failed")) {
+      return
+    }
+  }
+
+  $pluginResult = Invoke-Tool -Command "claude" -Arguments @("plugin", "list", "--json") -CaptureOutput
+  if ($pluginResult.ExitCode -ne 0) {
+    Add-ResultError ("Claude plugin list failed (exit code {0})" -f $pluginResult.ExitCode)
+    return
+  }
+
+  $pluginOutput = ($pluginResult.Output -join "`n").Trim()
+  $plugins = Convert-DevKitJsonFromToolOutput -Output $pluginResult.Output
+  if ($null -eq $plugins -and $pluginOutput -ne "[]") {
+    Add-ResultError "Claude plugin list JSON parse failed"
+    return
+  }
+
+  $pluginInstalled = $false
+  foreach ($plugin in @($plugins)) {
+    if ($null -ne $plugin -and [string]$plugin.id -eq "devkit@murakotaro4" -and [string]$plugin.scope -eq "user") {
+      $pluginInstalled = $true
+      break
+    }
+  }
+
+  if ($pluginInstalled) {
+    if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "update", "--scope", "user", "devkit@murakotaro4") -FailureMessage "Claude DevKit plugin update failed")) {
+      return
+    }
+  } else {
+    if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "install", "--scope", "user", "devkit@murakotaro4") -FailureMessage "Claude DevKit plugin install failed")) {
+      return
+    }
+  }
+
+  Write-Host "NOTE: Running Claude Code sessions need /reload-plugins (or restart) to apply the updated plugin."
+}
+
 function Section-DevKit {
   Write-Host ""
   Write-Host "=== [DevKit] ==="
@@ -1476,6 +1551,7 @@ function Section-DevKit {
   }
 
   Update-DevKitCodexPlugin
+  Update-DevKitClaudePlugin
 }
 
 function Parse-CliArgs {
@@ -1518,7 +1594,7 @@ function Show-Usage {
   Write-Host "  update-ccx.cmd                       # update tools and DevKit"
   Write-Host "  update-ccx.cmd --version             # show current versions"
   Write-Host "  update-ccx.cmd --cli-only            # update Claude/Codex only"
-  Write-Host "  update-ccx.cmd --devkit-only         # refresh DevKit managed files and Codex plugin only"
+  Write-Host "  update-ccx.cmd --devkit-only         # refresh DevKit managed files and Claude/Codex plugins only"
 }
 
 function Main {

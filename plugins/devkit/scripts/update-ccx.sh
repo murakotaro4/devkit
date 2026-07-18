@@ -2,11 +2,11 @@
 #
 # update-ccx.sh - DevKit updater.
 #
-# Updates Claude Code / Codex CLI and keeps the DevKit Codex plugin registered
-# through the Codex plugin marketplace.
+# Updates Claude Code / Codex CLI and keeps the DevKit Claude/Codex plugins
+# current through their plugin marketplaces.
 #
 # Usage:
-#   update-ccx.sh              # update CLIs and DevKit plugin registration
+#   update-ccx.sh              # update CLIs and DevKit plugin registrations
 #   update-ccx.sh --version    # show current versions
 #
 
@@ -211,10 +211,10 @@ show_versions() {
 show_usage() {
     cat <<'EOF'
 Usage:
-  update-ccx.sh                       # update tools and DevKit plugin registration
+  update-ccx.sh                       # update tools and DevKit plugin registrations
   update-ccx.sh --version             # show current versions
   update-ccx.sh --cli-only            # update Claude/Codex CLIs only
-  update-ccx.sh --devkit-only         # update DevKit managed files and Codex plugin registration only
+  update-ccx.sh --devkit-only         # update DevKit managed files and Claude/Codex plugins only
 EOF
 }
 
@@ -607,7 +607,7 @@ codex_marketplace_state() {
     fi
 }
 
-run_codex_plugin_command() {
+run_plugin_command() {
     local description="$1"
     shift
 
@@ -621,6 +621,87 @@ run_codex_plugin_command() {
     echo "ERROR"
     ERRORS+=("$description failed (exit code $exit_code)")
     return 1
+}
+
+claude_marketplace_registered() {
+    local output
+    if ! output="$(claude plugin marketplace list --json </dev/null 2>&1)"; then
+        return 1
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        local parsed_state
+        if parsed_state="$(printf '%s\n' "$output" | python3 -c '
+import json
+import sys
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(2)
+
+if not isinstance(data, list):
+    sys.exit(2)
+print("registered" if any(isinstance(item, dict) and item.get("name") == "murakotaro4" for item in data) else "missing")
+')"; then
+            printf '%s\n' "$parsed_state"
+            return 0
+        else
+            local parse_status=$?
+            if [[ $parse_status -eq 2 ]]; then
+                return 2
+            fi
+        fi
+    fi
+
+    if grep -Eq '"name"[[:space:]]*:[[:space:]]*"murakotaro4"' <<<"$output"; then
+        echo "registered"
+    else
+        echo "missing"
+    fi
+}
+
+claude_plugin_devkit_state() {
+    local output
+    if ! output="$(claude plugin list --json </dev/null 2>&1)"; then
+        return 1
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        local parsed_state
+        if parsed_state="$(printf '%s\n' "$output" | python3 -c '
+import json
+import sys
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(2)
+
+if not isinstance(data, list):
+    sys.exit(2)
+print("installed" if any(
+    isinstance(item, dict)
+    and item.get("id") == "devkit@murakotaro4"
+    and item.get("scope") == "user"
+    for item in data
+) else "missing")
+')"; then
+            printf '%s\n' "$parsed_state"
+            return 0
+        else
+            local parse_status=$?
+            if [[ $parse_status -eq 2 ]]; then
+                return 2
+            fi
+        fi
+    fi
+
+    if grep -Eq '"id"[[:space:]]*:[[:space:]]*"devkit@murakotaro4"' <<<"$output"; then
+        echo "installed"
+    else
+        echo "missing"
+    fi
 }
 
 codex_plugin_devkit_state() {
@@ -714,15 +795,15 @@ section_codex_plugin() {
     state="$(codex_marketplace_state)"
     case "$state" in
         missing)
-            run_codex_plugin_command \
+            run_plugin_command \
                 "Adding DevKit marketplace" \
                 codex plugin marketplace add murakotaro4/devkit || return 1
             ;;
         replace)
-            run_codex_plugin_command \
+            run_plugin_command \
                 "Removing non-git DevKit marketplace" \
                 codex plugin marketplace remove murakotaro4 || return 1
-            run_codex_plugin_command \
+            run_plugin_command \
                 "Adding DevKit marketplace" \
                 codex plugin marketplace add murakotaro4/devkit || return 1
             ;;
@@ -731,13 +812,69 @@ section_codex_plugin() {
             ;;
     esac
 
-    run_codex_plugin_command \
+    run_plugin_command \
         "Upgrading DevKit marketplace" \
         codex plugin marketplace upgrade murakotaro4 || return 1
 
-    run_codex_plugin_command \
+    run_plugin_command \
         "Installing DevKit plugin" \
         codex plugin add devkit@murakotaro4 || return 1
+}
+
+section_claude_plugin() {
+    echo ""
+    echo "=== [Claude Plugin] ==="
+
+    if ! command -v claude &>/dev/null; then
+        echo "SKIP Claude Code is not available"
+        return 0
+    fi
+
+    local marketplace_state marketplace_status
+    marketplace_state="$(claude_marketplace_registered)"
+    marketplace_status=$?
+    if [[ $marketplace_status -ne 0 ]]; then
+        if [[ $marketplace_status -eq 1 ]]; then
+            ERRORS+=("Claude marketplace list failed")
+        else
+            ERRORS+=("Claude marketplace list JSON parse failed")
+        fi
+        return 1
+    fi
+
+    if [[ "$marketplace_state" == "registered" ]]; then
+        run_plugin_command \
+            "Updating Claude marketplace" \
+            claude plugin marketplace update murakotaro4 || return 1
+    else
+        run_plugin_command \
+            "Adding Claude marketplace" \
+            claude plugin marketplace add murakotaro4/devkit || return 1
+    fi
+
+    local plugin_state plugin_status
+    plugin_state="$(claude_plugin_devkit_state)"
+    plugin_status=$?
+    if [[ $plugin_status -ne 0 ]]; then
+        if [[ $plugin_status -eq 1 ]]; then
+            ERRORS+=("Claude plugin list failed")
+        else
+            ERRORS+=("Claude plugin list JSON parse failed")
+        fi
+        return 1
+    fi
+
+    if [[ "$plugin_state" == "installed" ]]; then
+        run_plugin_command \
+            "Updating Claude DevKit plugin" \
+            claude plugin update --scope user devkit@murakotaro4 || return 1
+    else
+        run_plugin_command \
+            "Installing Claude DevKit plugin" \
+            claude plugin install --scope user devkit@murakotaro4 || return 1
+    fi
+
+    echo "NOTE: Running Claude Code sessions need /reload-plugins (or restart) to apply the updated plugin."
 }
 
 section_prune_legacy_assets() {
@@ -823,6 +960,7 @@ main() {
         section_prune_legacy_assets
         section_cursor_skills
         section_codex_plugin
+        section_claude_plugin
     fi
 
     echo ""

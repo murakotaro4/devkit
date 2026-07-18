@@ -13,6 +13,31 @@ ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "plugins" / "devkit" / "scripts"
 
 
+def test_update_ccx_scripts_have_claude_plugin_section():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    powershell = (SCRIPTS / "update-ccx.ps1").read_text(encoding="utf-8")
+
+    for expected in (
+        "=== [Claude Plugin] ===",
+        "claude plugin marketplace update murakotaro4",
+        "claude plugin marketplace add murakotaro4/devkit",
+        "claude plugin update --scope user devkit@murakotaro4",
+        "claude plugin install --scope user devkit@murakotaro4",
+        "/reload-plugins",
+    ):
+        assert expected in shell
+
+    for expected in (
+        "=== [Claude Plugin] ===",
+        '@("plugin", "marketplace", "update", "murakotaro4")',
+        '@("plugin", "marketplace", "add", "murakotaro4/devkit")',
+        '@("plugin", "update", "--scope", "user", "devkit@murakotaro4")',
+        '@("plugin", "install", "--scope", "user", "devkit@murakotaro4")',
+        "/reload-plugins",
+    ):
+        assert expected in powershell
+
+
 def test_managed_updater_copy_excludes_retired_update_devkit_files():
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
     shell_copy_names = shell.split("for script_name in ", 1)[1].split("; do", 1)[0].split()

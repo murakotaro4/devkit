@@ -66,6 +66,7 @@ SEMVER_RE = re.compile(
 class UpdateSmokeResult(NamedTuple):
     calls: list[str]
     stdout: str
+    returncode: int
 
 
 def shell_path(path: Path | str) -> str:
@@ -212,12 +213,44 @@ exit 0
 """
 
 
+FAKE_CLAUDE = """#!/bin/sh
+printf 'claude %s\\n' "$*" >> "$DEVKIT_TEST_CALL_LOG"
+if [ "$1" = "--version" ]; then
+  echo "claude 0.0.0"
+  exit 0
+fi
+if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ] && [ "$4" = "--json" ]; then
+  if [ "${DEVKIT_FAKE_CLAUDE_LIST_FAIL:-0}" = "1" ]; then
+    exit 1
+  fi
+  if [ "${DEVKIT_FAKE_CLAUDE_MARKETPLACE:-1}" = "1" ]; then
+    printf '[{"name":"murakotaro4","source":"github","repo":"murakotaro4/devkit"}]\\n'
+  else
+    printf '[]\\n'
+  fi
+  exit 0
+fi
+if [ "$1" = "plugin" ] && [ "$2" = "list" ] && [ "$3" = "--json" ]; then
+  if [ "${DEVKIT_FAKE_CLAUDE_LIST_FAIL:-0}" = "1" ]; then
+    exit 1
+  fi
+  if [ "${DEVKIT_FAKE_CLAUDE_INSTALLED:-1}" = "1" ]; then
+    printf '[{"id":"devkit@murakotaro4","version":"0.0.0","scope":"user","enabled":true}]\\n'
+  else
+    printf '[]\\n'
+  fi
+  exit 0
+fi
+if [ "$1" = "plugin" ]; then
+  exit 0
+fi
+exit 0
+"""
+
+
 FAKE_TOOL = """#!/bin/sh
 printf '%s %s\\n' "$(basename "$0")" "$*" >> "$DEVKIT_TEST_CALL_LOG"
 case "$(basename "$0")" in
-  claude)
-    if [ "$1" = "--version" ]; then echo "claude 0.0.0"; fi
-    ;;
   curl)
     exit 0
     ;;
@@ -256,6 +289,10 @@ def run_update_devkit_smoke(
     available: bool = False,
     available_shape: str = "installed",
     force_shell_fallback: bool = False,
+    claude_marketplace: bool = True,
+    claude_installed: bool = True,
+    claude_list_fail: bool = False,
+    expect_success: bool = True,
 ) -> UpdateSmokeResult:
     with tempfile.TemporaryDirectory(prefix=f"devkit-{label}-home-") as home, tempfile.TemporaryDirectory(
         prefix=f"devkit-{label}-bin-"
@@ -267,10 +304,11 @@ def run_update_devkit_smoke(
 
         fake_bin_path = Path(fake_bin)
         write_executable(fake_bin_path / "codex", FAKE_CODEX)
+        write_executable(fake_bin_path / "claude", FAKE_CLAUDE)
         if force_shell_fallback:
             write_executable(fake_bin_path / "python3", "#!/bin/sh\nexit 127\n")
         write_executable(fake_bin_path / "opencode", FAKE_TOOL)
-        for tool in ("claude", "curl", "git"):
+        for tool in ("curl", "git"):
             write_executable(fake_bin_path / tool, FAKE_TOOL)
 
         call_log = home_path / "tool-calls.log"
@@ -283,15 +321,29 @@ def run_update_devkit_smoke(
                 "DEVKIT_FAKE_CODEX_ENABLED": enabled_value or ("true" if enabled else "false"),
                 "DEVKIT_FAKE_CODEX_AVAILABLE": "1" if available else "0",
                 "DEVKIT_FAKE_CODEX_AVAILABLE_SHAPE": available_shape,
+                "DEVKIT_FAKE_CLAUDE_MARKETPLACE": "1" if claude_marketplace else "0",
+                "DEVKIT_FAKE_CLAUDE_INSTALLED": "1" if claude_installed else "0",
+                "DEVKIT_FAKE_CLAUDE_LIST_FAIL": "1" if claude_list_fail else "0",
                 "HOME": home,
                 "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
             }
         )
-        result = run_checked(
+        result = subprocess.run(
             [resolve_bash(), (PLUGIN_DIR / "scripts/update-ccx.sh").as_posix(), "--devkit-only"],
+            cwd=ROOT,
             env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
         )
-        return UpdateSmokeResult(call_log.read_text(encoding="utf-8").splitlines(), result.stdout)
+        if expect_success and result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode, result.args, output=result.stdout, stderr=result.stderr
+            )
+        return UpdateSmokeResult(
+            call_log.read_text(encoding="utf-8").splitlines(), result.stdout, result.returncode
+        )
 
 
 def assert_ordered_subset(lines: list[str], expected: list[str], label: str) -> None:
@@ -352,6 +404,37 @@ def assert_powershell_codex_plugin_update_contract(problems: list[str]) -> None:
         problems.append(str(exc))
 
 
+def assert_powershell_claude_plugin_update_contract(problems: list[str]) -> None:
+    update = (PLUGIN_DIR / "scripts/update-ccx.ps1").read_text(encoding="utf-8")
+    try:
+        block = extract_named_function(update, "Update-DevKitClaudePlugin")
+        assert_ordered_text_subset(
+            block,
+            [
+                '@("plugin", "marketplace", "update", "murakotaro4")',
+                '@("plugin", "marketplace", "add", "murakotaro4/devkit")',
+                '@("plugin", "update", "--scope", "user", "devkit@murakotaro4")',
+                '@("plugin", "install", "--scope", "user", "devkit@murakotaro4")',
+            ],
+            "PowerShell Claude plugin update",
+        )
+    except AssertionError as exc:
+        problems.append(str(exc))
+
+
+def assert_default_claude_plugin_update(calls: list[str], label: str) -> None:
+    assert_ordered_subset(
+        calls,
+        [
+            "claude plugin marketplace list --json",
+            "claude plugin marketplace update murakotaro4",
+            "claude plugin list --json",
+            "claude plugin update --scope user devkit@murakotaro4",
+        ],
+        f"{label} Claude plugin",
+    )
+
+
 def run_codex_marketplace_smoke_checks() -> None:
     registered = run_update_devkit_smoke(
         "registered",
@@ -369,6 +452,7 @@ def run_codex_marketplace_smoke_checks() -> None:
     if "codex plugin marketplace add murakotaro4/devkit" in registered.calls:
         raise AssertionError(f"registered marketplace unexpectedly added source: {registered}")
     assert_no_opencode(registered.calls, "registered marketplace")
+    assert_default_claude_plugin_update(registered.calls, "registered marketplace")
 
     disabled = run_update_devkit_smoke(
         "disabled",
@@ -385,6 +469,7 @@ def run_codex_marketplace_smoke_checks() -> None:
         "disabled plugin",
     )
     assert_no_opencode(disabled.calls, "disabled plugin")
+    assert_default_claude_plugin_update(disabled.calls, "disabled plugin")
 
     missing = run_update_devkit_smoke("missing", config_body=None, installed=False, available=True)
     assert_ordered_subset(
@@ -397,6 +482,7 @@ def run_codex_marketplace_smoke_checks() -> None:
         "missing marketplace",
     )
     assert_no_opencode(missing.calls, "missing marketplace")
+    assert_default_claude_plugin_update(missing.calls, "missing marketplace")
 
     missing_shell_fallback = run_update_devkit_smoke(
         "missing-fallback",
@@ -416,6 +502,7 @@ def run_codex_marketplace_smoke_checks() -> None:
         "missing marketplace shell fallback",
     )
     assert_no_opencode(missing_shell_fallback.calls, "missing marketplace shell fallback")
+    assert_default_claude_plugin_update(missing_shell_fallback.calls, "missing marketplace shell fallback")
 
     disabled_shell_fallback = run_update_devkit_smoke(
         "disabled-fallback",
@@ -433,6 +520,7 @@ def run_codex_marketplace_smoke_checks() -> None:
         "disabled plugin shell fallback",
     )
     assert_no_opencode(disabled_shell_fallback.calls, "disabled plugin shell fallback")
+    assert_default_claude_plugin_update(disabled_shell_fallback.calls, "disabled plugin shell fallback")
 
     local_source = run_update_devkit_smoke(
         "local",
@@ -450,6 +538,44 @@ def run_codex_marketplace_smoke_checks() -> None:
         "local marketplace",
     )
     assert_no_opencode(local_source.calls, "local marketplace")
+    assert_default_claude_plugin_update(local_source.calls, "local marketplace")
+
+
+def run_claude_plugin_smoke_checks() -> None:
+    missing = run_update_devkit_smoke(
+        "claude-missing",
+        config_body='[marketplaces.murakotaro4]\nsource_type = "git"\nsource = "murakotaro4/devkit"\n',
+        installed=True,
+        claude_marketplace=False,
+        claude_installed=False,
+    )
+    assert_ordered_subset(
+        missing.calls,
+        [
+            "claude plugin marketplace list --json",
+            "claude plugin marketplace add murakotaro4/devkit",
+            "claude plugin list --json",
+            "claude plugin install --scope user devkit@murakotaro4",
+        ],
+        "missing Claude plugin",
+    )
+
+    list_failure = run_update_devkit_smoke(
+        "claude-list-failure",
+        config_body='[marketplaces.murakotaro4]\nsource_type = "git"\nsource = "murakotaro4/devkit"\n',
+        installed=True,
+        claude_list_fail=True,
+        expect_success=False,
+    )
+    if list_failure.returncode != 1:
+        raise AssertionError(f"Claude list failure returned {list_failure.returncode}, expected 1")
+    assert_ordered_subset(
+        list_failure.calls,
+        ["claude plugin marketplace list --json"],
+        "Claude list failure",
+    )
+    if any(line.startswith("claude plugin marketplace update") for line in list_failure.calls):
+        raise AssertionError(f"Claude list failure was treated as registered: {list_failure.calls}")
 
 
 def run_prune_smoke_checks() -> None:
@@ -644,6 +770,7 @@ def main() -> int:
     assert_skill_surface(problems)
     assert_marketplace_manifest(problems)
     assert_powershell_codex_plugin_update_contract(problems)
+    assert_powershell_claude_plugin_update_contract(problems)
 
     try:
         run_codex_marketplace_smoke_checks()
@@ -652,6 +779,14 @@ def main() -> int:
         if isinstance(exc, subprocess.CalledProcessError) and not detail:
             detail = exc.stdout.strip() or str(exc)
         problems.append(f"codex marketplace smoke failed: {detail}")
+
+    try:
+        run_claude_plugin_smoke_checks()
+    except (AssertionError, subprocess.CalledProcessError) as exc:
+        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+        if isinstance(exc, subprocess.CalledProcessError) and not detail:
+            detail = exc.stdout.strip() or str(exc)
+        problems.append(f"Claude plugin smoke failed: {detail}")
 
     try:
         run_prune_smoke_checks()
