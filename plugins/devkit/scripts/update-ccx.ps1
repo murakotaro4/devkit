@@ -1485,11 +1485,11 @@ function Update-DevKitClaudePlugin {
     }
   } else {
     if ($marketplaceState -eq "replace") {
-      if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "remove", "murakotaro4") -FailureMessage "Claude plugin marketplace remove failed")) {
+      if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "remove", "--scope", "user", "murakotaro4") -FailureMessage "Claude plugin marketplace remove failed")) {
         return
       }
     }
-    if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "add", "murakotaro4/devkit") -FailureMessage "Claude plugin marketplace add failed")) {
+    if (-not (Invoke-DevKitCliCommand -Command "claude" -Arguments @("plugin", "marketplace", "add", "--scope", "user", "murakotaro4/devkit") -FailureMessage "Claude plugin marketplace add failed")) {
       return
     }
   }

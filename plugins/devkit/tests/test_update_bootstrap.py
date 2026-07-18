@@ -20,8 +20,8 @@ def test_update_ccx_scripts_have_claude_plugin_section():
     for expected in (
         "=== [Claude Plugin] ===",
         "claude plugin marketplace update murakotaro4",
-        "claude plugin marketplace remove murakotaro4",
-        "claude plugin marketplace add murakotaro4/devkit",
+        "claude plugin marketplace remove --scope user murakotaro4",
+        "claude plugin marketplace add --scope user murakotaro4/devkit",
         "claude plugin update --scope user devkit@murakotaro4",
         "claude plugin install --scope user devkit@murakotaro4",
         "/reload-plugins",
@@ -31,8 +31,8 @@ def test_update_ccx_scripts_have_claude_plugin_section():
     for expected in (
         "=== [Claude Plugin] ===",
         '@("plugin", "marketplace", "update", "murakotaro4")',
-        '@("plugin", "marketplace", "remove", "murakotaro4")',
-        '@("plugin", "marketplace", "add", "murakotaro4/devkit")',
+        '@("plugin", "marketplace", "remove", "--scope", "user", "murakotaro4")',
+        '@("plugin", "marketplace", "add", "--scope", "user", "murakotaro4/devkit")',
         '@("plugin", "update", "--scope", "user", "devkit@murakotaro4")',
         '@("plugin", "install", "--scope", "user", "devkit@murakotaro4")',
         "/reload-plugins",

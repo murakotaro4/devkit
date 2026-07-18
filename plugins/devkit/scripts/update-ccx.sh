@@ -882,15 +882,15 @@ section_claude_plugin() {
         replace)
             run_plugin_command \
                 "Removing unexpected Claude marketplace" \
-                claude plugin marketplace remove murakotaro4 || return 1
+                claude plugin marketplace remove --scope user murakotaro4 || return 1
             run_plugin_command \
                 "Adding Claude marketplace" \
-                claude plugin marketplace add murakotaro4/devkit || return 1
+                claude plugin marketplace add --scope user murakotaro4/devkit || return 1
             ;;
         missing)
             run_plugin_command \
                 "Adding Claude marketplace" \
-                claude plugin marketplace add murakotaro4/devkit || return 1
+                claude plugin marketplace add --scope user murakotaro4/devkit || return 1
             ;;
     esac
 

@@ -432,8 +432,8 @@ def assert_powershell_claude_plugin_update_contract(problems: list[str]) -> None
             block,
             [
                 '@("plugin", "marketplace", "update", "murakotaro4")',
-                '@("plugin", "marketplace", "remove", "murakotaro4")',
-                '@("plugin", "marketplace", "add", "murakotaro4/devkit")',
+                '@("plugin", "marketplace", "remove", "--scope", "user", "murakotaro4")',
+                '@("plugin", "marketplace", "add", "--scope", "user", "murakotaro4/devkit")',
                 '@("plugin", "update", "--scope", "user", "devkit@murakotaro4")',
                 '@("plugin", "install", "--scope", "user", "devkit@murakotaro4")',
             ],
@@ -574,8 +574,8 @@ def run_claude_plugin_smoke_checks() -> None:
         replace.calls,
         [
             "claude plugin marketplace list --json",
-            "claude plugin marketplace remove murakotaro4",
-            "claude plugin marketplace add murakotaro4/devkit",
+            "claude plugin marketplace remove --scope user murakotaro4",
+            "claude plugin marketplace add --scope user murakotaro4/devkit",
             "claude plugin list --json",
             "claude plugin update --scope user devkit@murakotaro4",
         ],
@@ -595,7 +595,7 @@ def run_claude_plugin_smoke_checks() -> None:
         missing.calls,
         [
             "claude plugin marketplace list --json",
-            "claude plugin marketplace add murakotaro4/devkit",
+            "claude plugin marketplace add --scope user murakotaro4/devkit",
             "claude plugin list --json",
             "claude plugin install --scope user devkit@murakotaro4",
         ],
