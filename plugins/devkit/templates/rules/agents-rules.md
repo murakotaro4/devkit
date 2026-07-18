@@ -16,7 +16,7 @@
 ## Worktree Rules
 
 - 並行開発は `git worktree` で分離する(1 ブランチ = 1 worktree)。
-- 他セッション由来の worktree・ブランチ・open PR は進行中の正常な作業として扱い、削除・変更・残存物としての報告をしない。後始末は自分が作成した worktree・ブランチに限る。
+- 他セッション由来の worktree・ブランチ・open PR は進行中の正常な作業として扱い、削除・変更・残存物としての報告をしない。後始末は自分が作成した worktree・ブランチに限り、他の worktree の調査・掃除・作業再開はユーザーが明示依頼した場合のみ行う。
 - default branch は他の PR が順に merge されて進む前提とし、統合前に fetch + rebase して検証を再実行する。push reject や base の前進は異常ではなく通常イベントとして扱う。
 
 ## Review Rules
