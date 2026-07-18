@@ -1378,6 +1378,73 @@ function Update-DevKitCodexPlugin {
   }
 }
 
+function Sync-DevKitCursorSkills([string]$RepoRoot) {
+  Write-Host ""
+  Write-Host "=== [Cursor Skills] ==="
+
+  $cursorRoot = Join-Path $env:USERPROFILE ".cursor"
+  if (-not (Test-Path -LiteralPath $cursorRoot -PathType Container)) {
+    Write-Host "SKIPPED: Cursor user directory not found"
+    return
+  }
+
+  $pythonCommand = $null
+  $pythonPrefix = @()
+  $candidates = @(
+    [pscustomobject]@{ Command = "python3"; Prefix = @() },
+    [pscustomobject]@{ Command = "python"; Prefix = @() },
+    [pscustomobject]@{ Command = "py"; Prefix = @("-3") }
+  )
+  foreach ($candidate in $candidates) {
+    $candidateCommand = [string]$candidate.Command
+    $candidatePrefix = @($candidate.Prefix)
+    if (-not (Get-Command $candidateCommand -ErrorAction SilentlyContinue)) {
+      continue
+    }
+    try {
+      & $candidateCommand @candidatePrefix "--version" *> $null
+    } catch {
+      continue
+    }
+    if ($LASTEXITCODE -ne 0) {
+      continue
+    }
+    try {
+      & $candidateCommand @candidatePrefix "-c" 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' *> $null
+    } catch {
+      continue
+    }
+    if ($LASTEXITCODE -eq 0) {
+      $pythonCommand = $candidateCommand
+      $pythonPrefix = $candidatePrefix
+      break
+    }
+  }
+
+  if (-not $pythonCommand) {
+    Add-ResultWarning "Cursor skills: Python 3.10 or newer not available; sync skipped."
+    Write-Host "SKIPPED: Python 3.10 or newer not found"
+    return
+  }
+
+  $syncScript = Join-Path $RepoRoot "plugins/devkit/skills/setup/scripts/sync_cursor_skills.py"
+  $pluginRoot = Join-Path $RepoRoot "plugins/devkit"
+  try {
+    $syncOutput = & $pythonCommand @pythonPrefix $syncScript --source $pluginRoot --target $cursorRoot --format json 2>&1
+  } catch {
+    Write-Host "FAILED: Cursor skills sync"
+    Add-ResultError ("Cursor skills sync failed: {0}" -f $_.Exception.Message)
+    return
+  }
+  if ($LASTEXITCODE -ne 0) {
+    $detail = ($syncOutput -join "`n").Trim()
+    Write-Host "FAILED: Cursor skills sync"
+    Add-ResultError ("Cursor skills sync failed: {0}" -f $detail)
+    return
+  }
+  $syncOutput | ForEach-Object { Write-Host $_ }
+}
+
 function Section-DevKit {
   Write-Host ""
   Write-Host "=== [DevKit] ==="
@@ -1391,6 +1458,7 @@ function Section-DevKit {
     $repoRoot = Get-DevKitRepoRoot -UserHome $env:USERPROFILE -Logger $logger
     $managed = Install-DevKitManagedFiles -RepoRoot $repoRoot -UserHome $env:USERPROFILE
     Remove-DevKitLegacyAssets -UserHome $env:USERPROFILE -SourceRoot $repoRoot -Logger $logger
+    Sync-DevKitCursorSkills -RepoRoot $repoRoot
 
     . (Join-Path $managed.CodexBin "devkit-codex-config.ps1")
     $configResult = Install-DevKitCodexConfig -UserHome $env:USERPROFILE -OsName "windows"
