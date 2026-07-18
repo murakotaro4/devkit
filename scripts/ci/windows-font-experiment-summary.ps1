@@ -27,7 +27,7 @@ function Add-CodeBlock([System.Collections.Generic.List[string]]$Lines, [object[
 try {
   $resultPath = Join-Path $env:RUNNER_TEMP "font-experiment-result.json"
   $lines = New-Object System.Collections.Generic.List[string]
-  $lines.Add("## Windows winget font experiment")
+  $lines.Add("## Windows font experiment")
   $lines.Add("")
 
   if (-not (Test-Path -LiteralPath $resultPath)) {
@@ -35,22 +35,20 @@ try {
   } else {
     $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
     $state = Get-ResultProperty -Result $result -Name "state" -DefaultValue "UNKNOWN"
-    $wingetVersion = Get-ResultProperty -Result $result -Name "winget_version" -DefaultValue $null
     $namesCount = Get-ResultProperty -Result $result -Name "names_count" -DefaultValue 0
     $pwshVersion = Get-ResultProperty -Result $result -Name "pwsh_version" -DefaultValue $PSVersionTable.PSVersion.ToString()
-    $jetbrainsNames = @(Get-ResultProperty -Result $result -Name "jetbrains_names" -DefaultValue @())
+    $udevNames = @(Get-ResultProperty -Result $result -Name "udev_names" -DefaultValue @())
     $allNames = @(Get-ResultProperty -Result $result -Name "all_names" -DefaultValue @())
 
     $lines.Add(('- `FONT_EXPERIMENT_RESULT={0}`' -f $state))
     $lines.Add(('- ImageOS: `{0}`' -f $env:ImageOS))
     $lines.Add(('- ImageVersion: `{0}`' -f $env:ImageVersion))
     $lines.Add(('- PowerShell: `{0}`' -f $pwshVersion))
-    $lines.Add(('- winget: `{0}`' -f $(if ($null -eq $wingetVersion) { 'unavailable' } else { $wingetVersion })))
     $lines.Add(('- Registry value count: `{0}`' -f $namesCount))
     $lines.Add("")
-    $lines.Add("### JetBrains registry value names")
+    $lines.Add("### UDEV registry value names")
     $lines.Add("")
-    Add-CodeBlock -Lines $lines -Values $jetbrainsNames
+    Add-CodeBlock -Lines $lines -Values $udevNames
     $lines.Add("")
     $lines.Add("<details>")
     $lines.Add("<summary>All registry value names</summary>")
@@ -68,6 +66,12 @@ try {
       $lines.Add(('- Exit code: `{0}`' -f $installExitCode))
       $lines.Add("")
       Add-CodeBlock -Lines $lines -Values @([string]$installOutputTail)
+    } elseif ($state -eq "PYTHON_UNAVAILABLE") {
+      $lines.Add("")
+      $lines.Add("Python was unavailable on the runner, so installation was not attempted.")
+    } elseif ($state -eq "REGISTERED_MISMATCH") {
+      $lines.Add("")
+      $lines.Add("The installer completed, but the production registry predicate did not match all required styles.")
     }
   }
 

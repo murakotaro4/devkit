@@ -123,7 +123,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run winget font experiment
+      - name: Run font install experiment
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/windows-font-experiment.ps1
       - name: Write experiment summary
         if: always()

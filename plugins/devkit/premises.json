@@ -396,6 +396,63 @@
           "count": 2
         }
       ]
+    },
+    {
+      "id": "terminal-font-face",
+      "summary": "Windows Terminal へ適用する日本語対応 Nerd Font の face 名",
+      "current_value": "UDEV Gothic NF",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])UDEV Gothic NF(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [
+        "(?<![A-Za-z0-9_])JetBrainsMono NF(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])JetBrainsMono Nerd Font(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])DEVCOM\\.JetBrainsMonoNerdFont(?![A-Za-z0-9_])"
+      ],
+      "verify_hint": "yuru7/udev-gothic releases / Windows Terminal 実機確認",
+      "update_notes": "setup スクリプト・SKILL・README・テスト・CI 実験系を同時更新",
+      "last_verified": "2026-07-18",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 3
+        },
+        {
+          "path": "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
+          "count": 8
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_skill.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_terminal_font.py",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "terminal-font-release",
+      "summary": "UDEV Gothic NF の固定 release archive と SHA-256",
+      "current_value": "UDEVGothic_NF_v2.2.0.zip",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])UDEVGothic_NF_v2\\.2\\.0\\.zip(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])45faeef7b5d8bc591bcc5887a2ca0c5fb9028066f18a5a52cd6f10b7d655ba37(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "gh api repos/yuru7/udev-gothic/releases/latest",
+      "update_notes": "download URL・archive member・SHA-256・テストを同時更新",
+      "last_verified": "2026-07-18",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
+          "count": 3
+        }
+      ]
     }
   ]
 }
