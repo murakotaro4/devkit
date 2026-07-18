@@ -507,13 +507,43 @@ def run_prune_smoke_checks() -> None:
         marker = home_path / ".codex/devkit/.migrated-v6"
         marker.parent.mkdir(parents=True)
         marker.write_text("migrated-v6\n", encoding="utf-8")
-        skills_root = home_path / ".agent/skills"
-        skills_root.mkdir(parents=True)
+        managed_skills_root = home_path / ".agent/skills"
+        managed_skills_root.mkdir(parents=True)
         for retired_name in ("dig", "goal-prompt"):
-            retired_skill = skills_root / retired_name
+            retired_skill = managed_skills_root / retired_name
             retired_skill.mkdir()
-            (retired_skill / "SKILL.md").write_text("retired\n", encoding="utf-8")
-        (skills_root / "custom-keep").mkdir()
+            (retired_skill / "SKILL.md").write_text(
+                "\n".join(
+                    (
+                        "---",
+                        f'name: "{retired_name}"',
+                        "---",
+                        "正本は devkit リポジトリの `AGENTS.md`。",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+        (managed_skills_root / "custom-keep").mkdir()
+
+        user_skills_root = home_path / ".codex/skills"
+        user_skills_root.mkdir(parents=True)
+        for retired_name in ("dig", "goal-prompt"):
+            user_skill = user_skills_root / retired_name
+            user_skill.mkdir()
+            (user_skill / "SKILL.md").write_text(
+                "\n".join(
+                    (
+                        "---",
+                        f'name: "{retired_name}"',
+                        "description: devkit リポジトリの `AGENTS.md` を参考にした独自スキル",
+                        "---",
+                        "ユーザー所有スキル。",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
 
         env = os.environ.copy()
         env.update({"HOME": home, "DEVKIT_SOURCE_ROOT": str(ROOT)})
@@ -527,9 +557,11 @@ def run_prune_smoke_checks() -> None:
         )
         run_checked([resolve_bash(), "-lc", script], env=env)
         for retired_name in ("dig", "goal-prompt"):
-            if (skills_root / retired_name).exists():
+            if (managed_skills_root / retired_name).exists():
                 raise AssertionError(f"retired live skill was not pruned: {retired_name}")
-        if not (skills_root / "custom-keep").is_dir():
+            if not (user_skills_root / retired_name / "SKILL.md").is_file():
+                raise AssertionError(f"user-owned same-name skill was pruned: {retired_name}")
+        if not (managed_skills_root / "custom-keep").is_dir():
             raise AssertionError("v9 prune removed a user skill directory")
         if not (home_path / ".codex/devkit/.migrated-v9-dig-goal").is_file():
             raise AssertionError("v9 dig-goal migration marker was not written")

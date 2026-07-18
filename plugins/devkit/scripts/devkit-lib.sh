@@ -380,9 +380,57 @@ devkit_prune_legacy_skill_roots() {
   done
 }
 
+devkit_v9_retired_skill_entry_is_managed() {
+  local entry="$1"
+  local retired_name="$2"
+
+  if [[ -L "$entry" ]]; then
+    local target
+    target="$(devkit_resolve_link_target "$entry")" || return 1
+    devkit_path_is_devkit_source "$target"
+    return
+  fi
+
+  local skill_file="$entry/SKILL.md"
+  [[ -d "$entry" && -f "$skill_file" ]] || return 1
+
+  awk -v expected="$retired_name" '
+    NR == 1 {
+      sub(/\r$/, "")
+      if ($0 != "---") exit 1
+      next
+    }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (!closed) {
+        if (line == "---") {
+          closed = 1
+          next
+        }
+        if (line ~ /^[[:space:]]*name[[:space:]]*:[[:space:]]*/) {
+          name_count++
+          sub(/^[[:space:]]*name[[:space:]]*:[[:space:]]*/, "", line)
+          sub(/[[:space:]]*$/, "", line)
+          if ((substr(line, 1, 1) == "\"" && substr(line, length(line), 1) == "\"") ||
+              (substr(line, 1, 1) == "\047" && substr(line, length(line), 1) == "\047")) {
+            line = substr(line, 2, length(line) - 2)
+          }
+          matched = (line == expected)
+        }
+        next
+      }
+      if (index(line, "devkit リポジトリの `AGENTS.md`") != 0) body_marker = 1
+    }
+    END {
+      if (!closed || name_count != 1 || !matched || !body_marker) exit 1
+    }
+  ' "$skill_file"
+}
+
 devkit_prune_v9_retired_skill_dirs() {
   local user_home="$1"
-  local skills_root retired_name
+  local skills_root retired_name retired_entry
   for skills_root in \
     "$user_home/.agents/skills" \
     "$user_home/.codex/skills" \
@@ -390,7 +438,10 @@ devkit_prune_v9_retired_skill_dirs() {
     "$user_home/.config/opencode/skills"
   do
     for retired_name in dig goal-prompt; do
-      rm -rf -- "$skills_root/$retired_name" || return 1
+      retired_entry="$skills_root/$retired_name"
+      if devkit_v9_retired_skill_entry_is_managed "$retired_entry" "$retired_name"; then
+        rm -rf -- "$retired_entry" || return 1
+      fi
     done
   done
 }

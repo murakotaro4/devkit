@@ -494,6 +494,70 @@ function Remove-DevKitLegacyCommandFile([string]$Path) {
   }
 }
 
+function Test-DevKitV9RetiredSkillEntryManaged([string]$Path, [string]$RetiredName) {
+  try {
+    if (Test-DevKitReparsePoint $Path) {
+      $target = Get-DevKitLinkTargetPath $Path
+      return (Test-DevKitPathLooksManaged $target)
+    }
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+      return $false
+    }
+
+    $skillFile = Join-Path $Path "SKILL.md"
+    if (-not (Test-Path -LiteralPath $skillFile -PathType Leaf)) {
+      return $false
+    }
+
+    $content = Read-DevKitTextFile -Path $skillFile
+    $lines = @($content -split "\r?\n")
+    if ($lines.Count -eq 0 -or $lines[0] -ne "---") {
+      return $false
+    }
+
+    $frontmatterClosed = $false
+    $frontmatterEndIndex = -1
+    $nameCount = 0
+    $nameMatches = $false
+    for ($index = 1; $index -lt $lines.Count; $index++) {
+      $line = $lines[$index]
+      if ($line -eq "---") {
+        $frontmatterClosed = $true
+        $frontmatterEndIndex = $index
+        break
+      }
+      if ($line -match '^\s*name\s*:') {
+        $nameCount++
+        if ($line -match '^\s*name\s*:\s*(?:"(?<value>[^"]+)"|''(?<value>[^'']+)''|(?<value>[^\s#]+))\s*$') {
+          $nameMatches = [string]::Equals($Matches["value"], $RetiredName, [StringComparison]::Ordinal)
+        } else {
+          $nameMatches = $false
+        }
+      }
+    }
+
+    $bodyMarkerFound = $false
+    if ($frontmatterClosed) {
+      for ($bodyIndex = $frontmatterEndIndex + 1; $bodyIndex -lt $lines.Count; $bodyIndex++) {
+        if ($lines[$bodyIndex].Contains('devkit リポジトリの `AGENTS.md`')) {
+          $bodyMarkerFound = $true
+          break
+        }
+      }
+    }
+
+    return (
+      $frontmatterClosed -and
+      $nameCount -eq 1 -and
+      $nameMatches -and
+      $bodyMarkerFound
+    )
+  } catch {
+    return $false
+  }
+}
+
 function Remove-DevKitV9RetiredSkillDirs([string]$UserHome) {
   foreach ($skillsRoot in @(
     (Join-Path $UserHome ".agents\skills"),
@@ -502,7 +566,10 @@ function Remove-DevKitV9RetiredSkillDirs([string]$UserHome) {
     (Join-Path $UserHome ".config\opencode\skills")
   )) {
     foreach ($retiredName in @("dig", "goal-prompt")) {
-      Remove-DevKitPathOrThrow -Path (Join-Path $skillsRoot $retiredName) -Recurse
+      $retiredEntry = Join-Path $skillsRoot $retiredName
+      if (Test-DevKitV9RetiredSkillEntryManaged -Path $retiredEntry -RetiredName $retiredName) {
+        Remove-DevKitPathOrThrow -Path $retiredEntry -Recurse
+      }
     }
   }
 }

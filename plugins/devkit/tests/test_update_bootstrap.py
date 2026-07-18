@@ -95,6 +95,16 @@ def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
     assert powershell_migration.index("if (-not (Test-Path -LiteralPath $v9MarkerPath))") < (
         powershell_migration.index("if (Test-Path -LiteralPath $markerPath)")
     )
+    shell_provenance = shell.split("devkit_v9_retired_skill_entry_is_managed()", 1)[1].split(
+        "devkit_prune_v9_retired_skill_dirs()", 1
+    )[0]
+    assert "devkit_path_is_devkit_source" in shell_provenance
+    assert "devkit リポジトリの `AGENTS.md`" in shell_provenance
+    powershell_provenance = powershell.split(
+        "function Test-DevKitV9RetiredSkillEntryManaged", 1
+    )[1].split("function Remove-DevKitV9RetiredSkillDirs", 1)[0]
+    assert "Test-DevKitPathLooksManaged" in powershell_provenance
+    assert "devkit リポジトリの `AGENTS.md`" in powershell_provenance
 
     pwsh = shutil.which("pwsh")
     if not pwsh:
@@ -108,6 +118,24 @@ def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
     retired_name = "goal-" + "prompt"
     retired = home / ".codex" / "skills" / retired_name
     retired.mkdir(parents=True)
+    (retired / "SKILL.md").write_text(
+        f'---\nname: "{retired_name}"\n---\n正本は devkit リポジトリの `AGENTS.md`。\n',
+        encoding="utf-8",
+    )
+    user_skill = home / ".codex" / "skills" / "dig"
+    user_skill.mkdir(parents=True)
+    (user_skill / "SKILL.md").write_text(
+        '---\nname: "dig"\ndescription: devkit リポジトリの `AGENTS.md` を参考\n---\n'
+        "ユーザー所有スキル。\n",
+        encoding="utf-8",
+    )
+    duplicate_name_user_skill = home / ".agent" / "skills" / "dig"
+    duplicate_name_user_skill.mkdir(parents=True)
+    (duplicate_name_user_skill / "SKILL.md").write_text(
+        '---\nname: "dig"\nname: [custom]\n---\n'
+        "本文で devkit リポジトリの `AGENTS.md` を参照。\n",
+        encoding="utf-8",
+    )
     powershell_path = str(SCRIPTS / "devkit-lib.ps1").replace("'", "''")
     home_path = str(home).replace("'", "''")
     root_path = str(ROOT).replace("'", "''")
@@ -126,6 +154,8 @@ def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
     )
     assert first.returncode == 0, first.stderr + first.stdout
     assert not retired.exists()
+    assert (user_skill / "SKILL.md").is_file()
+    assert (duplicate_name_user_skill / "SKILL.md").is_file()
     assert (marker_dir / ".migrated-v9-dig-goal").is_file()
 
     sentinel = home / ".codex" / "skills" / retired_name / "sentinel"
@@ -158,7 +188,10 @@ def test_v9_shell_migration_prunes_once_and_writes_marker(tmp_path):
         for name in ("dig", "goal-" + "prompt"):
             path = root / name
             path.mkdir(parents=True)
-            (path / "sentinel").write_text("retired\n", encoding="utf-8")
+            (path / "SKILL.md").write_text(
+                f'---\nname: "{name}"\n---\n正本は devkit リポジトリの `AGENTS.md`。\n',
+                encoding="utf-8",
+            )
             retired_paths.append(path)
 
     command = (
@@ -176,6 +209,47 @@ def test_v9_shell_migration_prunes_once_and_writes_marker(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     assert (marker_dir / ".migrated-v9-dig-goal").is_file()
     assert all(not path.exists() for path in retired_paths)
+
+
+def test_v9_shell_migration_preserves_unmanaged_same_name_skills(tmp_path):
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+    user_skill_files = []
+    skills_root = home / ".codex" / "skills"
+    for name in ("dig", "goal-" + "prompt"):
+        skill_file = skills_root / name / "SKILL.md"
+        skill_file.parent.mkdir(parents=True)
+        if name == "dig":
+            content = (
+                '---\nname: "dig"\n'
+                'description: devkit リポジトリの `AGENTS.md` を参考\n---\n'
+                "ユーザー所有スキル。\n"
+            )
+        else:
+            content = (
+                f'---\nname: "{name}"\nname: [custom]\n---\n'
+                "本文で devkit リポジトリの `AGENTS.md` を参照。\n"
+            )
+        skill_file.write_text(content, encoding="utf-8")
+        user_skill_files.append(skill_file)
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
+    assert all(skill_file.is_file() for skill_file in user_skill_files)
 
 
 def test_v9_shell_migration_is_noop_when_marker_exists(tmp_path):
