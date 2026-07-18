@@ -359,8 +359,11 @@ def test_worktree_integration_contract():
     assert "全件 `pass`(`skipping` は許容)" in pr_contract
     assert "安定した head SHA を「検証済み SHA」として記録" in pr_contract
     assert "API・認証エラーをチェック 0 件の成功と混同せず" in pr_contract
-    assert "計画作成時の CI 調査(CI 設定ファイルの有無確認等)" in pr_contract
-    assert "CI なし repo は checks 待ちを省略してその時点の安定した head SHA を検証済み SHA" in pr_contract
+    assert "repo 内 CI 設定ファイルと GitHub 側設定" in pr_contract
+    assert "`gh api` で取得できる branch ルール・required status checks 等" in pr_contract
+    assert "CI なし repo でも PR 作成後は `no checks reported` と同じ数分の登録猶予" in pr_contract
+    assert "checks が観測されたら計画記載より観測を優先して CI ありへ切り替え" in pr_contract
+    assert "登録猶予を過ぎても checks 0 件のときだけ" in pr_contract
     assert "CI あり repo で 0 件が続く場合は停止・報告" in pr_contract
     assert "merge 直前に `gh pr view <PR番号> --json headRefOid` を再取得" in pr_contract
     assert "検証済み SHA と一致することを確認" in pr_contract
@@ -457,15 +460,26 @@ def test_worktree_integration_contract():
     version_position = integration.index("2. その後、repo の release 規則")
     assert fetch_position < version_position
 
+    planning = _between(text, "### 2. 調査 + 計画", "### 3. backend 選択")
+    assert "`command -v gh` が通らない場合" in planning
+    assert "`git remote get-url origin` の URL ホスト名が非 GitHub ホスト" in planning
+    assert "`gh repo view` 等が認証切れ・API 障害・ネットワーク断などで失敗" in planning
+    assert "直接統合へフォールバックせず停止・報告" in planning
+    assert "GitHub 側設定(`gh api` で取得できる branch ルール・required status checks 等)" in planning
+
     backend_selection = _between(text, "### 3. backend 選択", "### 4. 計画レビュー")
     assert "統合方法は質問しない" in backend_selection
     assert "既定は PR 経由(提出 + CI green 確認 + merge まで)" in backend_selection
     assert "`command -v gh` が通らない場合" in backend_selection
-    assert "origin が `gh` で扱えない場合" in backend_selection
-    assert "`gh repo view` の成否" in backend_selection
+    assert "`git remote get-url origin` の URL ホスト名が非 GitHub ホスト" in backend_selection
+    assert "GitHub ホストの origin" in backend_selection
+    assert "`gh repo view` 等が認証切れ・API 障害・ネットワーク断などで失敗" in backend_selection
+    assert "直接統合へフォールバックせず停止・報告" in backend_selection
     assert "直接統合へ自動フォールバック" in backend_selection
+    assert "GitHub 側設定(`gh api` で取得できる branch ルール・required status checks 等)" in backend_selection
     assert "ゴール化して自律実行でも同じ規則で統合方法(既定は PR 経由(提出 + CI green 確認 + merge まで))を確定して goal 本文へ転記" in backend_selection
-    assert "対象 repo の CI 有無と CI 待機上限(既定 30 分)を計画へ記載" in backend_selection
+    assert "対象 repo の CI 有無を計画へ記載" in backend_selection
+    assert "CI 待機上限(既定 30 分)も記載" in backend_selection
     assert "非 git repo では統合を行わない" in backend_selection
     assert "既定推奨は「直接統合」" not in backend_selection
     assert "統合方法も 1 問で確認" not in backend_selection

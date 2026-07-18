@@ -148,7 +148,10 @@ def test_interview_rounds_are_present():
     assert "既定は現セッション自動実行" in text
     assert "ユーザーが定期実行・別ターミナル・別 PC・後で実行・白紙コンテキスト実行を明示した場合だけ" in text
     assert "独立レビュー通過後、追加確認なしでこのセッションが実行を開始する" in text
-    assert "gh 不在 / origin なし / origin が gh で扱えない repo は直接統合へ自動フォールバック" in text
+    fallback_contract = "gh 不在 / origin なし / origin が非 GitHub ホストの repo は直接統合へ自動フォールバック"
+    gh_failure_contract = "GitHub ホストで gh が認証・API 障害等により使えない場合はフォールバックせず停止・報告"
+    assert text.count(fallback_contract) == 4
+    assert text.count(gh_failure_contract) == 4
 
 
 def test_failure_modes_and_stop_conditions():
@@ -413,6 +416,7 @@ def test_pr_merge_completion_contract_is_baked_into_goal_strategy():
     for contract in (strategy, step6):
         assert "対象 repo の CI 有無" in contract
         assert "チェック 0 件の扱い" in contract
+        assert "CI なし判定でも PR 作成後の登録猶予内に checks が観測されたら計画より観測を優先して CI ありへ切り替える" in contract
         assert "数分おきの期限管理付きポーリング" in contract
         assert "`bucket`" in contract
         assert "`pass`" in contract and "`skipping`" in contract
