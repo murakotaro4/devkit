@@ -625,7 +625,7 @@ run_plugin_command() {
 
 claude_marketplace_state() {
     local output
-    if ! output="$(claude plugin marketplace list --json </dev/null 2>&1)"; then
+    if ! output="$(claude plugin marketplace list --json </dev/null 2>/dev/null)"; then
         return 1
     fi
 
@@ -683,7 +683,7 @@ else:
 
 claude_plugin_devkit_state() {
     local output
-    if ! output="$(claude plugin list --json </dev/null 2>&1)"; then
+    if ! output="$(claude plugin list --json </dev/null 2>/dev/null)"; then
         return 1
     fi
 
