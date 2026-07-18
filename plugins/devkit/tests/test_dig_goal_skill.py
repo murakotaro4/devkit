@@ -154,7 +154,7 @@ def test_backend_selection_and_python_gate_contract():
     assert claude_parent.count("| codex review — gpt-5.6-sol medium") == 1
     assert "標準の実装(既定)" in claude_parent
     assert "標準の計画レビュー / diff レビュー(既定)" in claude_parent
-    assert "`command -v python3`" in claude_parent
+    assert "`command -v uv`" in claude_parent
     assert "thread_id 抽出に必要な prerequisite 不足としてユーザーへ報告" in claude_parent
     assert "Codex の実装 backend だけを除外" in claude_parent
     assert "Codex の計画レビュー / diff レビュー選択肢は残し" in claude_parent
@@ -232,6 +232,8 @@ def test_delegation_records_explicit_thread_id_and_resumes_it():
         '-m gpt-5.6-sol -c model_reasoning_effort="medium" --json "<実装指示>" '
         '< /dev/null | tee "$JOB_DIR/codex-events.jsonl"'
     ) in delegation
+    assert 'uv run --no-project --python ">=3.10" python -c' in delegation
+    assert "python3 -c" not in delegation
     assert 'event.get("type") == "thread.started"' in delegation
     assert "len(ids) == 1" in delegation
     assert "isinstance(ids[0], str)" in delegation

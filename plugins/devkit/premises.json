@@ -306,6 +306,43 @@
       ]
     },
     {
+      "id": "python-runner",
+      "summary": "配布スキルの Python スクリプト実行形",
+      "current_value": "uv run --no-project --python \">=3.10\" python",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])uv run --no-project --python \">=3\\.10\" python(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [
+        "(?<![A-Za-z0-9_])command -v python3(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])python3 \\\"(?![A-Za-z0-9_])"
+      ],
+      "verify_hint": "uv --help / astral-sh/uv releases",
+      "update_notes": "対象 3 SKILL.md・README・AGENTS・テストを同時更新",
+      "last_verified": "2026-07-18",
+      "exclude_paths": [
+        "plugins/devkit/scripts/update-ccx.sh",
+        "plugins/devkit/scripts/devkit-lib.sh"
+      ],
+      "occurrences": [
+        {
+          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/improve-skill/SKILL.md",
+          "count": 4
+        },
+        {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "count": 1
+        }
+      ]
+    },
+    {
       "id": "cursor-agent-cli-flags",
       "summary": "cursor-agent 委譲に使う固有 CLI フラグ群",
       "current_value": "create-chat",

@@ -50,7 +50,7 @@ statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う
 対象 repo に依存しないユーザー環境の確認で、Claude 親 / Codex 親のどちらでも実行する。DevKit スキル群が前提にする CLI の存在を確認し、不足を報告する。
 
 ```bash
-for cmd in claude codex cursor-agent node python3; do
+for cmd in claude codex cursor-agent node uv; do
   if command -v "$cmd" >/dev/null 2>&1; then echo "OK $cmd"; else echo "MISSING $cmd"; fi
 done
 ```
@@ -61,11 +61,11 @@ done
 | codex | dig-goal の実装・レビュー backend。自律実行用ゴール本文の独立レビュー候補 | codex 系 backend とゴール本文の codex レビュー候補が使えない |
 | cursor-agent | dig-goal の高速レーン(任意) | dig-goal で cursor-agent の選択肢を提示しないだけ。導入は任意 |
 | node | statusline 適用 | statusline 適用が実行不可 |
-| python3 | ルール同期・thought-db 同期・updater 同期・Windows Terminal フォント適用スクリプト | ルール同期・thought-db 同期・updater 同期・フォント適用が実行不可(必須) |
+| uv | ルール同期・thought-db 同期・updater 同期・Windows Terminal フォント適用スクリプトの Python runner | ルール同期・thought-db 同期・updater 同期・フォント適用が実行不可(必須) |
 
 結果は OK / MISSING の一覧で報告し、MISSING には上表の影響と導入コマンドを添える。インストール自体はこのスキルでは行わない。
 
-- `python3` が `MISSING` の場合: step 3-5 のルール同期・thought-db 同期・updater 同期と step 7 のフォント適用は実行不能のため、この時点で停止し、step 3 以降は実行しない。macOS/Homebrew 例として `brew install python` を案内し、`python3` 導入後に `/setup` を再実行するよう伝える。
+- `uv` が `MISSING` の場合: step 3-5 のルール同期・thought-db 同期・updater 同期と step 7 のフォント適用は実行不能のため、この時点で停止し、step 3 以降は実行しない。macOS では `brew install uv`、Windows では `winget install --id astral-sh.uv` を案内し、`uv` 導入後に `/setup` を再実行するよう伝える。
 - `node` が `MISSING` の場合: step 6 の statusline 適用だけをスキップし、step 3-5 と step 7-8 は続行する。macOS/Homebrew 例として `brew install node` を案内し、statusline を適用したい場合は `node` 導入後に `/setup` を再実行するよう伝える。
 - `claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみで、ルール同期・thought-db 同期・statusline 適用の制御条件にはしない。
 
@@ -76,11 +76,13 @@ done
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
 TARGET_REPO="<対象リポジトリの絶対パス>"
-python3 "$SKILL_DIR/scripts/sync_rules.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_rules.py" \
   --target "$TARGET_REPO" \
   --template "$SKILL_DIR/../../templates/rules/agents-rules.md" \
   --format json
 ```
+
+`--no-project` は対象 repo の `pyproject.toml` を誤って同期対象にしないため必須とする。`--python ">=3.10"` は対象 repo の非互換な既存 `.venv` やアクティブな virtualenv を避け、DevKit が要求する版のインタプリタを強制するために指定する。
 
 結果 JSON の `changed` / `skipped` / `actions` を確認し、実際に同期した内容を報告する。2 回目以降は、テンプレートと対象ファイルが最新なら no-op になる。テンプレートが更新された場合は、マーカー区間だけを最新化し、マーカー外のプロジェクト固有記述は保持する。
 
@@ -90,7 +92,7 @@ python3 "$SKILL_DIR/scripts/sync_rules.py" \
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-python3 "$SKILL_DIR/scripts/sync_thought_db.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_thought_db.py" \
   --template "$SKILL_DIR/../../templates/rules/thought-db-user.md" \
   --format json
 ```
@@ -103,7 +105,7 @@ python3 "$SKILL_DIR/scripts/sync_thought_db.py" \
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-python3 "$SKILL_DIR/scripts/sync_updater.py" --format json
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_updater.py" --format json
 ```
 
 結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。POSIX では `~/.codex/bin/update-ccx.sh` に実行権を付け、両 OS とも `~/.local/bin/` の shim を plugin 同梱 `devkit-lib` の実装と同形式で同期する。旧 updater 名の残骸があれば削除し、`actions` に記録する。`~/.codex/devkit/source-root.txt` は変更しない。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
@@ -134,13 +136,13 @@ Windows では現在の検出・変更予定を確認する。
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-python3 "$SKILL_DIR/scripts/setup_terminal_font.py" --check --format json
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/setup_terminal_font.py" --check --format json
 ```
 
 結果 JSON を提示し、選択肢付き質問で承認を得てから適用する。Codex 親通常 mode または判定不能では、選択肢を箇条書きで提示して自由文回答を求める。
 
 ```bash
-python3 "$SKILL_DIR/scripts/setup_terminal_font.py" --format json
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/setup_terminal_font.py" --format json
 ```
 
 ダウンロード失敗、SHA-256 不一致、フォント未登録、Windows Terminal 未検出は案内のみとし、setup 全体を停止しない。フォントを検出できない場合の settings.json 書き込みはスクリプト側のゲートで抑止する。
