@@ -95,3 +95,11 @@ def test_powershell_codex_plugin_update_contract_is_enforced():
     check_skill_surface.assert_powershell_codex_plugin_update_contract(problems)
 
     assert problems == []
+
+
+def test_powershell_claude_plugin_update_contract_is_enforced():
+    problems: list[str] = []
+
+    check_skill_surface.assert_powershell_claude_plugin_update_contract(problems)
+
+    assert problems == []
