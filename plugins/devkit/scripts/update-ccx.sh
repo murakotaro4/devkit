@@ -771,6 +771,11 @@ section_cursor_skills() {
         WARNINGS+=("Cursor skills: python3 not available; sync skipped")
         return 0
     fi
+    if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+        echo "WARN Python 3.10 or newer is not available; skipping Cursor skills sync"
+        WARNINGS+=("Cursor skills: Python 3.10 or newer not available; sync skipped")
+        return 0
+    fi
 
     local repo_root sync_output
     if ! repo_root="$(ensure_devkit_repo_root_cached)"; then

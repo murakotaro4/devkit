@@ -267,6 +267,75 @@ def test_missing_manifest_preserves_conflicting_file(tmp_path):
     assert "skills/setup/SKILL.md" not in manifest(target)["files"]
 
 
+def test_modified_managed_file_is_preserved_across_source_updates(tmp_path):
+    source = make_source(tmp_path)
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    sync(target, source)
+    relpath = "skills/setup/SKILL.md"
+    destination = target / relpath
+    original_hash = manifest(target)["files"][relpath]
+    destination.write_bytes(b"user modified active skill\n")
+    (source / relpath).write_bytes(b"updated devkit skill\n")
+
+    first = sync(target, source)
+    second = sync(target, source)
+
+    assert first["changed"] is False
+    assert f"skip_modified:{relpath}" in first["actions"]
+    assert f"skip_modified:{relpath}" in second["actions"]
+    assert destination.read_bytes() == b"user modified active skill\n"
+    assert manifest(target)["files"][relpath] == original_hash
+
+
+def test_unmodified_managed_file_receives_source_update(tmp_path):
+    source = make_source(tmp_path)
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    sync(target, source)
+    relpath = "skills/setup/SKILL.md"
+    updated = b"updated devkit skill\n"
+    (source / relpath).write_bytes(updated)
+
+    result = sync(target, source)
+
+    assert f"copy:{relpath}" in result["actions"]
+    assert (target / relpath).read_bytes() == updated
+    assert manifest(target)["files"][relpath] == sha256(updated).hexdigest()
+
+
+def test_managed_file_already_matching_desired_only_updates_manifest(tmp_path):
+    source = make_source(tmp_path)
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    sync(target, source)
+    relpath = "skills/setup/SKILL.md"
+    updated = b"updated devkit skill\n"
+    (source / relpath).write_bytes(updated)
+    (target / relpath).write_bytes(updated)
+
+    result = sync(target, source)
+
+    assert f"copy:{relpath}" not in result["actions"]
+    assert f"write_manifest:{SYNC.MANIFEST_NAME}" in result["actions"]
+    assert manifest(target)["files"][relpath] == sha256(updated).hexdigest()
+
+
+def test_missing_managed_file_is_restored(tmp_path):
+    source = make_source(tmp_path)
+    target = tmp_path / ".cursor"
+    target.mkdir()
+    sync(target, source)
+    relpath = "skills/setup/SKILL.md"
+    expected = (source / relpath).read_bytes()
+    (target / relpath).unlink()
+
+    result = sync(target, source)
+
+    assert f"copy:{relpath}" in result["actions"]
+    assert (target / relpath).read_bytes() == expected
+
+
 def test_irregular_target_is_preserved(tmp_path):
     if not hasattr(os, "symlink"):
         pytest.skip("symlink is unavailable")
@@ -357,6 +426,62 @@ def test_source_and_target_overlap_is_rejected_without_writes(tmp_path):
     result = run_cli(source, source)
 
     assert result.returncode != 0
+    assert sorted(path.relative_to(source) for path in source.rglob("*")) == before
+
+
+def test_explicit_source_containing_missing_target_is_rejected_without_writes(tmp_path):
+    source = make_source(tmp_path)
+    target = source / "missing-target"
+    before = sorted(path.relative_to(source) for path in source.rglob("*"))
+
+    result = run_cli(target, source)
+
+    assert result.returncode != 0
+    assert "source and target must be separate trees" in result.stderr
+    assert not target.exists()
+    assert sorted(path.relative_to(source) for path in source.rglob("*")) == before
+
+
+def test_default_source_overlap_is_gracefully_skipped_without_writes(tmp_path):
+    source = make_source(tmp_path)
+    before = sorted(path.relative_to(source) for path in source.rglob("*"))
+
+    result = SYNC.sync_cursor_skills(source, source, False, source_is_default=True)
+
+    assert result == (
+        False,
+        [],
+        "source resolves inside target; running from the synced Cursor copy",
+    )
+    assert sorted(path.relative_to(source) for path in source.rglob("*")) == before
+
+
+def test_cli_detects_default_source_overlap_from_synced_copy(tmp_path):
+    source = make_source(tmp_path)
+    copied_script = source / "skills/setup/scripts/sync_cursor_skills.py"
+    before = sorted(path.relative_to(source) for path in source.rglob("*"))
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(copied_script),
+            "--target",
+            str(source),
+            "--format",
+            "json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "actions": [],
+        "changed": False,
+        "reason": "source resolves inside target; running from the synced Cursor copy",
+        "skipped": True,
+    }
     assert sorted(path.relative_to(source) for path in source.rglob("*")) == before
 
 
@@ -482,6 +607,39 @@ def test_posix_update_wrapper_python_missing_contract_is_warn_and_skip(tmp_path)
 
     assert probe.returncode == 0, probe.stderr + probe.stdout
     assert f"WARN {python_command} is not available; skipping Cursor skills sync" in probe.stdout
+    assert "warning_count=1" in probe.stdout
+
+
+def test_posix_update_wrapper_old_python_is_warn_and_skip(tmp_path):
+    text = (PLUGIN_ROOT / "scripts/update-ccx.sh").read_text(encoding="utf-8")
+    section_body = text.split("section_cursor_skills()", 1)[1].split("main()", 1)[0]
+    home = tmp_path / "home"
+    (home / ".cursor").mkdir(parents=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / ("python" + "3")
+    fake_python.write_text("#!/bin/bash\nexit 1\n", encoding="utf-8")
+    fake_python.chmod(0o755)
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["PATH"] = str(fake_bin)
+
+    probe = subprocess.run(
+        [
+            shutil.which("bash") or "/bin/bash",
+            "-c",
+            "declare -a ERRORS=(); declare -a WARNINGS=(); "
+            f"section_cursor_skills(){section_body}"
+            "section_cursor_skills; printf 'warning_count=%s\\n' \"${#WARNINGS[@]}\"",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert probe.returncode == 0, probe.stderr + probe.stdout
+    assert "WARN Python 3.10 or newer is not available; skipping Cursor skills sync" in probe.stdout
     assert "warning_count=1" in probe.stdout
 
 

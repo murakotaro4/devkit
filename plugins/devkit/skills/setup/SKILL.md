@@ -120,7 +120,7 @@ SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
 uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_cursor_skills.py" --format json
 ```
 
-結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。`~/.cursor/` が存在しない場合はディレクトリを作らず skip として報告する。管理 manifest と一致する廃止ファイルだけを prune し、ユーザーが変更したファイル、symlink、manifest 非掲載ファイルは保持して該当する skip action を報告する。同期失敗時は失敗を記録して後続の statusline / フォント step を続行し、最終レポートに明記する。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
+結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。`~/.cursor/` が存在しない場合はディレクトリを作らず skip として報告する。管理 manifest と一致する廃止ファイルだけを prune し、ユーザーが変更した管理ファイルは上書きせず `skip_modified` で報告する。symlink と manifest 非掲載ファイルも保持して該当する skip action を報告する。Cursor 上の同期済みコピーから実行した場合は skip になり、更新は `update-ccx` または Claude Code / Codex 側の `/setup` が担う。同期失敗時は失敗を記録して後続の statusline / フォント step を続行し、最終レポートに明記する。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
 
 ### 7. statusline 適用
 

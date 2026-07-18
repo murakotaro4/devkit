@@ -155,6 +155,9 @@ def test_cursor_sync_step_contract():
     assert "Claude 親 / Codex 親のどちらでも実行" in cursor_section
     assert "承認ゲートは置かず" in cursor_section
     assert "`~/.cursor/` が存在しない場合はディレクトリを作らず skip" in cursor_section
+    assert "ユーザーが変更した管理ファイルは上書きせず `skip_modified`" in cursor_section
+    assert "Cursor 上の同期済みコピーから実行した場合は skip" in cursor_section
+    assert "`update-ccx` または Claude Code / Codex 側の `/setup`" in cursor_section
     for field in ("`changed`", "`skipped`", "`actions`"):
         assert field in cursor_section
     assert CURSOR_SYNC_SCRIPT_PATH.is_file()

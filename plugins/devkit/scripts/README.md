@@ -32,7 +32,7 @@ update-ccx --cli-only
 update-ccx --devkit-only
 ```
 
-Cursor 同期は `plugins/devkit/skills/setup/scripts/sync_cursor_skills.py` に安全ロジックを集約します。前回 manifest と一致する廃止ファイルだけを prune し、ユーザー改変・symlink・manifest 非掲載ファイルは保持します。`~/.cursor/` または Python 3 が無い環境では skip し、同期スクリプト自体の失敗は他 section の実行後に updater 全体を非ゼロ終了させます。
+Cursor 同期は `plugins/devkit/skills/setup/scripts/sync_cursor_skills.py` に安全ロジックを集約します。前回 manifest と一致する廃止ファイルだけを prune し、ユーザー改変・symlink・manifest 非掲載ファイルは保持します。`~/.cursor/` または Python 3.10 以上が無い環境では skip し、同期スクリプト自体の失敗は他 section の実行後に updater 全体を非ゼロ終了させます。
 
 #### Windows: DevKit refresh が「Get-DevKitRepoRoot」で失敗する場合
 

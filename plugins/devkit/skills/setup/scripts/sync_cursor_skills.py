@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import stat
+import sys
 from pathlib import Path, PurePosixPath
 
 
@@ -22,6 +23,7 @@ EXPECTED_SKILLS = {
 }
 MANIFEST_NAME = ".devkit-sync-manifest.json"
 MANIFEST_VERSION = 1
+sys.dont_write_bytecode = True
 
 
 def _load_updater_file_names() -> tuple[str, ...]:
@@ -70,15 +72,14 @@ def _is_regular_file(path: Path) -> bool:
     return stat.S_ISREG(mode)
 
 
-def _validate_separate_trees(source: Path, target: Path) -> None:
+def _trees_overlap(source: Path, target: Path) -> bool:
     source_resolved = source.resolve()
     target_resolved = target.resolve()
-    if (
+    return (
         source_resolved == target_resolved
         or source_resolved in target_resolved.parents
         or target_resolved in source_resolved.parents
-    ):
-        raise SystemExit(f"source and target must be separate trees: {source_resolved} {target_resolved}")
+    )
 
 
 def _collect_tree(source_root: Path, relative_root: Path) -> dict[str, bytes]:
@@ -213,16 +214,21 @@ def sync_cursor_skills(
     target: Path,
     source: Path,
     dry_run: bool,
+    *,
+    source_is_default: bool = False,
 ) -> tuple[bool, list[str], str | None]:
     target = target.expanduser()
     source = source.expanduser()
+
+    if _trees_overlap(source, target):
+        if source_is_default:
+            return False, [], "source resolves inside target; running from the synced Cursor copy"
+        raise SystemExit(f"source and target must be separate trees: {source.resolve()} {target.resolve()}")
 
     if not target.exists():
         return False, [], "cursor target directory does not exist"
     if target.is_symlink() or not target.is_dir():
         return False, [f"skip_irregular:{target}"], "cursor target is not a regular directory"
-
-    _validate_separate_trees(source, target)
     desired = collect_desired(source)
 
     manifest_path = target / MANIFEST_NAME
@@ -250,6 +256,15 @@ def sync_cursor_skills(
         is_managed = previous is not None and relpath in previous
         if not is_managed and existing is not None and existing != content:
             actions.append(f"skip_conflict:{relpath}")
+            continue
+        if (
+            is_managed
+            and existing is not None
+            and existing != content
+            and _sha256(existing) != previous[relpath]
+        ):
+            actions.append(f"skip_modified:{relpath}")
+            next_manifest[relpath] = previous[relpath]
             continue
         if existing != content:
             actions.append(f"copy:{relpath}")
@@ -304,10 +319,17 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="Report planned changes without writing files")
     parser.add_argument("--format", choices=["json"], default="json", help="Output format")
     parser.add_argument("--target", type=Path, default=Path.home() / ".cursor")
-    parser.add_argument("--source", type=Path, default=default_source_dir())
+    parser.add_argument("--source", type=Path)
     args = parser.parse_args()
 
-    changed, actions, reason = sync_cursor_skills(args.target, args.source, args.check)
+    source_is_default = args.source is None
+    source = default_source_dir() if source_is_default else args.source
+    changed, actions, reason = sync_cursor_skills(
+        args.target,
+        source,
+        args.check,
+        source_is_default=source_is_default,
+    )
     dump_result(changed, actions, reason=reason)
     return 0
 

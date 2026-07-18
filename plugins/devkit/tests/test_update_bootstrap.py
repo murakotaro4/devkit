@@ -938,6 +938,60 @@ def test_update_ccx_ps1_syncs_cursor_skills_when_cursor_home_exists(tmp_path):
     assert (home / ".cursor/.devkit-sync-manifest.json").is_file()
 
 
+def test_update_ccx_ps1_cursor_sync_failure_is_aggregated_and_later_sections_continue(tmp_path):
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        pytest.skip("pwsh is not installed")
+
+    home = tmp_path / "home"
+    (home / ".cursor").mkdir(parents=True)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_codex = fake_bin / "codex"
+    fake_codex.write_text('#!/bin/bash\nprintf \'{}\\n\'\n', encoding="utf-8")
+    fake_codex.chmod(0o755)
+    damaged_root = tmp_path / "damaged-root"
+    shutil.copytree(ROOT / "plugins/devkit", damaged_root / "plugins/devkit")
+    shutil.rmtree(damaged_root / "plugins/devkit/skills/backlog")
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    env["DEVKIT_SOURCE_ROOT"] = str(damaged_root)
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+
+    result = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(SCRIPTS / "update-ccx.ps1"),
+            "--devkit-only",
+        ],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Cursor skills sync failed" in result.stdout
+    assert "=== [Codex Plugin] ===" in result.stdout
+    assert (home / ".codex/config.toml").is_file()
+
+
+def test_update_ccx_ps1_cursor_sync_failure_does_not_throw_from_sync_function():
+    text = (SCRIPTS / "update-ccx.ps1").read_text(encoding="utf-8")
+    function_body = text.split("function Sync-DevKitCursorSkills", 1)[1].split(
+        "function Section-DevKit", 1
+    )[0]
+
+    assert "Add-ResultError" in function_body
+    assert "throw" not in function_body
+
+
 # devkit-lib.ps1 の dot-source をスクリプトトップレベルで行うことを PowerShell AST で検証する。
 # v7.0.1 未満の update-ccx.ps1 は Import-DevKitLibForUpdate 関数の内側で devkit-lib.ps1 を
 # dot-source していた。PowerShell は関数内 dot-source のスコープを関数 return と同時に破棄する
