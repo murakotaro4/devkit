@@ -475,7 +475,7 @@
         },
         {
           "path": "plugins/devkit/scripts/check_skill_surface.py",
-          "count": 51
+          "count": 58
         },
         {
           "path": "plugins/devkit/scripts/devkit-lib.ps1",

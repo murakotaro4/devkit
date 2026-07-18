@@ -697,7 +697,18 @@ print("installed" if any(
         fi
     fi
 
-    if grep -Eq '"id"[[:space:]]*:[[:space:]]*"devkit@murakotaro4"' <<<"$output"; then
+    local devkit_entry
+    devkit_entry="$(
+        printf '%s\n' "$output" |
+            tr '\n' ' ' |
+            sed -E 's/}[[:space:]]*,[[:space:]]*[{]/}\
+{/g' |
+            grep -E '"id"[[:space:]]*:[[:space:]]*"devkit@murakotaro4"' |
+            grep -E '"scope"[[:space:]]*:[[:space:]]*"user"' |
+            head -n 1
+    )"
+
+    if [[ -n "$devkit_entry" ]]; then
         echo "installed"
     else
         echo "missing"

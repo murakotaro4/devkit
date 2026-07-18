@@ -235,7 +235,15 @@ if [ "$1" = "plugin" ] && [ "$2" = "list" ] && [ "$3" = "--json" ]; then
     exit 1
   fi
   if [ "${DEVKIT_FAKE_CLAUDE_INSTALLED:-1}" = "1" ]; then
-    printf '[{"id":"devkit@murakotaro4","version":"0.0.0","scope":"user","enabled":true}]\\n'
+    if [ "${DEVKIT_FAKE_CLAUDE_SCOPE:-user}" = "user" ]; then
+      printf '[{"id":"devkit@murakotaro4","version":"0.0.0","scope":"user","enabled":true}]\\n'
+    else
+      printf '%s\\n' \
+        '[' \
+        '  {"id":"devkit@murakotaro4","version":"0.0.0","scope":"project","enabled":true},' \
+        '  {"id":"other@murakotaro4","version":"0.0.0","scope":"user","enabled":true}' \
+        ']'
+    fi
   else
     printf '[]\\n'
   fi
@@ -291,6 +299,7 @@ def run_update_devkit_smoke(
     force_shell_fallback: bool = False,
     claude_marketplace: bool = True,
     claude_installed: bool = True,
+    claude_scope: str = "user",
     claude_list_fail: bool = False,
     expect_success: bool = True,
 ) -> UpdateSmokeResult:
@@ -323,6 +332,7 @@ def run_update_devkit_smoke(
                 "DEVKIT_FAKE_CODEX_AVAILABLE_SHAPE": available_shape,
                 "DEVKIT_FAKE_CLAUDE_MARKETPLACE": "1" if claude_marketplace else "0",
                 "DEVKIT_FAKE_CLAUDE_INSTALLED": "1" if claude_installed else "0",
+                "DEVKIT_FAKE_CLAUDE_SCOPE": claude_scope,
                 "DEVKIT_FAKE_CLAUDE_LIST_FAIL": "1" if claude_list_fail else "0",
                 "HOME": home,
                 "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
@@ -576,6 +586,29 @@ def run_claude_plugin_smoke_checks() -> None:
     )
     if any(line.startswith("claude plugin marketplace update") for line in list_failure.calls):
         raise AssertionError(f"Claude list failure was treated as registered: {list_failure.calls}")
+
+    project_scope_shell_fallback = run_update_devkit_smoke(
+        "claude-project-scope-fallback",
+        config_body='[marketplaces.murakotaro4]\nsource_type = "git"\nsource = "murakotaro4/devkit"\n',
+        installed=True,
+        force_shell_fallback=True,
+        claude_scope="project",
+    )
+    assert_ordered_subset(
+        project_scope_shell_fallback.calls,
+        [
+            "claude plugin marketplace list --json",
+            "claude plugin marketplace update murakotaro4",
+            "claude plugin list --json",
+            "claude plugin install --scope user devkit@murakotaro4",
+        ],
+        "project-scope Claude plugin shell fallback",
+    )
+    if "claude plugin update --scope user devkit@murakotaro4" in project_scope_shell_fallback.calls:
+        raise AssertionError(
+            "project-scope Claude plugin was treated as user-installed: "
+            f"{project_scope_shell_fallback.calls}"
+        )
 
 
 def run_prune_smoke_checks() -> None:
