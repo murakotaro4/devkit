@@ -75,7 +75,7 @@ $ARGUMENTS
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-uv run --no-project python "$SKILL_DIR/scripts/session_extract.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/session_extract.py" \
   --input-file /tmp/current-session.txt \
   --format json \
   > /tmp/improve-skill-session.json
@@ -86,7 +86,7 @@ uv run --no-project python "$SKILL_DIR/scripts/session_extract.py" \
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
 TARGET_SKILL_DIR="<対象スキルディレクトリの絶対パス>"
-uv run --no-project python "$SKILL_DIR/scripts/refresh_mapper.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/refresh_mapper.py" \
   --skill "$TARGET_SKILL_DIR" \
   --session-json /tmp/improve-skill-session.json \
   --format markdown
@@ -102,7 +102,7 @@ uv run --no-project python "$SKILL_DIR/scripts/refresh_mapper.py" \
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-uv run --no-project python "$SKILL_DIR/scripts/session_extract.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/session_extract.py" \
   --input-file /tmp/current-session.txt \
   --format json \
   > /tmp/improve-skill-session.json
@@ -113,7 +113,7 @@ uv run --no-project python "$SKILL_DIR/scripts/session_extract.py" \
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
 BASE_SKILLS_DIR="$(dirname "$SKILL_DIR")"
-uv run --no-project python "$SKILL_DIR/scripts/create_blueprint.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/create_blueprint.py" \
   --session-json /tmp/improve-skill-session.json \
   --base-path "$BASE_SKILLS_DIR" \
   --format markdown

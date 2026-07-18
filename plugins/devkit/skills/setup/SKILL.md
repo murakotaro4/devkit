@@ -76,13 +76,13 @@ done
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
 TARGET_REPO="<対象リポジトリの絶対パス>"
-uv run --no-project python "$SKILL_DIR/scripts/sync_rules.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_rules.py" \
   --target "$TARGET_REPO" \
   --template "$SKILL_DIR/../../templates/rules/agents-rules.md" \
   --format json
 ```
 
-`--no-project` は対象 repo の `pyproject.toml` を誤って同期対象にしないため必須とする。
+`--no-project` は対象 repo の `pyproject.toml` を誤って同期対象にしないため必須とする。`--python ">=3.10"` は対象 repo の非互換な既存 `.venv` やアクティブな virtualenv を避け、DevKit が要求する版のインタプリタを強制するために指定する。
 
 結果 JSON の `changed` / `skipped` / `actions` を確認し、実際に同期した内容を報告する。2 回目以降は、テンプレートと対象ファイルが最新なら no-op になる。テンプレートが更新された場合は、マーカー区間だけを最新化し、マーカー外のプロジェクト固有記述は保持する。
 
@@ -92,7 +92,7 @@ uv run --no-project python "$SKILL_DIR/scripts/sync_rules.py" \
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-uv run --no-project python "$SKILL_DIR/scripts/sync_thought_db.py" \
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_thought_db.py" \
   --template "$SKILL_DIR/../../templates/rules/thought-db-user.md" \
   --format json
 ```
@@ -105,7 +105,7 @@ uv run --no-project python "$SKILL_DIR/scripts/sync_thought_db.py" \
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-uv run --no-project python "$SKILL_DIR/scripts/sync_updater.py" --format json
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_updater.py" --format json
 ```
 
 結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。POSIX では `~/.codex/bin/update-ccx.sh` に実行権を付け、両 OS とも `~/.local/bin/` の shim を plugin 同梱 `devkit-lib` の実装と同形式で同期する。旧 updater 名の残骸があれば削除し、`actions` に記録する。`~/.codex/devkit/source-root.txt` は変更しない。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
@@ -136,13 +136,13 @@ Windows では現在の検出・変更予定を確認する。
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
-uv run --no-project python "$SKILL_DIR/scripts/setup_terminal_font.py" --check --format json
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/setup_terminal_font.py" --check --format json
 ```
 
 結果 JSON を提示し、選択肢付き質問で承認を得てから適用する。Codex 親通常 mode または判定不能では、選択肢を箇条書きで提示して自由文回答を求める。
 
 ```bash
-uv run --no-project python "$SKILL_DIR/scripts/setup_terminal_font.py" --format json
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/setup_terminal_font.py" --format json
 ```
 
 ダウンロード失敗、SHA-256 不一致、フォント未登録、Windows Terminal 未検出は案内のみとし、setup 全体を停止しない。フォントを検出できない場合の settings.json 書き込みはスクリプト側のゲートで抑止する。
