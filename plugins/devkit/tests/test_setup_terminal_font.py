@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import json
+import hashlib
 import importlib.util
+import json
 import os
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,7 @@ SPEC = importlib.util.spec_from_file_location("setup_terminal_font", SCRIPT)
 assert SPEC and SPEC.loader
 terminal_font = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(terminal_font)
+UDEV_NAMES = tuple(terminal_font.EXPECTED_VALUE_NAMES)
 
 
 def run_script(*args: object) -> dict[str, object]:
@@ -40,17 +43,12 @@ def make_font_names(path: Path, *names: str) -> None:
     path.write_text("\n".join(names) + "\n", encoding="utf-8")
 
 
-def make_winget(path: Path, body: str) -> Path:
-    if os.name == "nt":
-        # Windows は shebang を解釈しないため、python 本体を .cmd 経由で起動する
-        impl = path.with_name(path.name + "-impl.py")
-        impl.write_text(body + "\n", encoding="utf-8")
-        cmd = path.with_name(path.name + ".cmd")
-        cmd.write_text(f'@echo off\r\n"{sys.executable}" "{impl}" %*\r\n', encoding="utf-8")
-        return cmd
-    path.write_text(f"#!{sys.executable}\n{body}\n", encoding="utf-8")
-    path.chmod(0o755)
-    return path
+def make_font_zip(path: Path, *, omit: str | None = None) -> str:
+    with zipfile.ZipFile(path, "w") as bundle:
+        for member in terminal_font.FONT_MEMBERS.values():
+            if member != omit:
+                bundle.writestr(member, f"dummy:{member}".encode())
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def windows_args(settings: Path, fonts: Path, *extra: object) -> tuple[object, ...]:
@@ -81,13 +79,9 @@ def test_platform_override_beats_windir():
 @pytest.mark.parametrize(
     ("names", "installed"),
     [
-        (["JetBrainsMono NF Regular (TrueType)"], True),
-        (["JetBrainsMono NF Bold Italic (OpenType)"], True),
-        (["JetBrainsMono NF ExtraLight Italic (TrueType)"], True),
-        (["JetBrainsMono NFM Bold (TrueType)"], False),
-        (["JetBrainsMono NFP Regular (TrueType)"], False),
-        (["JetBrainsMonoNL NF Regular (TrueType)"], False),
-        (["JetBrainsMono Nerd Font Regular (TrueType)"], False),
+        (list(UDEV_NAMES), True),
+        (list(UDEV_NAMES[:-1]), False),
+        (["UDEV Gothic 35NF Regular (TrueType)", *UDEV_NAMES[1:]], False),
     ],
 )
 def test_font_family_detection(tmp_path: Path, names: list[str], installed: bool):
@@ -99,61 +93,69 @@ def test_font_family_detection(tmp_path: Path, names: list[str], installed: bool
     assert result["font_installed"] is installed
 
 
-def test_fake_winget_arguments_and_successful_redetection(tmp_path: Path):
+def test_local_zip_installs_all_styles_and_updates_settings(tmp_path: Path):
+    fonts = tmp_path / "fonts.txt"
+    fonts_dir = tmp_path / "installed-fonts"
+    settings = tmp_path / "settings.json"
+    archive = tmp_path / "font.zip"
+    make_font_names(fonts, UDEV_NAMES[0])
+    make_settings(settings)
+    digest = make_font_zip(archive)
+    result = run_script(
+        *windows_args(
+            settings, fonts, "--font-zip", archive,
+            "--expected-sha256", digest, "--fonts-dir", fonts_dir,
+        )
+    )
+    assert result["font_installed"] is True
+    assert result["download"] == "downloaded"
+    assert result["settings"][0]["changed"] is True
+    assert {path.name for path in fonts_dir.iterdir()} == {
+        Path(member).name for member in terminal_font.FONT_MEMBERS.values()
+    }
+    assert fonts.read_text(encoding="utf-8").splitlines() == list(UDEV_NAMES)
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    assert data["profiles"]["defaults"]["font"]["face"] == "UDEV Gothic NF"
+
+
+def test_hash_mismatch_does_not_write_settings(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    calls = tmp_path / "calls.json"
+    archive = tmp_path / "font.zip"
     make_font_names(fonts)
     make_settings(settings)
-    winget = make_winget(
-        tmp_path / "winget",
-        f"import json, pathlib, sys\npathlib.Path({str(calls)!r}).write_text(json.dumps(sys.argv[1:]))\n"
-        f"pathlib.Path({str(fonts)!r}).write_text('JetBrainsMono NF Regular (TrueType)\\n')",
-    )
-    result = run_script(*windows_args(settings, fonts, "--winget-cmd", winget))
-    assert result["font_installed"] is True
-    assert result["settings"][0]["changed"] is True
-    assert json.loads(calls.read_text()) == [
-        "install", "--id", "DEVCOM.JetBrainsMonoNerdFont", "--exact", "--silent",
-        "--accept-package-agreements", "--accept-source-agreements",
-    ]
+    make_font_zip(archive)
+    original = settings.read_bytes()
+    result = run_script(*windows_args(settings, fonts, "--font-zip", archive, "--expected-sha256", "0" * 64))
+    assert result["download"] == "hash-mismatch"
+    assert result["settings"] == []
+    assert settings.read_bytes() == original
 
 
-def test_winget_success_without_registration_does_not_write(tmp_path: Path):
+def test_missing_zip_member_does_not_write_settings(tmp_path: Path):
+    fonts = tmp_path / "fonts.txt"
+    settings = tmp_path / "settings.json"
+    archive = tmp_path / "font.zip"
+    make_font_names(fonts)
+    make_settings(settings)
+    digest = make_font_zip(archive, omit=next(iter(terminal_font.FONT_MEMBERS.values())))
+    original = settings.read_bytes()
+    result = run_script(*windows_args(settings, fonts, "--font-zip", archive, "--expected-sha256", digest))
+    assert result["download"] == "failed"
+    assert result["settings"] == []
+    assert settings.read_bytes() == original
+
+
+def test_missing_local_zip_is_download_failure(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
     make_font_names(fonts)
     make_settings(settings)
     original = settings.read_bytes()
-    winget = make_winget(tmp_path / "winget", "raise SystemExit(0)")
-    result = run_script(*windows_args(settings, fonts, "--winget-cmd", winget))
-    assert result["reason"] == "font-not-registered"
+    result = run_script(*windows_args(settings, fonts, "--font-zip", tmp_path / "missing.zip"))
+    assert result["download"] == "failed"
     assert result["settings"] == []
-    assert "Restart Windows" in result["actions"][0]
     assert settings.read_bytes() == original
-
-
-def test_winget_failure_does_not_write(tmp_path: Path):
-    fonts = tmp_path / "fonts.txt"
-    settings = tmp_path / "settings.json"
-    make_font_names(fonts)
-    make_settings(settings)
-    winget = make_winget(tmp_path / "winget", "import sys\nprint('package failed', file=sys.stderr)\nraise SystemExit(9)")
-    result = run_script(*windows_args(settings, fonts, "--winget-cmd", winget))
-    assert result["winget"] == "failed"
-    assert "package failed" in result["actions"][0]
-    assert result["settings"] == []
-
-
-def test_missing_winget_includes_manual_install_guidance(tmp_path: Path):
-    fonts = tmp_path / "fonts.txt"
-    settings = tmp_path / "settings.json"
-    make_font_names(fonts)
-    make_settings(settings)
-    result = run_script(*windows_args(settings, fonts, "--winget-cmd", tmp_path / "missing"))
-    assert result["winget"] == "missing"
-    assert "nerdfonts.com" in result["actions"][0]
-    assert result["settings"] == []
 
 
 @pytest.mark.parametrize(
@@ -168,7 +170,7 @@ def test_missing_winget_includes_manual_install_guidance(tmp_path: Path):
 def test_json_jsonc_trailing_comma_and_bom_are_updated(tmp_path: Path, content: bytes | str):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
+    make_font_names(fonts, *UDEV_NAMES)
     make_settings(settings, content)
     had_bom = settings.read_bytes().startswith(b"\xef\xbb\xbf")
     result = run_script(*windows_args(settings, fonts))
@@ -177,13 +179,13 @@ def test_json_jsonc_trailing_comma_and_bom_are_updated(tmp_path: Path, content: 
     raw = settings.read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf") is had_bom
     data = json.loads(raw.decode("utf-8-sig"))
-    assert data["profiles"]["defaults"]["font"]["face"] == "JetBrainsMono NF"
+    assert data["profiles"]["defaults"]["font"]["face"] == "UDEV Gothic NF"
 
 
 def test_jsonc_trailing_comma_cleanup_preserves_string_content(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
+    make_font_names(fonts, *UDEV_NAMES)
     make_settings(settings, '{"literal": ",} and ,]", // comment\n "profiles": {},}\n')
     result = run_script(*windows_args(settings, fonts))
     assert result["settings"][0]["changed"] is True
@@ -194,7 +196,7 @@ def test_jsonc_trailing_comma_cleanup_preserves_string_content(tmp_path: Path):
 def test_backup_collision_and_second_run_noop(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
+    make_font_names(fonts, *UDEV_NAMES)
     make_settings(settings, '{"profiles":{"defaults":{"font":{"face":"Other"}}}}')
     first = run_script(*windows_args(settings, fonts))
     first_backup = Path(first["settings"][0]["backup"])
@@ -240,7 +242,7 @@ def test_backup_path_collision_suffix(tmp_path: Path):
 def test_invalid_json_and_unexpected_structures_are_unchanged(tmp_path: Path, content: str):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
+    make_font_names(fonts, *UDEV_NAMES)
     make_settings(settings, content)
     original = settings.read_bytes()
     result = run_script(*windows_args(settings, fonts))
@@ -249,17 +251,16 @@ def test_invalid_json_and_unexpected_structures_are_unchanged(tmp_path: Path, co
     assert not (settings.parent / "devkit-font-backup").exists()
 
 
-def test_check_never_runs_winget_or_changes_files(tmp_path: Path):
+def test_check_never_reads_zip_or_changes_files(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    called = tmp_path / "called"
+    missing_archive = tmp_path / "missing.zip"
     make_font_names(fonts)
     make_settings(settings)
     original = settings.read_bytes()
-    winget = make_winget(tmp_path / "winget", f"import pathlib\npathlib.Path({str(called)!r}).touch()")
-    result = run_script(*windows_args(settings, fonts, "--winget-cmd", winget, "--check"))
+    result = run_script(*windows_args(settings, fonts, "--font-zip", missing_archive, "--check"))
     assert result["reason"] == "font-not-registered"
-    assert not called.exists()
+    assert not missing_archive.exists()
     assert settings.read_bytes() == original
     assert not (settings.parent / "devkit-font-backup").exists()
 
@@ -267,7 +268,7 @@ def test_check_never_runs_winget_or_changes_files(tmp_path: Path):
 def test_check_reports_would_change_for_registered_font(tmp_path: Path):
     fonts = tmp_path / "fonts.txt"
     settings = tmp_path / "settings.json"
-    make_font_names(fonts, "JetBrainsMono NF Regular (TrueType)")
+    make_font_names(fonts, *UDEV_NAMES)
     make_settings(settings)
     result = run_script(*windows_args(settings, fonts, "--check"))
     assert result["settings"][0]["would_change"] is True

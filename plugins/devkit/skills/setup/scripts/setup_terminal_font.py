@@ -2,41 +2,45 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform as platform_module
-import re
-import shlex
 import shutil
-import subprocess
 import tempfile
+import urllib.request
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 
-FONT_FACE = "JetBrainsMono NF"
-PACKAGE_ID = "DEVCOM.JetBrainsMonoNerdFont"
+FONT_FACE = "UDEV Gothic NF"
+DOWNLOAD_URL = "https://github.com/yuru7/udev-gothic/releases/download/v2.2.0/UDEVGothic_NF_v2.2.0.zip"
+EXPECTED_SHA256 = "45faeef7b5d8bc591bcc5887a2ca0c5fb9028066f18a5a52cd6f10b7d655ba37"  # pragma: allowlist secret
+DOWNLOAD_TIMEOUT_SECONDS = 60
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
+FONT_MEMBERS = {
+    "UDEV Gothic NF Regular (TrueType)": "UDEVGothic_NF_v2.2.0/UDEVGothicNF-Regular.ttf",
+    "UDEV Gothic NF Bold (TrueType)": "UDEVGothic_NF_v2.2.0/UDEVGothicNF-Bold.ttf",
+    "UDEV Gothic NF Italic (TrueType)": "UDEVGothic_NF_v2.2.0/UDEVGothicNF-Italic.ttf",
+    "UDEV Gothic NF Bold Italic (TrueType)": "UDEVGothic_NF_v2.2.0/UDEVGothicNF-BoldItalic.ttf",
+}
 REGISTRY_PATHS = (
     ("HKEY_LOCAL_MACHINE", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"),
     ("HKEY_CURRENT_USER", r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"),
 )
-STYLE_WORDS = {
-    "regular", "bold", "italic", "light", "medium", "semibold",
-    "extrabold", "thin", "extralight",
-}
+EXPECTED_VALUE_NAMES = tuple(FONT_MEMBERS)
 
 
-def normalize_font_family(value_name: str) -> str:
-    name = re.sub(r"\s*\([^)]*\)\s*$", "", value_name).strip()
-    words = name.split()
-    while words and words[-1].casefold() in STYLE_WORDS:
-        words.pop()
-    return " ".join(words).casefold()
+def normalize_registry_value_name(value_name: str) -> str:
+    return " ".join(value_name.split()).casefold()
 
 
 def font_is_registered(value_names: Iterable[str]) -> bool:
-    return any(normalize_font_family(name) == FONT_FACE.casefold() for name in value_names)
+    actual = {normalize_registry_value_name(name) for name in value_names}
+    expected = {normalize_registry_value_name(name) for name in EXPECTED_VALUE_NAMES}
+    return expected.issubset(actual)
 
 
 def read_font_names(path: Path | None) -> list[str]:
@@ -63,6 +67,148 @@ def read_font_names(path: Path | None) -> list[str]:
         except FileNotFoundError:
             continue
     return names
+
+
+def read_font_registry_values() -> list[tuple[str, str]]:
+    import winreg  # type: ignore[import-not-found]  # Windows-only, intentionally lazy.
+
+    roots = {
+        "HKEY_LOCAL_MACHINE": winreg.HKEY_LOCAL_MACHINE,
+        "HKEY_CURRENT_USER": winreg.HKEY_CURRENT_USER,
+    }
+    values: list[tuple[str, str]] = []
+    for root_name, key_path in REGISTRY_PATHS:
+        try:
+            with winreg.OpenKey(roots[root_name], key_path) as key:
+                index = 0
+                while True:
+                    try:
+                        name, data, _value_type = winreg.EnumValue(key, index)
+                    except OSError:
+                        break
+                    values.append((name, str(data)))
+                    index += 1
+        except FileNotFoundError:
+            continue
+    return values
+
+
+def registry_font_path(value: str) -> Path:
+    path = Path(os.path.expandvars(value))
+    if path.is_absolute():
+        return path
+    windows_dir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+    return windows_dir / "Fonts" / path
+
+
+def real_font_is_registered() -> bool:
+    expected = {
+        normalize_registry_value_name(name): name for name in EXPECTED_VALUE_NAMES
+    }
+    valid: set[str] = set()
+    for name, data in read_font_registry_values():
+        normalized = normalize_registry_value_name(name)
+        if normalized in expected and registry_font_path(data).is_file():
+            valid.add(normalized)
+    return valid == set(expected)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def download_archive(destination: Path) -> None:
+    with urllib.request.urlopen(DOWNLOAD_URL, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310
+        content_length = response.headers.get("Content-Length")
+        if content_length is not None and int(content_length) > MAX_DOWNLOAD_BYTES:
+            raise ValueError("font archive exceeds the 200MB download limit")
+        total = 0
+        with destination.open("wb") as output:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_DOWNLOAD_BYTES:
+                    raise ValueError("font archive exceeds the 200MB download limit")
+                output.write(chunk)
+
+
+def stage_fonts(archive: Path, staging_dir: Path) -> dict[str, Path]:
+    staged: dict[str, Path] = {}
+    total = 0
+    with zipfile.ZipFile(archive) as bundle:
+        infos = bundle.infolist()
+        for value_name, member_name in FONT_MEMBERS.items():
+            matches = [info for info in infos if info.filename == member_name]
+            if len(matches) != 1 or matches[0].is_dir():
+                raise ValueError(f"required font member must appear exactly once: {member_name}")
+            info = matches[0]
+            destination = staging_dir / Path(member_name).name
+            written = 0
+            with bundle.open(info) as source, destination.open("wb") as output:
+                while True:
+                    chunk = source.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    total += len(chunk)
+                    if total > MAX_DOWNLOAD_BYTES:
+                        raise ValueError("expanded font files exceed the 200MB limit")
+                    output.write(chunk)
+            if written != info.file_size:
+                raise ValueError(f"font member size mismatch: {member_name}")
+            staged[value_name] = destination
+    return staged
+
+
+def write_font_name_seam(path: Path) -> None:
+    existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    normalized = {normalize_registry_value_name(name) for name in existing}
+    additions = [
+        name for name in EXPECTED_VALUE_NAMES
+        if normalize_registry_value_name(name) not in normalized
+    ]
+    if additions:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prefix = "\n" if existing and path.read_bytes()[-1:] not in (b"\n", b"\r") else ""
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(prefix + "\n".join(additions) + "\n")
+
+
+def register_fonts(installed: dict[str, Path], font_names_path: Path | None) -> None:
+    if font_names_path is not None:
+        write_font_name_seam(font_names_path)
+        return
+
+    import winreg  # type: ignore[import-not-found]  # Windows-only, intentionally lazy.
+
+    key_path = r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+        for value_name, path in installed.items():
+            winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, str(path.resolve()))
+
+
+def refresh_font_cache(installed: Iterable[Path]) -> list[str]:
+    notes: list[str] = []
+    try:
+        import ctypes
+
+        gdi32 = ctypes.windll.gdi32
+        user32 = ctypes.windll.user32
+        for path in installed:
+            if not gdi32.AddFontResourceW(str(path.resolve())):
+                notes.append(f"Font cache refresh did not load {path.name}; restart may be required.")
+        result = ctypes.c_ulong()
+        if not user32.SendMessageTimeoutW(0xFFFF, 0x001D, 0, 0, 0x0002, 5000, ctypes.byref(result)):
+            notes.append("WM_FONTCHANGE broadcast timed out; restart may be required.")
+    except Exception as exc:  # Cache refresh is best-effort after durable registration.
+        notes.append(f"Font cache refresh failed: {exc}")
+    return notes
 
 
 def default_settings_paths() -> list[Path]:
@@ -246,7 +392,7 @@ def base_result(platform_name: str) -> dict[str, Any]:
         "status": "ok",
         "platform": platform_name,
         "font_installed": False,
-        "winget": "not-run",
+        "download": "not-run",
         "settings": [],
         "actions": [],
     }
@@ -265,41 +411,67 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return result
 
     font_names_path = Path(args.font_names_file) if args.font_names_file else None
-    registered = font_is_registered(read_font_names(font_names_path))
+    registered = (
+        font_is_registered(read_font_names(font_names_path))
+        if font_names_path is not None else real_font_is_registered()
+    )
     result["font_installed"] = registered
     if args.check and not registered:
         result.update({"status": "check", "reason": "font-not-registered"})
-        result["actions"].append("Install JetBrainsMono Nerd Font before applying Windows Terminal settings.")
+        result["actions"].append("Install UDEV Gothic NF before applying Windows Terminal settings.")
         return result
 
     if not registered:
-        if Path(args.winget_cmd).exists():
-            # スペースを含むパスを分割しないよう、実在するパスは単一の実行体として扱う
-            winget_argv = [args.winget_cmd]
-        else:
-            # posix=True は Windows パスのバックスラッシュを剥がすため OS で切り替える
-            winget_argv = shlex.split(args.winget_cmd, posix=(os.name != "nt"))
-        command = winget_argv + [
-            "install", "--id", PACKAGE_ID, "--exact", "--silent",
-            "--accept-package-agreements", "--accept-source-agreements",
-        ]
+        archive_arg = Path(args.font_zip) if args.font_zip else None
         try:
-            completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=False)
-        except FileNotFoundError:
-            result.update({"status": "error", "winget": "missing", "reason": "winget-missing"})
-            result["actions"].append("Install manually from nerdfonts.com or github.com/ryanoasis/nerd-fonts/releases.")
+            temp_parent = str(archive_arg.parent) if archive_arg is not None else None
+            with tempfile.TemporaryDirectory(prefix="devkit-udev-font-", dir=temp_parent) as temp_dir_value:
+                temp_dir = Path(temp_dir_value)
+                archive = archive_arg or (temp_dir / "UDEVGothic_NF_v2.2.0.zip")
+                if archive_arg is None:
+                    download_archive(archive)
+                elif not archive.is_file():
+                    raise FileNotFoundError(archive)
+                if archive.stat().st_size > MAX_DOWNLOAD_BYTES:
+                    raise ValueError("font archive exceeds the 200MB download limit")
+                actual_hash = sha256_file(archive)
+                if actual_hash.casefold() != args.expected_sha256.casefold():
+                    result.update({"status": "error", "download": "hash-mismatch", "reason": "hash-mismatch"})
+                    result["actions"].append(
+                        f"Font archive SHA-256 mismatch: expected {args.expected_sha256}, got {actual_hash}."
+                    )
+                    return result
+                result["download"] = "downloaded"
+                staging_dir = temp_dir / "staging"
+                staging_dir.mkdir()
+                staged = stage_fonts(archive, staging_dir)
+                fonts_dir = (
+                    Path(args.fonts_dir) if args.fonts_dir
+                    else Path(os.environ["LOCALAPPDATA"]) / "Microsoft/Windows/Fonts"
+                )
+                fonts_dir.mkdir(parents=True, exist_ok=True)
+                installed: dict[str, Path] = {}
+                for value_name, staged_path in staged.items():
+                    destination = fonts_dir / staged_path.name
+                    shutil.copy2(staged_path, destination)
+                    installed[value_name] = destination
+                register_fonts(installed, font_names_path)
+                if font_names_path is None:
+                    result["actions"].extend(refresh_font_cache(installed.values()))
+                result["actions"].append("Restart Windows Terminal if the new font is not visible yet.")
+        except Exception as exc:
+            result.update({"status": "error", "download": "failed", "reason": "font-install-failed"})
+            result["actions"].append(str(exc))
             return result
-        if completed.returncode != 0:
-            result.update({"status": "error", "winget": "failed", "reason": "winget-failed"})
-            result["actions"].append((completed.stderr or completed.stdout).strip()[-500:])
-            return result
-        result["winget"] = "installed"
-        registered = font_is_registered(read_font_names(font_names_path))
+        registered = (
+            font_is_registered(read_font_names(font_names_path))
+            if font_names_path is not None else real_font_is_registered()
+        )
         result["font_installed"] = registered
         if not registered:
             result.update({"status": "error", "reason": "font-not-registered"})
             result["actions"].append(
-                "Restart Windows or install the font manually, then rerun /setup after it appears in the Fonts registry."
+                "Register all four UDEV Gothic NF styles, then rerun /setup."
             )
             return result
 
@@ -318,12 +490,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Configure JetBrainsMono Nerd Font in Windows Terminal.")
+    parser = argparse.ArgumentParser(description="Configure UDEV Gothic NF in Windows Terminal.")
     parser.add_argument("--check", action="store_true", help="Report changes without installing or writing")
     parser.add_argument("--format", choices=["json"], default="json")
     parser.add_argument("--settings-path", action="append", default=[])
     parser.add_argument("--font-names-file")
-    parser.add_argument("--winget-cmd", default="winget")
+    parser.add_argument("--font-zip")
+    parser.add_argument("--expected-sha256", default=EXPECTED_SHA256)
+    parser.add_argument("--fonts-dir")
     parser.add_argument("--platform")
     args = parser.parse_args()
     print(json.dumps(run(args), ensure_ascii=False, sort_keys=True))

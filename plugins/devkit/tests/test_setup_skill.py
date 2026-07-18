@@ -110,7 +110,10 @@ def test_skill_contract_mentions_windows_terminal_font_approval_gate():
 
     assert "### 7. ターミナルフォント適用(Windows のみ)" in text
     assert "setup_terminal_font.py" in text
-    assert "JetBrainsMono Nerd Font" in text
+    assert "UDEV Gothic NF" in text
+    assert "ダウンロード失敗" in text
+    assert "SHA-256 不一致" in text
+    assert "`download`" in text
     assert "--check --format json" in text
     assert "選択肢付き質問で承認" in text
     assert "statusline 適用とターミナルフォント適用のみ" in text

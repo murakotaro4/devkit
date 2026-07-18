@@ -21,7 +21,7 @@ def main() -> int:
         "registered": registered,
         "font_face": setup_terminal_font.FONT_FACE,
         "names": names,
-        "jetbrains_names": [name for name in names if "jetbrains" in name.lower()],
+        "udev_names": [name for name in names if "udev" in name.lower()],
     }
     print(json.dumps(payload, ensure_ascii=False))
     return 0
