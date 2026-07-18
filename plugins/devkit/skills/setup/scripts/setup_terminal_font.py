@@ -17,7 +17,7 @@ from typing import Any, Iterable
 
 FONT_FACE = "UDEV Gothic NF"
 DOWNLOAD_URL = "https://github.com/yuru7/udev-gothic/releases/download/v2.2.0/UDEVGothic_NF_v2.2.0.zip"
-EXPECTED_SHA256 = "45faeef7b5d8bc591bcc5887a2ca0c5fb9028066f18a5a52cd6f10b7d655ba37"
+EXPECTED_SHA256 = "45faeef7b5d8bc591bcc5887a2ca0c5fb9028066f18a5a52cd6f10b7d655ba37"  # pragma: allowlist secret
 DOWNLOAD_TIMEOUT_SECONDS = 60
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
 FONT_MEMBERS = {
