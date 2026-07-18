@@ -18,7 +18,7 @@
 
 1. 深掘り: 要求が曖昧なら、未知を棚卸しして影響が大きい未知だけ質問し、ユーザーの要求(目的・成功条件・非対象)を聞き出す。未知棚卸し表(質問する / 仮定で進める / 確定済み)で終了判定を可視化し、小さい未知は仮定を明示して進める(質問ポリシーの正本は dig-goal スキルの SKILL.md)
 2. 計画: コードベースを調査し、decision-complete な計画を作る
-3. 承認: 計画レビュー・実装・diff レビューの backend を選択し、計画レビュー(skip 可)を経た計画をユーザーに提示して、承認を得てから実装に進む
+3. 承認: 計画レビュー・実装・diff レビューの backend を選択し、計画レビュー(skip 可)を経た計画をユーザーに提示して、承認を得てから実装に進む。Claude 親は plan mode / ExitPlanMode を既定とする
 4. 実装: worktree 上の作業ブランチで計画に沿って差分を作り、親が節目ごとにパス限定で commit する。計画から逸脱する場合は理由・リスク・要確認点を記録する(実装を外部 backend に委譲する場合は dig-goal スキルの契約に従う)
 5. 自レビュー: diff 全文を計画と突き合わせ、テスト・リンタを実行する
 6. 修正ループ: 指摘が解消するまで修正を繰り返す
@@ -90,6 +90,12 @@ worktree 統合の rebase で発生する既知の機械的衝突は、以下の
 - Claude 親: AskUserQuestion
 - Codex 親 plan mode: `request_user_input`
 - Codex 親通常 mode / 判定不能: 選択肢を箇条書きで提示して自由文回答を求める
+
+### 承認手段
+
+- Claude 親: plan mode + `ExitPlanMode` を既定とし、step 1 開始時に plan mode 外であれば `EnterPlanMode` で入る。`EnterPlanMode` を利用できない場合だけ、計画全文を提示して明示承認を得る
+- Codex 親 plan mode: `request_user_input` で承認を得る
+- Codex 親通常 mode / 判定不能: 計画全文を提示して自由文で明示承認を得る
 
 ### タスクリスト連動
 

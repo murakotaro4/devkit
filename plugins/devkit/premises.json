@@ -160,7 +160,7 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
-          "count": 7
+          "count": 8
         },
         {
           "path": "plugins/devkit/skills/backlog/SKILL.md",
@@ -233,6 +233,37 @@
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
           "count": 1
+        }
+      ]
+    },
+    {
+      "id": "plan-mode-tools",
+      "summary": "plan mode 遷移に使うハーネスツール名",
+      "current_value": "EnterPlanMode",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])EnterPlanMode(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])ExitPlanMode(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "Claude Code の利用可能ツール一覧",
+      "update_notes": "SKILL.md・AGENTS.md・README・契約テストを同時更新",
+      "last_verified": "2026-07-18",
+      "occurrences": [
+        {
+          "path": "AGENTS.md",
+          "count": 4
+        },
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
+          "count": 5
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "count": 5
         }
       ]
     },

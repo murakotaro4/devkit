@@ -205,6 +205,19 @@ def test_plan_review_and_approval_contract():
     assert "### 9. 統合・後始末・完了報告" in text
 
 
+def test_claude_parent_plan_mode_approval_boundaries():
+    text = _skill_text()
+    interview = _section(text, "### 1. 深掘り(棚卸し駆動面談、親)")
+    approval = _section(text, "### 5. 計画承認")
+    assert "Claude 親は step 1 開始時に plan mode 外であれば `EnterPlanMode` を呼んで plan mode へ入る" in interview
+    assert "step 1-5 の read-only 契約は plan mode と整合する" in interview
+    assert "`ExitPlanMode` で承認を得ることに一本化する" in approval
+    assert "`EnterPlanMode` が利用できないハーネスの縮退経路に限り" in approval
+    assert "通常 mode で計画全文を提示して明示承認を得る" in approval
+    assert "`ExitPlanMode` による承認前は step 6(実装・実行移行)へ進まない" in approval
+    assert "`ExitPlanMode` 承認後は plan mode を抜け" in approval
+
+
 def test_delegation_records_explicit_thread_id_and_resumes_it():
     text = _skill_text()
     delegation = _section(text, "### 6. 実装委譲(backend)")
