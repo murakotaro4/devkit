@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 
 from check_external_premises import validate_registry
 
 
 PATTERN = r"(?<![A-Za-z0-9_])composer-2\.5(?![A-Za-z0-9_])"
+CURSOR_SKILLS_PATTERN = r"(?<![A-Za-z0-9_])\.cursor[/\\]skills(?![A-Za-z0-9_.-])"
 
 
 def registry(path: str = "docs/value.md", count: int = 1) -> dict[str, object]:
@@ -125,6 +127,20 @@ def test_token_boundary_rejects_longer_identifier(tmp_path):
     write(tmp_path, "docs/value.md", "composer-2.5Tool\n")
     problems = validate_registry(tmp_path, registry(), ["docs/value.md"])
     assert any("declared occurrence has no match" in problem for problem in problems)
+
+
+def test_cursor_skills_pattern_rejects_lookalike_directories():
+    pattern = re.compile(CURSOR_SKILLS_PATTERN)
+
+    assert pattern.search("~/.cursor/skills/setup/SKILL.md")
+    assert pattern.search(r"C:\Users\user\.cursor\skills\setup\SKILL.md")
+    for value in (
+        "~/.cursor/skills-old",
+        "~/.cursor/skills.backup",
+        "~/.cursor/skills_extra",
+        "~/.cursorx/skills",
+    ):
+        assert not pattern.search(value)
 
 
 def test_obsolete_pattern_fails_when_old_value_remains(tmp_path):

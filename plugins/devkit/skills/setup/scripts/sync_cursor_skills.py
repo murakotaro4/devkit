@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import stat
+from pathlib import Path, PurePosixPath
+
+
+EXPECTED_SKILLS = {
+    "backlog",
+    "catch-up",
+    "commit-push",
+    "dig-goal",
+    "handoff",
+    "improve-skill",
+    "memory-review",
+    "refactor",
+    "setup",
+}
+MANIFEST_NAME = ".devkit-sync-manifest.json"
+MANIFEST_VERSION = 1
+
+
+def _load_updater_file_names() -> tuple[str, ...]:
+    module_path = Path(__file__).with_name("sync_updater.py")
+    spec = importlib.util.spec_from_file_location("devkit_sync_updater", module_path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"failed to load updater contract: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.POSIX_FILES) + tuple(module.WINDOWS_FILES)
+
+
+UPDATER_FILES = _load_updater_file_names()
+
+
+def default_source_dir() -> Path:
+    skill_dir = Path(__file__).resolve().parent.parent
+    return (skill_dir / "../..").resolve()
+
+
+def dump_result(
+    changed: bool,
+    actions: list[str],
+    *,
+    reason: str | None = None,
+) -> None:
+    payload: dict[str, object] = {
+        "changed": changed,
+        "skipped": not changed,
+        "actions": actions,
+    }
+    if reason is not None:
+        payload["reason"] = reason
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+def _sha256(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _is_regular_file(path: Path) -> bool:
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return False
+    return stat.S_ISREG(mode)
+
+
+def _validate_separate_trees(source: Path, target: Path) -> None:
+    source_resolved = source.resolve()
+    target_resolved = target.resolve()
+    if (
+        source_resolved == target_resolved
+        or source_resolved in target_resolved.parents
+        or target_resolved in source_resolved.parents
+    ):
+        raise SystemExit(f"source and target must be separate trees: {source_resolved} {target_resolved}")
+
+
+def _collect_tree(source_root: Path, relative_root: Path) -> dict[str, bytes]:
+    result: dict[str, bytes] = {}
+    root = source_root / relative_root
+    if not root.is_dir() or root.is_symlink():
+        raise SystemExit(f"missing required source directory: {root}")
+    for path in sorted(root.rglob("*")):
+        relative_parts = path.relative_to(root).parts
+        if "__pycache__" in relative_parts or path.suffix == ".pyc":
+            continue
+        if path.is_symlink():
+            raise SystemExit(f"source contains symlink: {path}")
+        if path.is_dir():
+            continue
+        if not _is_regular_file(path):
+            raise SystemExit(f"source contains non-regular file: {path}")
+        relpath = (relative_root / path.relative_to(root)).as_posix()
+        result[relpath] = path.read_bytes()
+    return result
+
+
+def collect_desired(source: Path) -> dict[str, bytes]:
+    source = source.resolve()
+    skills_dir = source / "skills"
+    if not skills_dir.is_dir() or skills_dir.is_symlink():
+        raise SystemExit(f"missing skills source directory: {skills_dir}")
+
+    actual_skills = {path.name for path in skills_dir.iterdir() if path.is_dir()}
+    if actual_skills != EXPECTED_SKILLS:
+        raise SystemExit(
+            "skills surface mismatch: "
+            f"expected={sorted(EXPECTED_SKILLS)} actual={sorted(actual_skills)}"
+        )
+
+    desired: dict[str, bytes] = {}
+    for skill_name in sorted(EXPECTED_SKILLS):
+        skill_dir = skills_dir / skill_name
+        skill_markdown = skill_dir / "SKILL.md"
+        if skill_dir.is_symlink() or not _is_regular_file(skill_markdown):
+            raise SystemExit(f"missing regular SKILL.md: {skill_markdown}")
+        desired.update(_collect_tree(source, Path("skills") / skill_name))
+
+    for template_name in ("rules", "codex"):
+        desired.update(_collect_tree(source, Path("templates") / template_name))
+
+    scripts_dir = source / "scripts"
+    for file_name in UPDATER_FILES:
+        path = scripts_dir / file_name
+        if not _is_regular_file(path):
+            raise SystemExit(f"missing updater source: {path}")
+        desired[(Path("scripts") / file_name).as_posix()] = path.read_bytes()
+
+    for file_name in ("install.js", "statusline.js"):
+        path = source / "statusline" / file_name
+        if not _is_regular_file(path):
+            raise SystemExit(f"missing statusline source: {path}")
+        desired[(Path("statusline") / file_name).as_posix()] = path.read_bytes()
+
+    return desired
+
+
+def _read_manifest(path: Path) -> dict[str, str] | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    if not _is_regular_file(path):
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("version") != MANIFEST_VERSION:
+        return None
+    files = payload.get("files")
+    if not isinstance(files, dict):
+        return None
+    managed_roots = {"skills", "templates", "scripts", "statusline"}
+    if not all(
+        isinstance(key, str)
+        and isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+        and "\\" not in key
+        and not PurePosixPath(key).is_absolute()
+        and PurePosixPath(key).as_posix() == key
+        and ".." not in PurePosixPath(key).parts
+        and len(PurePosixPath(key).parts) >= 2
+        and PurePosixPath(key).parts[0] in managed_roots
+        for key, value in files.items()
+    ):
+        return None
+    return dict(files)
+
+
+def _path_kind(target: Path, destination: Path) -> str:
+    relative = destination.relative_to(target)
+    current = target
+    for part in relative.parts[:-1]:
+        current = current / part
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            return "irregular"
+    try:
+        mode = destination.lstat().st_mode
+    except FileNotFoundError:
+        return "missing"
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        return "irregular"
+    return "regular"
+
+
+def _manifest_bytes(files: dict[str, str]) -> bytes:
+    payload = {"version": MANIFEST_VERSION, "files": dict(sorted(files.items()))}
+    return (json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _remove_empty_managed_dirs(target: Path, start: Path) -> None:
+    managed_roots = {target / name for name in ("skills", "templates", "scripts", "statusline")}
+    current = start
+    while current != target and any(current == root or root in current.parents for root in managed_roots):
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
+def sync_cursor_skills(
+    target: Path,
+    source: Path,
+    dry_run: bool,
+) -> tuple[bool, list[str], str | None]:
+    target = target.expanduser()
+    source = source.expanduser()
+
+    if not target.exists():
+        return False, [], "cursor target directory does not exist"
+    if target.is_symlink() or not target.is_dir():
+        return False, [f"skip_irregular:{target}"], "cursor target is not a regular directory"
+
+    _validate_separate_trees(source, target)
+    desired = collect_desired(source)
+
+    manifest_path = target / MANIFEST_NAME
+    manifest_present = manifest_path.exists() or manifest_path.is_symlink()
+    previous = _read_manifest(manifest_path)
+    if manifest_present and previous is None:
+        return False, [f"skip_irregular:{MANIFEST_NAME}"], "manifest is not a valid regular file"
+
+    actions: list[str] = []
+    writes: dict[str, bytes] = {}
+    prunes: list[str] = []
+    next_manifest: dict[str, str] = {}
+
+    for relpath, content in sorted(desired.items()):
+        destination = target / relpath
+        kind = _path_kind(target, destination)
+        desired_hash = _sha256(content)
+        if kind == "irregular":
+            actions.append(f"skip_irregular:{relpath}")
+            if previous is not None and relpath in previous:
+                next_manifest[relpath] = previous[relpath]
+            continue
+
+        existing = destination.read_bytes() if kind == "regular" else None
+        is_managed = previous is not None and relpath in previous
+        if not is_managed and existing is not None and existing != content:
+            actions.append(f"skip_conflict:{relpath}")
+            continue
+        if existing != content:
+            actions.append(f"copy:{relpath}")
+            writes[relpath] = content
+        next_manifest[relpath] = desired_hash
+
+    if previous is not None:
+        for relpath in sorted(set(previous) - set(desired)):
+            destination = target / relpath
+            kind = _path_kind(target, destination)
+            if kind == "missing":
+                continue
+            if kind == "irregular":
+                actions.append(f"skip_irregular:{relpath}")
+                next_manifest[relpath] = previous[relpath]
+                continue
+            if _sha256(destination.read_bytes()) != previous[relpath]:
+                actions.append(f"skip_prune_modified:{relpath}")
+                next_manifest[relpath] = previous[relpath]
+                continue
+            actions.append(f"prune:{relpath}")
+            prunes.append(relpath)
+
+    desired_manifest = _manifest_bytes(next_manifest)
+    existing_manifest = manifest_path.read_bytes() if previous is not None else None
+    manifest_change = existing_manifest != desired_manifest
+    if manifest_change:
+        actions.append(f"write_manifest:{MANIFEST_NAME}")
+
+    changed = bool(writes or prunes or manifest_change)
+    if dry_run or not changed:
+        return changed, actions, None
+
+    for relpath in prunes:
+        destination = target / relpath
+        destination.unlink()
+        _remove_empty_managed_dirs(target, destination.parent)
+
+    for relpath, content in writes.items():
+        destination = target / relpath
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+
+    if manifest_change:
+        manifest_path.write_bytes(desired_manifest)
+
+    return True, actions, None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Synchronize DevKit skills for Cursor.")
+    parser.add_argument("--check", action="store_true", help="Report planned changes without writing files")
+    parser.add_argument("--format", choices=["json"], default="json", help="Output format")
+    parser.add_argument("--target", type=Path, default=Path.home() / ".cursor")
+    parser.add_argument("--source", type=Path, default=default_source_dir())
+    args = parser.parse_args()
+
+    changed, actions, reason = sync_cursor_skills(args.target, args.source, args.check)
+    dump_result(changed, actions, reason=reason)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

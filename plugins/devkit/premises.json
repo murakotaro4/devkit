@@ -20,6 +20,36 @@
   },
   "premises": [
     {
+      "id": "cursor-skills-dir",
+      "summary": "Cursor がグローバル Agent Skills を発見するユーザーディレクトリ",
+      "current_value": "~/.cursor/skills",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])\\.cursor[/\\\\]skills(?![A-Za-z0-9_.-])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "Cursor Agent Skills official documentation",
+      "update_notes": "Cursor のグローバル skills discovery path が変わった場合、同期スクリプト・setup/update 契約・README・契約テストを同時更新",
+      "last_verified": "2026-07-19",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_check_external_premises.py",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_sync_cursor_skills.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_update_bootstrap.py",
+          "count": 1
+        }
+      ]
+    },
+    {
       "id": "cursor-composer-model",
       "summary": "cursor-agent に明示指定する Cursor 自社モデル名",
       "current_value": "composer-2.5",
@@ -334,7 +364,11 @@
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
-          "count": 5
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_skill.py",
+          "count": 1
         },
         {
           "path": "plugins/devkit/tests/test_dig_goal_skill.py",

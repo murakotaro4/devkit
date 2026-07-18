@@ -898,6 +898,46 @@ def test_update_ccx_ps1_preserves_existing_source_root(tmp_path):
     assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(caller_source_root)
 
 
+def test_update_ccx_ps1_syncs_cursor_skills_when_cursor_home_exists(tmp_path):
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        pytest.skip("pwsh is not installed")
+
+    home = tmp_path / "home"
+    (home / ".cursor").mkdir(parents=True)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_codex = fake_bin / "codex"
+    fake_codex.write_text('#!/bin/bash\nprintf \'{}\\n\'\n', encoding="utf-8")
+    fake_codex.chmod(0o755)
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    env["DEVKIT_SOURCE_ROOT"] = str(ROOT)
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+
+    result = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(SCRIPTS / "update-ccx.ps1"),
+            "--devkit-only",
+        ],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (home / ".cursor/skills/setup/SKILL.md").is_file()
+    assert (home / ".cursor/.devkit-sync-manifest.json").is_file()
+
+
 # devkit-lib.ps1 の dot-source をスクリプトトップレベルで行うことを PowerShell AST で検証する。
 # v7.0.1 未満の update-ccx.ps1 は Import-DevKitLibForUpdate 関数の内側で devkit-lib.ps1 を
 # dot-source していた。PowerShell は関数内 dot-source のスコープを関数 return と同時に破棄する

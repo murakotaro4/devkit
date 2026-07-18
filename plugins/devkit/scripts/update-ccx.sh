@@ -758,6 +758,38 @@ section_prune_legacy_assets() {
     fi
 }
 
+section_cursor_skills() {
+    echo ""
+    echo "=== [Cursor Skills] ==="
+
+    if [[ ! -d "$HOME/.cursor" ]]; then
+        echo "SKIP Cursor user directory is not available"
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        echo "WARN python3 is not available; skipping Cursor skills sync"
+        WARNINGS+=("Cursor skills: python3 not available; sync skipped")
+        return 0
+    fi
+
+    local repo_root sync_output
+    if ! repo_root="$(ensure_devkit_repo_root_cached)"; then
+        ERRORS+=("Cursor skills: DevKit checkout unavailable")
+        return 1
+    fi
+
+    if ! sync_output="$(python3 "$repo_root/plugins/devkit/skills/setup/scripts/sync_cursor_skills.py" \
+        --source "$repo_root/plugins/devkit" \
+        --target "$HOME/.cursor" \
+        --format json)"; then
+        echo "FAILED Cursor skills sync"
+        ERRORS+=("Cursor skills: sync failed")
+        return 1
+    fi
+
+    echo "$sync_output"
+}
+
 main() {
     if ! parse_args "$@"; then
         show_usage
@@ -784,6 +816,7 @@ main() {
 
     if [[ "$CLI_ONLY" != true ]]; then
         section_prune_legacy_assets
+        section_cursor_skills
         section_codex_plugin
     fi
 

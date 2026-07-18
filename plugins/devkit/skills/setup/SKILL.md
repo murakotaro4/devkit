@@ -1,13 +1,13 @@
 ---
 name: "setup"
-description: "対象リポジトリへ DevKit 標準ルールを、ユーザー環境へ updater を同期し旧 updater 名の残骸を prune する。「セットアップして」「ルール同期して」「/setup」で起動"
+description: "対象リポジトリへ DevKit 標準ルールを、ユーザー環境へ updater と Cursor skills を同期し旧 updater 名の残骸を prune する。「セットアップして」「ルール同期して」「/setup」で起動"
 argument-hint: "[target]"
 allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit", "AskUserQuestion", "request_user_input", "TaskCreate", "TaskUpdate"]
 ---
 
 # /setup
 
-対象リポジトリに DevKit 標準ルールを冪等同期し、ユーザー環境へ思想 DB（thought-db）への参照と最新版の updater を同期する。Claude 親では statusline を、Windows ではハーネスを問わず Windows Terminal の UDEV Gothic NF を必要に応じて適用する。
+対象リポジトリに DevKit 標準ルールを冪等同期し、ユーザー環境へ思想 DB（thought-db）への参照、最新版の updater、Cursor skills を同期する。Claude 親では statusline を、Windows ではハーネスを問わず Windows Terminal の UDEV Gothic NF を必要に応じて適用する。
 
 ## トピック ($ARGUMENTS)
 
@@ -32,6 +32,7 @@ statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う
 - `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`(ユーザーレベル): `<!-- devkit:thought-db:start -->` / `<!-- devkit:thought-db:end -->` 区間へ、思想 DB(`~/repos/thought-db`)への参照ブロックを同期する。thought-db が存在しない環境では skip として報告する。
 - POSIX: plugin 同梱の `update-ccx.sh` / `devkit-lib.sh` を `~/.codex/bin/` へ、`update-ccx` shim を `~/.local/bin/` へ同期する。
 - Windows: plugin 同梱の `update-ccx.ps1` / `update-ccx.cmd` / `devkit-lib.ps1` / `devkit-setup.ps1` / `devkit-codex-config.ps1` を `~/.codex/bin/` へ、`update-ccx.cmd` shim を `~/.local/bin/` へ同期する。旧 updater 名の残骸は両 OS で prune する。
+- Cursor: `~/.cursor/` が存在する場合、plugin 同梱の配布スキル 9 本と必要な templates / scripts / statusline を `~/.cursor/` へ冪等同期する。
 - Claude 親のみ: plugin 同梱の `statusline/install.js` で Claude Code の statusline 設定を確認し、ユーザー承認後に適用する。
 - Windows のみ: Windows Terminal のフォント(UDEV Gothic NF)設定を確認し、ユーザー承認後に適用する。
 
@@ -65,8 +66,8 @@ done
 
 結果は OK / MISSING の一覧で報告し、MISSING には上表の影響と導入コマンドを添える。インストール自体はこのスキルでは行わない。
 
-- `uv` が `MISSING` の場合: step 3-5 のルール同期・thought-db 同期・updater 同期と step 7 のフォント適用は実行不能のため、この時点で停止し、step 3 以降は実行しない。macOS では `brew install uv`、Windows では `winget install --id astral-sh.uv` を案内し、`uv` 導入後に `/setup` を再実行するよう伝える。
-- `node` が `MISSING` の場合: step 6 の statusline 適用だけをスキップし、step 3-5 と step 7-8 は続行する。macOS/Homebrew 例として `brew install node` を案内し、statusline を適用したい場合は `node` 導入後に `/setup` を再実行するよう伝える。
+- `uv` が `MISSING` の場合: step 3-6 のルール同期・thought-db 同期・updater 同期・Cursor skills 同期と step 8 のフォント適用は実行不能のため、この時点で停止し、step 3 以降は実行しない。macOS では `brew install uv`、Windows では `winget install --id astral-sh.uv` を案内し、`uv` 導入後に `/setup` を再実行するよう伝える。
+- `node` が `MISSING` の場合: step 7 の statusline 適用だけをスキップし、step 3-6 と step 8-9 は続行する。macOS/Homebrew 例として `brew install node` を案内し、statusline を適用したい場合は `node` 導入後に `/setup` を再実行するよう伝える。
 - `claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみで、ルール同期・thought-db 同期・statusline 適用の制御条件にはしない。
 
 ### 3. `scripts/sync_rules.py` による冪等同期
@@ -110,9 +111,20 @@ uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_updater.py
 
 結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。POSIX では `~/.codex/bin/update-ccx.sh` に実行権を付け、両 OS とも `~/.local/bin/` の shim を plugin 同梱 `devkit-lib` の実装と同形式で同期する。旧 updater 名の残骸があれば削除し、`actions` に記録する。`~/.codex/devkit/source-root.txt` は変更しない。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
 
-### 6. statusline 適用
+### 6. Cursor skills 同期(ユーザー環境)
 
-Claude 親のみ実行する。Codex 親ではこの step をスキップし、「statusline は Claude Code 固有機能のため対象外。ルール同期・thought-db 接続同期・updater 同期を実施」と報告する。step 2 で `node` が `MISSING` だった場合もこの step はスキップし、`node` 導入後の `/setup` 再実行を案内する。
+対象 repo に依存しないユーザー環境の同期で、Claude 親 / Codex 親のどちらでも実行する。承認ゲートは置かず、`~/.cursor/` が存在する場合だけ plugin 同梱の配布スキルと必要資産を冪等同期する。
+
+```bash
+SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_cursor_skills.py" --format json
+```
+
+結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。`~/.cursor/` が存在しない場合はディレクトリを作らず skip として報告する。管理 manifest と一致する廃止ファイルだけを prune し、ユーザーが変更したファイル、symlink、manifest 非掲載ファイルは保持して該当する skip action を報告する。同期失敗時は失敗を記録して後続の statusline / フォント step を続行し、最終レポートに明記する。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
+
+### 7. statusline 適用
+
+Claude 親のみ実行する。Codex 親ではこの step をスキップし、「statusline は Claude Code 固有機能のため対象外。ルール同期・thought-db 接続同期・updater 同期・Cursor skills 同期を実施」と報告する。step 2 で `node` が `MISSING` だった場合もこの step はスキップし、`node` 導入後の `/setup` 再実行を案内する。
 
 Claude 親では plugin 同梱の installer を確認する。
 
@@ -126,9 +138,9 @@ node "$STATUSLINE_INSTALL" --check
 
 - 未導入または DevKit 管理済み: ユーザーが適用を選んだ場合に `node "$STATUSLINE_INSTALL"` を実行する。
 - 他の statusline 設定を検出した場合: 既存設定を上書きするかを追加確認し、承認された場合だけ `node "$STATUSLINE_INSTALL" --force` を実行する。
-- ユーザーがスキップを選んだ場合: ルール同期・thought-db 接続同期・updater 同期の結果を報告する。
+- ユーザーがスキップを選んだ場合: ルール同期・thought-db 接続同期・updater 同期・Cursor skills 同期の結果を報告する。
 
-### 7. ターミナルフォント適用(Windows のみ)
+### 8. ターミナルフォント適用(Windows のみ)
 
 Claude 親 / Codex 親のどちらでも実行する。ターミナルレベルの設定であり、ハーネスには依存しない。非 Windows 環境では skip し、「macOS/Linux は対象外(macOS は Ghostty 既定が JetBrains Mono)」と報告する。
 
@@ -147,24 +159,25 @@ uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/setup_terminal_
 
 ダウンロード失敗、SHA-256 不一致、フォント未登録、Windows Terminal 未検出は案内のみとし、setup 全体を停止しない。フォントを検出できない場合の settings.json 書き込みはスクリプト側のゲートで抑止する。
 
-### 8. 検証とレポート
+### 9. 検証とレポート
 
 1. `AGENTS.md` に `devkit:rules` の start/end マーカーが 1 組あることを確認する。
 2. `CLAUDE.md` に `@./AGENTS.md` が 1 行だけあることを確認する。
 3. `.claude/devkit-rules.json` の `template_sha256` がテンプレートの SHA-256 と一致することを確認する。
 4. thought-db 同期を実行した場合は、`~/.claude/CLAUDE.md` と `~/.codex/AGENTS.md` に `devkit:thought-db` の start/end マーカーが 1 組ずつあることを確認する。skip の場合はその旨を報告する。
 5. updater 同期の `changed` / `skipped` / `actions` を報告し、同期または prune したパスを示す。
-6. statusline を適用した場合は installer の結果 JSON を報告する。
-7. ターミナルフォント確認を実行した場合は `status` / `font_installed` / `download` / `settings` / `actions` を含む結果 JSON を報告する。
-8. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。環境前提チェックで MISSING があった場合は、影響と導入コマンドを報告に含める。
+6. Cursor skills 同期の `changed` / `skipped` / `actions` と、`~/.cursor/` 不在による skip または同期失敗を報告する。
+7. statusline を適用した場合は installer の結果 JSON を報告する。
+8. ターミナルフォント確認を実行した場合は `status` / `font_installed` / `download` / `settings` / `actions` を含む結果 JSON を報告する。
+9. 変更ファイル、no-op だった項目、ユーザーがスキップした項目を分けて報告する。環境前提チェックで MISSING があった場合は、影響と導入コマンドを報告に含める。
 
 ## 再実行時の動作
 
-DevKit 更新後に `/setup` を再実行すると、ルール・thought-db 参照・updater・statusline・Windows Terminal フォント設定を最新へ同期する。ルール同期・thought-db 同期・updater 同期は冪等で、管理対象が最新なら no-op になる。テンプレートが変わった場合はマーカー区間だけを置換し、マーカー外の記述は保持する。updater の同期元が変わった場合は該当ファイルと shim だけを更新し、旧 updater 名の残骸は毎回 prune 対象として確認する。Claude 親で statusline 適用を選ぶと、同梱最新版を管理先へ再コピーして設定を更新する。フォントの face が既に UDEV Gothic NF なら no-op となり、バックアップも増やさない。
+DevKit 更新後に `/setup` を再実行すると、ルール・thought-db 参照・updater・Cursor skills・statusline・Windows Terminal フォント設定を最新へ同期する。ルール同期・thought-db 同期・updater 同期・Cursor skills 同期は冪等で、管理対象が最新なら no-op になる。テンプレートが変わった場合はマーカー区間だけを置換し、マーカー外の記述は保持する。updater の同期元が変わった場合は該当ファイルと shim だけを更新し、旧 updater 名の残骸は毎回 prune 対象として確認する。Cursor の同期元が変わった場合は manifest で管理するファイルだけを更新または安全に prune し、manifest 非掲載のユーザーファイルは保持する。Claude 親で statusline 適用を選ぶと、同梱最新版を管理先へ再コピーして設定を更新する。フォントの face が既に UDEV Gothic NF なら no-op となり、バックアップも増やさない。
 
 ## 注意
 
-- ルール同期と updater 同期は設計上、差分承認ゲートなしで実行する(冪等同期が本務のため)。承認ゲートがあるのは statusline 適用とターミナルフォント適用のみで、この非対称は意図的なもの。
+- ルール同期、updater 同期、Cursor skills 同期は設計上、差分承認ゲートなしで実行する(冪等同期が本務のため)。承認ゲートがあるのは statusline 適用とターミナルフォント適用のみで、この非対称は意図的なもの。
 - マーカー内の手動編集は次回 `/setup` 実行時に上書きされる。
 - プロジェクト固有ルールはマーカー外に書く。
 - DevKit repo 自身には実行しない。
