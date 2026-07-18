@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import tempfile
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -925,13 +927,20 @@ def test_update_ccx_ps1_preserves_existing_source_root(tmp_path):
     assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(caller_source_root)
 
 
-def test_update_ccx_ps1_syncs_cursor_skills_when_cursor_home_exists(tmp_path):
+def test_update_ccx_ps1_prunes_legacy_cursor_sync_when_manifest_exists(tmp_path):
     pwsh = shutil.which("pwsh")
     if not pwsh:
         pytest.skip("pwsh is not installed")
 
     home = tmp_path / "home"
-    (home / ".cursor").mkdir(parents=True)
+    managed = home / ".cursor/skills/setup/SKILL.md"
+    managed.parent.mkdir(parents=True)
+    managed.write_bytes(b"managed\n")
+    manifest = home / ".cursor/.devkit-sync-manifest.json"
+    manifest.write_text(
+        json.dumps({"version": 1, "files": {"skills/setup/SKILL.md": sha256(managed.read_bytes()).hexdigest()}}),
+        encoding="utf-8",
+    )
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     fake_codex = fake_bin / "codex"
@@ -961,30 +970,27 @@ def test_update_ccx_ps1_syncs_cursor_skills_when_cursor_home_exists(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert (home / ".cursor/skills/setup/SKILL.md").is_file()
-    assert (home / ".cursor/.devkit-sync-manifest.json").is_file()
+    assert not managed.exists()
+    assert not manifest.exists()
 
 
-def test_update_ccx_ps1_cursor_sync_failure_is_aggregated_and_later_sections_continue(tmp_path):
+def test_update_ccx_ps1_cursor_prune_failure_is_aggregated_and_later_sections_continue(tmp_path):
     pwsh = shutil.which("pwsh")
     if not pwsh:
         pytest.skip("pwsh is not installed")
 
     home = tmp_path / "home"
     (home / ".cursor").mkdir(parents=True)
+    (home / ".cursor/.devkit-sync-manifest.json").write_text("{invalid", encoding="utf-8")
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     fake_codex = fake_bin / "codex"
     fake_codex.write_text('#!/bin/bash\nprintf \'{}\\n\'\n', encoding="utf-8")
     fake_codex.chmod(0o755)
-    damaged_root = tmp_path / "damaged-root"
-    shutil.copytree(ROOT / "plugins/devkit", damaged_root / "plugins/devkit")
-    shutil.rmtree(damaged_root / "plugins/devkit/skills/backlog")
-
     env = os.environ.copy()
     env["HOME"] = str(home)
     env["USERPROFILE"] = str(home)
-    env["DEVKIT_SOURCE_ROOT"] = str(damaged_root)
+    env["DEVKIT_SOURCE_ROOT"] = str(ROOT)
     env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
 
     result = subprocess.run(
@@ -1004,14 +1010,60 @@ def test_update_ccx_ps1_cursor_sync_failure_is_aggregated_and_later_sections_con
     )
 
     assert result.returncode == 1
-    assert "Cursor skills sync failed" in result.stdout
+    assert "Cursor legacy sync prune failed" in result.stdout
     assert "=== [Codex Plugin] ===" in result.stdout
     assert (home / ".codex/config.toml").is_file()
 
 
-def test_update_ccx_ps1_cursor_sync_failure_does_not_throw_from_sync_function():
+def test_update_ccx_ps1_dangling_cursor_manifest_symlink_is_not_skipped(tmp_path):
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        pytest.skip("pwsh is not installed")
+
+    home = tmp_path / "home"
+    cursor = home / ".cursor"
+    cursor.mkdir(parents=True)
+    manifest = cursor / ".devkit-sync-manifest.json"
+    try:
+        manifest.symlink_to(tmp_path / "missing-manifest.json")
+    except OSError as error:
+        pytest.skip(f"symlink is not available: {error}")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_codex = fake_bin / "codex"
+    fake_codex.write_text('#!/bin/bash\nprintf \'{}\\n\'\n', encoding="utf-8")
+    fake_codex.chmod(0o755)
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    env["DEVKIT_SOURCE_ROOT"] = str(ROOT)
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+
+    result = subprocess.run(
+        [
+            pwsh,
+            "-NoLogo",
+            "-NoProfile",
+            "-File",
+            str(SCRIPTS / "update-ccx.ps1"),
+            "-DevKitOnly",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 1
+    assert "Cursor legacy sync prune failed" in result.stdout
+    assert "SKIPPED: Legacy Cursor sync manifest not found" not in result.stdout
+    assert "=== [Codex Plugin] ===" in result.stdout
+    assert manifest.is_symlink()
+
+
+def test_update_ccx_ps1_cursor_prune_failure_does_not_throw_from_prune_function():
     text = (SCRIPTS / "update-ccx.ps1").read_text(encoding="utf-8")
-    function_body = text.split("function Sync-DevKitCursorSkills", 1)[1].split(
+    function_body = text.split("function Remove-DevKitLegacyCursorSync", 1)[1].split(
         "function Section-DevKit", 1
     )[0]
 

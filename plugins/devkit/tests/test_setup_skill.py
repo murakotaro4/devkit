@@ -19,7 +19,7 @@ THOUGHT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_thou
 THOUGHT_TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/thought-db-user.md"
 TERMINAL_FONT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/setup_terminal_font.py"
 UPDATER_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_updater.py"
-CURSOR_SYNC_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_cursor_skills.py"
+CURSOR_PRUNE_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -83,6 +83,7 @@ def test_skill_contract_mentions_markers_idempotency_and_harness():
     assert "## ハーネス判定" in text
     assert "Claude 親" in text
     assert "Codex 親" in text
+    assert "Claude Code plugin のスキルを読み込む" in text
 
 
 def test_skill_contract_mentions_environment_prerequisites():
@@ -101,7 +102,7 @@ def test_skill_contract_mentions_environment_prerequisites():
     assert "`brew install uv`" in text
     assert "`winget install --id astral-sh.uv`" in text
     assert "`node` が `MISSING` の場合" in text
-    assert "step 7 の statusline 適用だけをスキップ" in text
+    assert "step 6 の statusline 適用だけをスキップ" in text
     assert "`brew install node`" in text
     assert "`claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみ" in text
     assert "MISSING があった場合は、影響と導入コマンドを報告に含める" in text
@@ -110,7 +111,7 @@ def test_skill_contract_mentions_environment_prerequisites():
 def test_skill_contract_mentions_windows_terminal_font_approval_gate():
     text = SKILL_PATH.read_text(encoding="utf-8")
 
-    assert "### 8. ターミナルフォント適用(Windows のみ)" in text
+    assert "### 7. ターミナルフォント適用(Windows のみ)" in text
     assert "setup_terminal_font.py" in text
     assert "UDEV Gothic NF" in text
     assert "ダウンロード失敗" in text
@@ -126,17 +127,16 @@ def test_updater_sync_step_order_and_reporting_contract():
     text = SKILL_PATH.read_text(encoding="utf-8")
     thought_heading = "### 4. thought-db 接続同期(ユーザー環境)"
     updater_heading = "### 5. updater 同期(ユーザー環境)"
-    cursor_heading = "### 6. Cursor skills 同期(ユーザー環境)"
-    statusline_heading = "### 7. statusline 適用"
+    statusline_heading = "### 6. statusline 適用"
 
     assert (
         text.index(thought_heading)
         < text.index(updater_heading)
-        < text.index(cursor_heading)
         < text.index(statusline_heading)
     )
-    updater_section = text.split(updater_heading, 1)[1].split(cursor_heading, 1)[0]
+    updater_section = text.split(updater_heading, 1)[1].split(statusline_heading, 1)[0]
     assert "sync_updater.py" in updater_section
+    assert "prune_legacy_cursor_sync.py" in updater_section
     assert "Claude 親 / Codex 親のどちらでも実行" in updater_section
     assert "承認ゲートは置かず" in updater_section
     for field in ("`changed`", "`skipped`", "`actions`"):
@@ -144,23 +144,21 @@ def test_updater_sync_step_order_and_reporting_contract():
     assert UPDATER_SCRIPT_PATH.is_file()
 
 
-def test_cursor_sync_step_contract():
+def test_cursor_prune_contract_is_part_of_updater_step():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    cursor_heading = "### 6. Cursor skills 同期(ユーザー環境)"
-    statusline_heading = "### 7. statusline 適用"
-    cursor_section = text.split(cursor_heading, 1)[1].split(statusline_heading, 1)[0]
+    updater_heading = "### 5. updater 同期(ユーザー環境)"
+    statusline_heading = "### 6. statusline 適用"
+    cursor_section = text.split(updater_heading, 1)[1].split(statusline_heading, 1)[0]
 
-    assert "sync_cursor_skills.py" in cursor_section
+    assert "prune_legacy_cursor_sync.py" in cursor_section
     assert 'uv run --no-project --python ">=3.10" python' in cursor_section
-    assert "Claude 親 / Codex 親のどちらでも実行" in cursor_section
-    assert "承認ゲートは置かず" in cursor_section
-    assert "`~/.cursor/` が存在しない場合はディレクトリを作らず skip" in cursor_section
-    assert "ユーザーが変更した管理ファイルは上書きせず `skip_modified`" in cursor_section
-    assert "Cursor 上の同期済みコピーから実行した場合は skip" in cursor_section
-    assert "`update-ccx` または Claude Code / Codex 側の `/setup`" in cursor_section
+    assert "旧 Cursor 同期資産の残骸 prune" in cursor_section
+    assert "`~/.cursor/` または manifest が存在しない場合はディレクトリを作らず skip" in cursor_section
+    assert "`skip_prune_modified`" in cursor_section
+    assert "`skip_irregular`" in cursor_section
     for field in ("`changed`", "`skipped`", "`actions`"):
         assert field in cursor_section
-    assert CURSOR_SYNC_SCRIPT_PATH.is_file()
+    assert CURSOR_PRUNE_SCRIPT_PATH.is_file()
 
 
 def test_openai_agent_metadata_exists():
