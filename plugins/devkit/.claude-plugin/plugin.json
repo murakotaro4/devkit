@@ -1,5 +1,5 @@
 {
   "name": "devkit",
   "description": "DevKit の /dig-goal 深掘り・実装オーケストレーション・現セッション自律実行、skill 改善、リポジトリ setup、refactor 計画化、memory-review メモリ監査、handoff 引継ぎ書き出し、backlog 残課題棚卸し、commit-push 分割コミットと push、/catch-up 外部前提追従を提供し、Node statusline を同梱します。",
-  "version": "9.1.0"
+  "version": "9.1.1"
 }

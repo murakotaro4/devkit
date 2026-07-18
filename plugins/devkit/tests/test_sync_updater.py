@@ -198,6 +198,7 @@ def test_check_reports_changes_without_writing(tmp_path):
     source_root.write_text("keep-this-root\n", encoding="utf-8")
     env = os.environ.copy()
     env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
 
     result = subprocess.run(
         [sys.executable, str(SCRIPT_PATH), "--check", "--format", "json"],
