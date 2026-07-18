@@ -105,6 +105,11 @@ def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
     )[1].split("function Remove-DevKitV9RetiredSkillDirs", 1)[0]
     assert "Test-DevKitPathLooksManaged" in powershell_provenance
     assert "devkit リポジトリの `AGENTS.md`" in powershell_provenance
+    powershell_reparse = powershell.split("function Test-DevKitReparsePoint", 1)[1].split(
+        "function Test-DevKitFileContentEqual", 1
+    )[0]
+    assert "Test-DevKitPathPresent" in powershell_reparse
+    assert "Test-Path" not in powershell_reparse
 
     pwsh = shutil.which("pwsh")
     if not pwsh:
@@ -250,6 +255,47 @@ def test_v9_shell_migration_preserves_unmanaged_same_name_skills(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     assert (marker_dir / ".migrated-v9-dig-goal").is_file()
     assert all(skill_file.is_file() for skill_file in user_skill_files)
+
+
+def test_v9_shell_migration_handles_dangling_symlink_provenance(tmp_path):
+    if not _probe_symlink_support():
+        pytest.skip("symlinks are unavailable")
+
+    home = tmp_path / "home"
+    marker_dir = home / ".codex" / "devkit"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+
+    managed_link = home / ".agents" / "skills" / "dig"
+    managed_link.parent.mkdir(parents=True)
+    managed_target = ROOT / "plugins" / "devkit" / "skills" / "dig"
+    assert not managed_target.exists()
+    managed_link.symlink_to(
+        os.path.relpath(managed_target, start=managed_link.parent), target_is_directory=True
+    )
+
+    unmanaged_link = home / ".codex" / "skills" / ("goal-" + "prompt")
+    unmanaged_link.parent.mkdir(parents=True)
+    unmanaged_target = tmp_path / "unrelated-user-skills" / ("goal-" + "prompt")
+    assert not unmanaged_target.exists()
+    unmanaged_link.symlink_to(unmanaged_target, target_is_directory=True)
+
+    command = (
+        f'source "{SCRIPTS / "devkit-lib.sh"}"; '
+        f'prune_legacy_devkit_assets "{home}" "{ROOT}"'
+    )
+    result = subprocess.run(
+        [bash_path(), "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not managed_link.is_symlink()
+    assert unmanaged_link.is_symlink()
+    assert (marker_dir / ".migrated-v9-dig-goal").is_file()
 
 
 def test_v9_shell_migration_is_noop_when_marker_exists(tmp_path):

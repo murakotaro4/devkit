@@ -122,9 +122,9 @@ devkit_resolve_path_lenient() {
 devkit_resolve_link_target() {
   local path="$1"
   local target
-  target="$(readlink "$path")"
+  target="$(readlink "$path")" || return 1
   if [[ "$target" != /* ]]; then
-    target="$(cd "$(dirname "$path")" && cd "$(dirname "$target")" && pwd -P)/$(basename "$target")"
+    target="$(dirname "$path")/$target"
   fi
   devkit_resolve_path_lenient "$target"
 }

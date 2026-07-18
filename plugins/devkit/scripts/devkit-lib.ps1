@@ -177,11 +177,11 @@ function Get-DevKitLinkTargetPath([string]$Path) {
 }
 
 function Test-DevKitReparsePoint([string]$Path) {
-  if (-not (Test-Path -LiteralPath $Path)) {
+  if (-not (Test-DevKitPathPresent -Path $Path)) {
     return $false
   }
 
-  $item = Get-Item -LiteralPath $Path -Force
+  $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
   return [bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint)
 }
 
