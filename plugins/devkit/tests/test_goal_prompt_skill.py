@@ -118,8 +118,9 @@ def test_phase_and_execution_contract():
     assert "既定では step 8 で実行へ移行する" in text
     assert "cron 登録・`/schedule` 登録はどの step でも行わない" in text
     assert "直起動の書き込み・破壊的操作・外部状態変更は Round 3 の明示回答" in text
-    assert "commit / push は承認済み計画(dig 経由)または実装系 Round 4 の commit・統合に対する明示回答" in text
-    assert "無回答・曖昧な回答から書き込み・破壊的操作・外部状態変更・commit / push の許可を推定しない" in text
+    assert "commit / push・統合は goal 本文に記載された統合方法(既定は PR 経由。dig 経由では承認済み計画の統合方法)に従う" in text
+    assert "統合しないが明示された場合は commit / push を行わない" in text
+    assert "無回答・曖昧な回答から統合以外の書き込み・破壊的操作・外部状態変更の許可を推定しない" in text
 
 
 def test_interview_rounds_are_present():
@@ -137,7 +138,7 @@ def test_interview_rounds_are_present():
         "タスク型(実装 / 調査 / 状態確認 / 文書化 / 整理)",
         "完了状態、検証方法、検証コマンド、品質バー",
         "書き込み範囲(write_scope)、非対象、上限停止の種類と値、行き詰まり時の扱い、破壊的操作の可否、外部状態変更の具体的な対象・操作と可否",
-        "実装系のみ委譲先・並列方針・トークン効率方針・worktree 分離・節目 commit・統合方法",
+        "実装系のみ委譲先・並列方針・トークン効率方針・worktree 分離・節目 commit。統合方法は質問しない",
     ):
         assert required in text
 
@@ -284,7 +285,7 @@ def test_launch_command_table_and_codex_stdin_guard():
     assert "同じマシン・同じ checkout で実行する前提" in launch_guide
     assert "loop 停止・schedule 解除までゴールファイルを削除しない" in launch_guide
     assert "登録はユーザーの 1 アクション" in launch_guide
-    assert "commit・統合はゴール本文の統合方法に従う(許可転記がなければユーザーが判断する)" in launch_guide
+    assert "commit・統合はゴール本文の統合方法(既定は PR 経由)に従う(統合しないが明示された場合のみ commit / push なし)" in launch_guide
     assert "commit するかはユーザーが判断する" not in launch_guide
     assert "codex exec" not in launch_guide
     assert "claude -p" not in launch_guide
@@ -393,10 +394,11 @@ def test_dig_handoff_mode_contract():
     assert "行き詰まり停止の扱い" in text
     assert "破壊的操作の可否" in text
     assert "権限、進捗管理、実装戦略" in text
-    assert "commit / push の扱い(承認済み計画の統合方法に従う。許可転記がなければ禁止)" in text
+    assert "commit / push の扱い(承認済み計画の統合方法に従う。統合しないが明示された場合は禁止)" in text
     assert "実装後レビュー要件、どの停止種別でも書き出す完了レポート要件は転記必須項目" in text
     assert "組み立て + セルフチェック 10 項目、独立レビューを経て、既定では step 8 の実行移行" in text
-    assert "worktree 運用・節目 commit・統合契約(PR 経由の場合は CI 判定・merge・失敗時契約を含む)・version bump" in text
+    assert "承認済み計画で確定済みの統合方法(既定は PR 経由)をそのまま転記" in text
+    assert "worktree 運用・節目 commit・統合契約(PR 経由の場合は CI 判定・merge・失敗時契約、直接統合の場合は直接統合の統合契約を含む)・version bump" in text
     assert "セルフチェック 10 項目" in text
 
 
@@ -406,7 +408,7 @@ def test_pr_merge_completion_contract_is_baked_into_goal_strategy():
     step6 = _section(text, "### 6. 組み立て + セルフチェック")
     label = "PR 経由(提出 + CI green 確認 + merge まで)"
 
-    assert text.count(label) >= 3
+    assert text.count(label) == 3
     for contract in (strategy, step6):
         assert "対象 repo の CI 有無" in contract
         assert "チェック 0 件の扱い" in contract
@@ -438,6 +440,15 @@ def test_pr_merge_completion_contract_is_baked_into_goal_strategy():
         assert "PR を open のまま停止" in contract
         assert "PR URL・失敗チェック・残存状態" in contract
 
+    assert "直接統合の統合契約" in strategy
+    assert "`merge --ff-only` → push" in strategy
+    assert "push reject は fetch + rebase + 検証再実行 + version 再計算からやり直す" in strategy
+    assert "origin なし repo は `merge --ff-only` までで統合完了(push なし)" in strategy
+    assert "失敗時は別の統合方法へ切り替えず" in strategy
+    assert "直接統合の統合契約" in step6
+    assert "統合の明示回答がなければ" not in text
+    assert "diff と完了レポートを残して停止し、commit 判断はユーザー" not in text
+
 
 def test_auto_execution_transition_contract():
     text = _skill_text()
@@ -455,7 +466,7 @@ def test_auto_execution_transition_contract():
     assert "write_scope(実装系では必須。これ以外への変更禁止)" in text
     assert "具体的な対象と操作が許可として書かれていない破壊的操作・外部状態変更" in text
     assert "直起動の書き込み・破壊的操作・外部状態変更では Round 3" in step8
-    assert "直起動の commit・統合では実装系 Round 4" in step8
+    assert "commit・統合では goal 本文に記載された統合方法(既定は PR 経由)" in step8
     assert "外部状態変更の具体的な対象・操作と可否を聞く" in text
     assert "例外形態では従来どおり" in step9
     assert "起動元 checkout(スキル起動時の cwd を含む checkout)" in text

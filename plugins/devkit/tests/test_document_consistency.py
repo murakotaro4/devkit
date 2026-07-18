@@ -451,14 +451,36 @@ def test_pr_merge_completion_contract_stays_in_sync():
             "plugins/devkit/skills/goal-prompt/SKILL.md"
         ),
     }
-    retired_contracts = ("merge は人間", "PR 提出まで", "PR 提出完了")
+    retired_contracts = (
+        "merge は人間",
+        "PR 提出まで",
+        "PR 提出完了",
+        "既定推奨は「直接統合」",
+        "統合方法も 1 問で確認",
+        "統合の明示回答がなければ",
+        "commit 判断をユーザーへ戻す",
+    )
 
     for doc_name, text in documents.items():
         assert "PR" in text, f"{doc_name} に PR 経路の記載がない"
         assert "CI green" in text, f"{doc_name} に CI green 判定の記載がない"
         assert "merge" in text, f"{doc_name} に PR merge 完遂の記載がない"
+        assert (
+            "既定は PR 経由" in text or "既定は PR の提出" in text
+        ), f"{doc_name} に PR 経由を既定とする契約がない"
         for retired in retired_contracts:
             assert retired not in text, f"{doc_name} に旧 PR 統合契約が残っている: {retired}"
+
+    for doc_name in (
+        "plugins/devkit/skills/dig/SKILL.md",
+        "plugins/devkit/skills/goal-prompt/SKILL.md",
+    ):
+        assert "直接統合へ自動フォールバック" in documents[doc_name], (
+            f"{doc_name} に直接統合への自動フォールバック契約がない"
+        )
+    assert "別の統合方法へ黙って切り替えない" in documents[
+        "plugins/devkit/skills/dig/SKILL.md"
+    ]
 
 
 def test_goal_prompt_auto_execution_contract_stays_in_sync():

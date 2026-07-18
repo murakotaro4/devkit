@@ -291,14 +291,15 @@ def test_goal_handoff_contract():
     assert 'Skill(skill: "devkit:goal-prompt"' in text
     assert "commit・push の扱い / 実装後の独立レビュー要件" in text
     assert "目的 / write_scope / 受け入れ条件 / 検証コマンド / 非対象" in text
-    assert "commit / push は承認済み計画の統合方法として許可された範囲でのみ" in text
+    assert "dig 計画で確定済みの統合方法(既定は PR 経由)をそのまま転記" in text
+    assert "commit / push は承認済み計画の統合方法に従い、統合しないが明示された場合は禁止" in text
     assert "実装後の独立レビュー要件" in text
     assert "既定では `goal-prompt` が実行移行から完了レポートまで完遂する" in text
     assert "dig は引き継ぎで終了し、step 7-9 は実行しない" in text
     assert "diff レビュー backend の質問を出さない" in text
     assert "実装と別系統の独立レビュー(codex review 等)を実施し指摘ゼロ" in text
     assert "commit / push の扱いと合わせて転記必須項目" in text
-    assert "worktree 運用・節目 commit・統合契約(PR 経由の場合は CI 判定・merge・失敗時契約を含む)・version bump" in text
+    assert "worktree 運用・節目 commit・統合契約(PR 経由の場合は CI 判定・merge・失敗時契約、直接統合の場合は直接統合の統合契約を含む)・version bump" in text
     assert "監視または引き渡し" not in text
     assert "step 7(自レビュー)以降を続行" not in text
     assert ".claude/worktrees/" not in text
@@ -336,8 +337,9 @@ def test_worktree_integration_contract():
     assert "`git diff <記録した基点>...HEAD` を全文読み" in text
     assert 'merge --ff-only <branch>' in worktree
     assert 'push origin <default>' in worktree
-    assert "PR 経路" in worktree
-    pr_contract = _between(worktree, "4. PR 経路", "5. 後始末")
+    assert "直接統合(PR 不可時の自動フォールバック" in worktree
+    assert "PR 経由(既定)" in worktree
+    pr_contract = _between(worktree, "4. PR 経由(既定)", "5. 後始末")
     assert "gh pr create --base <default> --head <branch> --title" in pr_contract
     assert "PR URL / 番号を記録" in pr_contract
     assert "--watch" not in pr_contract
@@ -357,6 +359,7 @@ def test_worktree_integration_contract():
     assert "全件 `pass`(`skipping` は許容)" in pr_contract
     assert "安定した head SHA を「検証済み SHA」として記録" in pr_contract
     assert "API・認証エラーをチェック 0 件の成功と混同せず" in pr_contract
+    assert "計画作成時の CI 調査(CI 設定ファイルの有無確認等)" in pr_contract
     assert "CI なし repo は checks 待ちを省略してその時点の安定した head SHA を検証済み SHA" in pr_contract
     assert "CI あり repo で 0 件が続く場合は停止・報告" in pr_contract
     assert "merge 直前に `gh pr view <PR番号> --json headRefOid` を再取得" in pr_contract
@@ -455,13 +458,16 @@ def test_worktree_integration_contract():
     assert fetch_position < version_position
 
     backend_selection = _between(text, "### 3. backend 選択", "### 4. 計画レビュー")
-    assert "統合方法も 1 問で確認" in backend_selection
-    assert "既定推奨は「直接統合」" in backend_selection
+    assert "統合方法は質問しない" in backend_selection
+    assert "既定は PR 経由(提出 + CI green 確認 + merge まで)" in backend_selection
     assert "`command -v gh` が通らない場合" in backend_selection
-    assert "ゴール化して自律実行でも統合方法(直接統合 / PR 経由(提出 + CI green 確認 + merge まで))を確定" in backend_selection
+    assert "直接統合へ自動フォールバック" in backend_selection
+    assert "ゴール化して自律実行でも同じ規則で統合方法(既定は PR 経由(提出 + CI green 確認 + merge まで))を確定して goal 本文へ転記" in backend_selection
     assert "対象 repo の CI 有無と CI 待機上限(既定 30 分)を計画へ記載" in backend_selection
-    assert "非 git repo ではこの質問を出さない" in backend_selection
-    assert "または origin なし repo では PR 選択肢を出さない" in backend_selection
+    assert "非 git repo では統合を行わない" in backend_selection
+    assert "既定推奨は「直接統合」" not in backend_selection
+    assert "統合方法も 1 問で確認" not in backend_selection
+    assert "step 3 の統合質問" not in text
 
     claude_parent = _between(text, "#### Claude 親の選択肢", "#### Codex 親の選択肢")
     review_table = _between(
