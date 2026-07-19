@@ -678,6 +678,40 @@ if ($configResult.BackupPath) {
     echo "OK Codex config templated"
 }
 
+remove_windows_legacy_scheduled_task() {
+    local powershell_lib_path="$1"
+    if ! command -v powershell.exe &>/dev/null; then
+        echo "WARN DevKit migration: powershell.exe is unavailable; legacy scheduled task cleanup skipped" >&2
+        WARNINGS+=("DevKit migration: legacy scheduled task cleanup skipped because powershell.exe is unavailable")
+        return 0
+    fi
+
+    local windows_powershell_lib=""
+    if ! windows_powershell_lib="$(windows_path_from_posix "$powershell_lib_path")"; then
+        if [[ -z "${USERPROFILE:-}" ]]; then
+            echo "WARN DevKit migration: devkit-lib.ps1 path could not be resolved; legacy scheduled task cleanup skipped" >&2
+            WARNINGS+=("DevKit migration: legacy scheduled task cleanup skipped because devkit-lib.ps1 path resolution failed")
+            return 0
+        fi
+        windows_powershell_lib="$USERPROFILE\.codex\bin\devkit-lib.ps1"
+        echo "WARN DevKit migration: cygpath could not resolve devkit-lib.ps1; using USERPROFILE fallback" >&2
+        WARNINGS+=("DevKit migration: legacy scheduled task cleanup uses USERPROFILE fallback")
+    fi
+
+    if ! DEVKIT_POWERSHELL_LIB="$windows_powershell_lib" \
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+$ErrorActionPreference = "Stop"
+. $env:DEVKIT_POWERSHELL_LIB
+Remove-DevKitLegacyScheduledTask
+'; then
+        echo "WARN DevKit migration: legacy scheduled task cleanup failed; continuing migration" >&2
+        WARNINGS+=("DevKit migration: legacy scheduled task cleanup failed")
+        return 0
+    fi
+
+    echo "OK legacy scheduled task removed"
+}
+
 section_managed_copy() {
     echo ""
     echo "=== [DevKit Managed Files] ==="
@@ -1110,12 +1144,32 @@ section_prune_legacy_assets() {
         return 1
     fi
 
+    if [[ "$OS_TYPE" == "windows" && ! -f "$HOME/.codex/devkit/.migrated-v6" ]]; then
+        remove_windows_legacy_scheduled_task "$HOME/.codex/bin/devkit-lib.ps1"
+    fi
+
     if prune_legacy_devkit_assets "$HOME" "$repo_root"; then
         echo "OK legacy assets pruned"
     else
         ERRORS+=("DevKit migration: legacy asset prune failed")
         return 1
     fi
+}
+
+resolve_cursor_prune_python() {
+    if python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+        printf 'python3\n'
+        return 0
+    fi
+    if python -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+        printf 'python\n'
+        return 0
+    fi
+    if py -3 -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+        printf 'py\n'
+        return 0
+    fi
+    return 1
 }
 
 section_prune_cursor_sync() {
@@ -1130,15 +1184,16 @@ section_prune_cursor_sync() {
         echo "SKIP legacy Cursor sync manifest is not available"
         return 0
     fi
-    if ! command -v python3 &>/dev/null; then
-        echo "WARN python3 is not available; skipping legacy Cursor sync prune"
-        WARNINGS+=("Cursor legacy sync: python3 not available; prune skipped")
-        return 0
-    fi
-    if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+    local python_kind=""
+    if ! python_kind="$(resolve_cursor_prune_python)"; then
         echo "WARN Python 3.10 or newer is not available; skipping legacy Cursor sync prune"
         WARNINGS+=("Cursor legacy sync: Python 3.10 or newer not available; prune skipped")
         return 0
+    fi
+
+    local -a python_command=("$python_kind")
+    if [[ "$python_kind" == "py" ]]; then
+        python_command=(py -3)
     fi
 
     local repo_root prune_output
@@ -1147,7 +1202,7 @@ section_prune_cursor_sync() {
         return 1
     fi
 
-    if ! prune_output="$(python3 "$repo_root/plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py" \
+    if ! prune_output="$("${python_command[@]}" "$repo_root/plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py" \
         --target "$HOME/.cursor" \
         --format json)"; then
         echo "FAILED legacy Cursor sync prune"

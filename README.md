@@ -129,10 +129,11 @@ Windows の updater 実装を PowerShell から bash 正本へ一本化しまし
 
 Windows でも明示された `HOME` を尊重し、managed files は `$HOME` 配下へ配置します。生成する cmd shim と Codex config templating はコピー先の実パスを参照し、ランチャーの source-root fallback は `HOME`、次に `USERPROFILE` の順で探します。非対話 Git Bash では fnm の shell 環境も updater が初期化し、初期化できない場合は警告して後続処理を継続します。
 
-PowerShell の残置責務は次の 2 点だけです。
+PowerShell の残置責務は次の 3 点だけです。
 
 - `update-ccx.sh` から Windows の Claude Code native installer を呼ぶ
 - `devkit-codex-config.ps1` を dot-source して Codex config templating を行う
+- v6 migration marker を書く前に `devkit-lib.ps1` の `Remove-DevKitLegacyScheduledTask` で旧日次タスクを削除する
 
 旧 `update-ccx.ps1` 固有の npm repair、`.npmrc` legacy Codex prefix migration、レジストリからの PATH 再読込は廃止しました。install 成功直後にコマンドが PATH へ現れない場合、updater は警告とターミナル再起動案内を出して処理を続けます。
 

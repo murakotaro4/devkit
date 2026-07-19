@@ -151,6 +151,50 @@ def test_updater_self_refresh_propagates_prune_failures():
     assert 'throw "PRUNE_FAILED: scheduled task DevKitSkillsDailyUpdate"' in scheduled_task
 
 
+def test_windows_shell_migration_removes_legacy_task_before_v6_marker_path():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    cleanup = shell.split("remove_windows_legacy_scheduled_task()", 1)[1].split(
+        "section_managed_copy()", 1
+    )[0]
+    migration = shell.split("section_prune_legacy_assets()", 1)[1].split(
+        "resolve_cursor_prune_python()", 1
+    )[0]
+
+    for expected in (
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass",
+        ". $env:DEVKIT_POWERSHELL_LIB",
+        "Remove-DevKitLegacyScheduledTask",
+        "legacy scheduled task cleanup failed; continuing migration",
+        'WARNINGS+=("DevKit migration: legacy scheduled task cleanup failed")',
+    ):
+        assert expected in cleanup
+    assert '[[ "$OS_TYPE" == "windows" && ! -f "$HOME/.codex/devkit/.migrated-v6" ]]' in migration
+    assert migration.index("remove_windows_legacy_scheduled_task") < migration.index(
+        "prune_legacy_devkit_assets"
+    )
+
+
+def test_cursor_prune_python_resolver_probes_supported_commands_in_order():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    resolver = shell.split("resolve_cursor_prune_python()", 1)[1].split(
+        "section_prune_cursor_sync()", 1
+    )[0]
+    section = shell.split("section_prune_cursor_sync()", 1)[1].split("main()", 1)[0]
+
+    probes = (
+        "python3 -c",
+        "python -c",
+        "py -3 -c",
+    )
+    positions = [resolver.index(probe) for probe in probes]
+    assert positions == sorted(positions)
+    assert resolver.count("sys.version_info >= (3, 10)") == 3
+    assert 'python_kind="$(resolve_cursor_prune_python)"' in section
+    assert 'python_command=(py -3)' in section
+    assert '"${python_command[@]}"' in section
+    assert "command -v " + "python3" not in section
+
+
 def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
     shell = (SCRIPTS / "devkit-lib.sh").read_text(encoding="utf-8")
     powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
