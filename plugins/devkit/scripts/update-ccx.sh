@@ -770,10 +770,6 @@ section_managed_copy() {
                 return 1
             fi
         done
-        if ! ensure_managed_file "$plugin_scripts/update-ccx.ps1" "$codex_bin/update-ccx.ps1" true; then
-            ERRORS+=("DevKit managed file: failed to update update-ccx.ps1")
-            return 1
-        fi
     fi
 
     chmod +x "$codex_bin/update-ccx.sh"
@@ -1166,6 +1162,18 @@ section_prune_legacy_assets() {
 
     if [[ "$OS_TYPE" == "windows" && ! -f "$HOME/.codex/devkit/.migrated-v6" ]]; then
         remove_windows_legacy_scheduled_task "$HOME/.codex/bin/devkit-lib.ps1"
+    fi
+
+    # v12 -> v13: update-ccx.ps1 の委譲シムを廃止したため、v6 marker の有無に関わらず
+    # 常時 prune する(prune_legacy_devkit_assets は v6 marker があると早期 return するため)。
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        local legacy_ps1_path="$HOME/.codex/bin/update-ccx.ps1"
+        rm -f -- "$legacy_ps1_path"
+        if [[ -e "$legacy_ps1_path" || -L "$legacy_ps1_path" ]]; then
+            echo "PRUNE_FAILED: $legacy_ps1_path" >&2
+            ERRORS+=("DevKit migration: failed to prune $legacy_ps1_path")
+            return 1
+        fi
     fi
 
     if prune_legacy_devkit_assets "$HOME" "$repo_root"; then

@@ -16,9 +16,15 @@ WINDOWS_FILES = (
     "devkit-lib.ps1",
     "devkit-setup.ps1",
     "devkit-codex-config.ps1",
-    "update-ccx.ps1",
 )
-LEGACY_CODEX_BIN_FILES = ("update-devkit.sh", "update-devkit.ps1", "update-devkit.cmd")
+LEGACY_CODEX_BIN_FILES = (
+    "update-devkit.sh",
+    "update-devkit.ps1",
+    "update-devkit.cmd",
+)
+# v12 -> v13 で廃止した委譲シム。DevKit がこのパスを管理していたのは Windows だけなので、
+# POSIX では prune 対象にしない(ユーザーが自作した同名ファイルを消さないため)。
+LEGACY_CODEX_BIN_FILES_WINDOWS_ONLY = ("update-ccx.ps1",)
 LEGACY_LOCAL_BIN_FILES = ("update-devkit", "update-devkit.cmd")
 
 
@@ -129,6 +135,8 @@ def sync_updater(
         actions.append(f"write_shim:{shim_path}")
 
     legacy_paths = [*(codex_bin / name for name in LEGACY_CODEX_BIN_FILES)]
+    if platform == "windows":
+        legacy_paths.extend(codex_bin / name for name in LEGACY_CODEX_BIN_FILES_WINDOWS_ONLY)
     legacy_paths.extend(local_bin / name for name in LEGACY_LOCAL_BIN_FILES)
     for legacy_path in legacy_paths:
         if _path_present(legacy_path):

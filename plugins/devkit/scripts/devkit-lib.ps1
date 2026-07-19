@@ -396,8 +396,7 @@ function Install-DevKitManagedFiles([string]$RepoRoot, [string]$UserHome) {
     "update-ccx.cmd",
     "devkit-lib.ps1",
     "devkit-setup.ps1",
-    "devkit-codex-config.ps1",
-    "update-ccx.ps1"
+    "devkit-codex-config.ps1"
   )) {
     Ensure-DevKitManagedFile `
       -SourcePath (Join-Path $scriptsRoot $fileName) `
@@ -616,6 +615,10 @@ function Remove-DevKitLegacyAssets([string]$UserHome, [string]$SourceRoot, [scri
     Remove-DevKitV9RetiredSkillDirs -UserHome $UserHome
     Write-DevKitUtf8NoBom -Path $v9MarkerPath -Content "migrated-v9-dig-goal`n"
   }
+
+  # v12 -> v13: update-ccx.ps1 の委譲シムを廃止したため、marker の有無に関わらず
+  # 常時 prune する(v6 marker があると後続 cleanup は早期 return するため)。
+  Remove-DevKitPathOrThrow -Path (Join-Path $UserHome ".codex\bin\update-ccx.ps1")
 
   if (Test-Path -LiteralPath $markerPath) {
     Invoke-DevKitLogger $Logger "Legacy migration marker already exists."

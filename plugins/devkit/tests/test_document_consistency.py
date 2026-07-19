@@ -81,8 +81,9 @@ def test_retired_update_devkit_mentions_are_allowlisted():
             rf'^\s*foreach \(\$fileName in \$legacyLocalBinFileNames\) \{{$',
         ),
         "plugins/devkit/skills/setup/scripts/sync_updater.py": (
-            rf'^LEGACY_CODEX_BIN_FILES = \("{retired_updater_pattern}\.sh", '
-            rf'"{retired_updater_pattern}\.ps1", "{retired_updater_pattern}\.cmd"\)$',
+            rf'^\s*"{retired_updater_pattern}\.sh",$',
+            rf'^\s*"{retired_updater_pattern}\.ps1",$',
+            rf'^\s*"{retired_updater_pattern}\.cmd",$',
             rf'^LEGACY_LOCAL_BIN_FILES = \("{retired_updater_pattern}", '
             rf'"{retired_updater_pattern}\.cmd"\)$',
         ),
@@ -162,7 +163,7 @@ def test_retired_update_devkit_mentions_are_allowlisted():
                 (
                     rf'\s*"{retired_updater_pattern}\.sh",',
                     rf'\s*"{retired_updater_pattern}\.ps1",',
-                    rf'\s*"{retired_updater_pattern}\.cmd"',
+                    rf'\s*"{retired_updater_pattern}\.cmd",?',
                 ),
             ),
             (

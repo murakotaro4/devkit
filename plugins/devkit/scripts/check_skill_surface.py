@@ -187,6 +187,16 @@ def assert_marketplace_manifest(problems: list[str]) -> None:
         problems.append(f"root marketplace source directory does not exist: {source}")
 
 
+def assert_no_opencode_in_windows_updater_surface(problems: list[str]) -> None:
+    # update-ccx.ps1 の委譲シム廃止(v13)により Windows 実行正本は update-ccx.sh に
+    # 一本化された。旧 run_powershell_smoke_checks() が ps1 に対して行っていた
+    # OpenCode command surface 検査を、正本となった update-ccx.sh に対して行う。
+    target = PLUGIN_DIR / "scripts/update-ccx.sh"
+    content = target.read_text(encoding="utf-8")
+    if re.search(r"opencode|opencode-ai", content, re.IGNORECASE):
+        problems.append(f"{target} contains OpenCode command surface")
+
+
 FAKE_CODEX = """#!/bin/sh
 printf 'codex %s\\n' "$*" >> "$DEVKIT_TEST_CALL_LOG"
 if [ "$1" = "--version" ]; then
@@ -701,6 +711,74 @@ def run_prune_smoke_checks() -> None:
             raise AssertionError("v9 dig-goal migration marker was not written")
 
 
+def run_legacy_ps1_shim_prune_smoke_checks() -> None:
+    # update-ccx.ps1 の委譲シム廃止(v13)の回帰テスト。section_prune_legacy_assets()
+    # は devkit-lib.sh の .migrated-v6 marker とは独立に、常時この shim を prune する
+    # 必要がある(prune_legacy_devkit_assets 自体は marker があると早期 return するため)。
+    # OS_TYPE の判定は実 uname 依存のため、この検証は Windows(Git Bash)上でのみ意味を持つ。
+    if os.name != "nt":
+        return
+
+    for marker_present in (False, True):
+        label = "ps1-shim-marker" if marker_present else "ps1-shim-no-marker"
+        with tempfile.TemporaryDirectory(prefix=f"devkit-{label}-home-") as home, tempfile.TemporaryDirectory(
+            prefix=f"devkit-{label}-bin-"
+        ) as fake_bin:
+            home_path = Path(home)
+            source_root = prepare_update_smoke_home(home_path)
+
+            codex_bin = home_path / ".codex/bin"
+            codex_bin.mkdir(parents=True)
+            stale_ps1 = codex_bin / "update-ccx.ps1"
+            stale_ps1.write_text("# stale legacy delegating shim\n", encoding="utf-8")
+
+            if marker_present:
+                marker_dir = home_path / ".codex/devkit"
+                marker_dir.mkdir(parents=True, exist_ok=True)
+                (marker_dir / ".migrated-v6").write_text("migrated-v6\n", encoding="utf-8")
+
+            fake_bin_path = Path(fake_bin)
+            write_executable(fake_bin_path / "codex", FAKE_CODEX)
+            write_executable(fake_bin_path / "claude", FAKE_CLAUDE)
+            write_executable(fake_bin_path / "opencode", FAKE_TOOL)
+            for tool in ("curl", "git"):
+                write_executable(fake_bin_path / tool, FAKE_TOOL)
+
+            call_log = home_path / "tool-calls.log"
+            env = os.environ.copy()
+            env.update(
+                {
+                    "DEVKIT_SOURCE_ROOT": str(source_root),
+                    "DEVKIT_TEST_CALL_LOG": str(call_log),
+                    "DEVKIT_FAKE_CODEX_INSTALLED": "1",
+                    "DEVKIT_FAKE_CODEX_ENABLED": "true",
+                    "DEVKIT_FAKE_CLAUDE_MARKETPLACE": "1",
+                    "DEVKIT_FAKE_CLAUDE_MARKETPLACE_SHAPE": "ok",
+                    "DEVKIT_FAKE_CLAUDE_INSTALLED": "1",
+                    "DEVKIT_FAKE_CLAUDE_SCOPE": "user",
+                    "HOME": home,
+                    "USERPROFILE": home,
+                    "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
+                }
+            )
+            result = subprocess.run(
+                [resolve_bash(), (PLUGIN_DIR / "scripts/update-ccx.sh").as_posix(), "--devkit-only"],
+                cwd=ROOT,
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            if result.returncode != 0:
+                raise AssertionError(
+                    f"{label}: update-ccx.sh --devkit-only failed (exit {result.returncode})\n"
+                    f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+                )
+            if stale_ps1.exists():
+                raise AssertionError(f"{label}: stale update-ccx.ps1 was not pruned: {stale_ps1}")
+
+
 def run_powershell_smoke_checks() -> None:
     pwsh = shutil.which("pwsh")
     if not pwsh:
@@ -755,12 +833,24 @@ try {{
   . (Join-Path $Root "plugins/devkit/scripts/devkit-lib.ps1")
   $userHome = Join-Path $Tmp.FullName "home"
   New-Item -ItemType Directory -Path $userHome | Out-Null
+
+  # update-ccx.ps1 の委譲シム廃止(v13)の回帰テスト。marker 不在で 1 回目、
+  # marker 実在(1 回目の呼び出しが書き込む)で 2 回目を検証し、両方で prune されることを確認する。
+  $legacyPs1Bin = Join-Path $userHome ".codex\bin"
+  New-Item -ItemType Directory -Path $legacyPs1Bin -Force | Out-Null
+  $legacyPs1Path = Join-Path $legacyPs1Bin "update-ccx.ps1"
+  Set-Content -LiteralPath $legacyPs1Path -Encoding UTF8 -Value "# stale legacy delegating shim`n"
+  $migratedV6Marker = Join-Path $userHome ".codex\devkit\.migrated-v6"
+
   Remove-DevKitLegacyAssets -UserHome $userHome -SourceRoot $Root -Logger $null
   if (-not ($script:TaskLog -contains "unregister:DevKitSkillsDailyUpdate")) {{ throw "legacy task was not unregistered" }}
   if (($script:TaskLog | Where-Object {{ $_ -like "register:*" }}).Count -gt 0) {{ throw "new scheduled task was registered" }}
+  if (Test-Path -LiteralPath $legacyPs1Path) {{ throw "stale update-ccx.ps1 was not pruned (no marker)" }}
+  if (-not (Test-Path -LiteralPath $migratedV6Marker)) {{ throw "migrated-v6 marker was not written after first prune" }}
 
-  $update = Get-Content -LiteralPath (Join-Path $Root "plugins/devkit/scripts/update-ccx.ps1") -Raw
-  if ($update -match "opencode|opencode-ai|OpenCode") {{ throw "update-ccx.ps1 contains OpenCode command surface" }}
+  Set-Content -LiteralPath $legacyPs1Path -Encoding UTF8 -Value "# stale legacy delegating shim (re-seeded)`n"
+  Remove-DevKitLegacyAssets -UserHome $userHome -SourceRoot $Root -Logger $null
+  if (Test-Path -LiteralPath $legacyPs1Path) {{ throw "stale update-ccx.ps1 was not pruned (marker present)" }}
 }} finally {{
   Remove-Item -LiteralPath $Tmp.FullName -Recurse -Force -ErrorAction SilentlyContinue
 }}
@@ -776,6 +866,7 @@ def main() -> int:
     problems: list[str] = []
     assert_skill_surface(problems)
     assert_marketplace_manifest(problems)
+    assert_no_opencode_in_windows_updater_surface(problems)
     try:
         run_codex_marketplace_smoke_checks()
     except (AssertionError, subprocess.CalledProcessError) as exc:
@@ -799,6 +890,14 @@ def main() -> int:
         if isinstance(exc, subprocess.CalledProcessError) and not detail:
             detail = exc.stdout.strip() or str(exc)
         problems.append(f"legacy prune smoke failed: {detail}")
+
+    try:
+        run_legacy_ps1_shim_prune_smoke_checks()
+    except (AssertionError, subprocess.CalledProcessError) as exc:
+        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+        if isinstance(exc, subprocess.CalledProcessError) and not detail:
+            detail = exc.stdout.strip() or str(exc)
+        problems.append(f"legacy update-ccx.ps1 shim prune smoke failed: {detail}")
 
     try:
         run_powershell_smoke_checks()
