@@ -196,14 +196,14 @@ try {
     "update-ccx.cmd",
     "devkit-lib.ps1",
     "devkit-setup.ps1",
-    "devkit-codex-config.ps1",
-    "update-ccx.ps1"
+    "devkit-codex-config.ps1"
   )
   $managedTemplateFileNames = @("config.shared.toml", "config.windows.toml")
   $legacyCodexBinRemnantNames = @(
     "update-devkit.sh",
     "update-devkit.ps1",
-    "update-devkit.cmd"
+    "update-devkit.cmd",
+    "update-ccx.ps1"
   )
   $legacyLocalBinRemnantNames = @(
     "update-devkit",
@@ -278,10 +278,11 @@ try {
   Write-Output "=== Phase A: sync_updater.py dry-run, apply, and no-op ==="
   Reset-ManagedState
   Initialize-Directories
-  $staleUpdater = Join-Path $codexBin "update-ccx.ps1"
-  Write-Utf8NoBom -Path $staleUpdater -Content "# stale dummy updater"
+  # update-ccx.ps1 の委譲シムは v13 で廃止された。既存インストール済み環境に残る
+  # 旧 shim を legacy remnant として seed し、sync_updater.py が prune することを検証する
+  # (managed file としてはもう扱わないため copy 対象には含めない)。
   Add-Remnants
-  $seededPaths = @($staleUpdater) + @($remnantPaths)
+  $seededPaths = @($remnantPaths)
   $seededHashes = Get-PathHashes -Paths $seededPaths
 
   $checkResult = Invoke-JsonPython -Arguments @($syncScript, "--check")
@@ -295,7 +296,7 @@ try {
     Assert-ActionPath -Actions @($checkResult.actions) -Prefix "prune" -ExpectedPath $path
   }
   Assert-HashesEqual -Expected $seededHashes -Message "sync dry-run leaves seeded file contents unchanged"
-  foreach ($path in $managedPaths | Where-Object { (Get-NormalizedPath $_) -ne (Get-NormalizedPath $staleUpdater) }) {
+  foreach ($path in $managedPaths) {
     Assert-True (-not (Test-Path -LiteralPath $path)) ("sync dry-run does not create managed file: {0}" -f $path)
   }
   Assert-True (-not (Test-Path -LiteralPath $shimPath)) "sync dry-run does not create shim"

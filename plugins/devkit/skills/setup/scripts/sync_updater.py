@@ -16,9 +16,13 @@ WINDOWS_FILES = (
     "devkit-lib.ps1",
     "devkit-setup.ps1",
     "devkit-codex-config.ps1",
+)
+LEGACY_CODEX_BIN_FILES = (
+    "update-devkit.sh",
+    "update-devkit.ps1",
+    "update-devkit.cmd",
     "update-ccx.ps1",
 )
-LEGACY_CODEX_BIN_FILES = ("update-devkit.sh", "update-devkit.ps1", "update-devkit.cmd")
 LEGACY_LOCAL_BIN_FILES = ("update-devkit", "update-devkit.cmd")
 
 

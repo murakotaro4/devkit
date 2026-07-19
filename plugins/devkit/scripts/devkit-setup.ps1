@@ -57,7 +57,7 @@ try {
   Write-Host "  update-ccx"
   Write-Host ""
   Write-Host "Manual update command:"
-  Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$($managed.CodexBin)\update-ccx.ps1`" --devkit-only"
+  Write-Host "  `"$($managed.CodexBin)\update-ccx.cmd`" --devkit-only"
   exit 0
 } catch {
   Write-Error $_

@@ -123,9 +123,9 @@ Windows だけ `~/.codex/config.toml` の合成を行います。合成時は De
 
 macOS / Linux / WSL では config 合成を行いません。Codex plugin 登録を正本として扱います。
 
-### Windows updater stage 1 breaking change
+### Windows updater: bash 正本への一本化
 
-Windows の updater 実装を PowerShell から bash 正本へ一本化しました。`update-ccx.cmd` は Git for Windows の Bash launcher で、`update-ccx.ps1` は旧チェーン互換のため 1 リリースだけ残す直接委譲シムです。両者は互いを呼ばず、同居する `update-ccx.sh`、次に `~/.codex/devkit/source-root.txt` が指す checkout の script を探します。WSL の `System32\bash.exe` は使いません。
+Windows の updater 実装は PowerShell から bash 正本へ完全移行しました。`update-ccx.cmd` は Git for Windows の Bash launcher で、同居する `update-ccx.sh`、次に `~/.codex/devkit/source-root.txt` が指す checkout の script を探して実行します。旧チェーン互換の直接委譲シム `update-ccx.ps1` は廃止済みで、既存インストール済み環境の残骸は updater 自身が自動 prune します。WSL の `System32\bash.exe` は使いません。
 
 Windows でも明示された `HOME` を尊重し、managed files は `$HOME` 配下へ配置します。生成する cmd shim と Codex config templating はコピー先の実パスを参照し、ランチャーの source-root fallback は `HOME`、次に `USERPROFILE` の順で探します。`source-root.txt` は Windows launcher が直接扱える Windows 絶対パスで保存し、bash 側は旧 POSIX 形式と Windows 形式の両方を読めます。非対話 Git Bash では fnm の shell 環境も updater が初期化し、初期化できない場合は警告して後続処理を継続します。
 

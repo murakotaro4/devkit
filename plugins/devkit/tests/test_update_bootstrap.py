@@ -40,10 +40,10 @@ def test_managed_updater_copy_excludes_retired_update_devkit_files():
         'ensure_managed_file "$plugin_scripts/update-ccx.cmd"',
         "for script_name in devkit-lib.ps1 devkit-setup.ps1 devkit-codex-config.ps1",
         "for script_name in config.shared.toml config.windows.toml",
-        'ensure_managed_file "$plugin_scripts/update-ccx.ps1"',
     )
     positions = [managed_section.index(marker) for marker in ordered_copy_markers]
     assert positions == sorted(positions)
+    assert "update-ccx.ps1" not in managed_section
 
     powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
     managed_function = powershell.split("function Install-DevKitManagedFiles", 1)[1].split(
@@ -53,8 +53,8 @@ def test_managed_updater_copy_excludes_retired_update_devkit_files():
     assert '"update-ccx.sh"' in managed_names
     assert '"devkit-lib.sh"' in managed_names
     assert '"update-ccx.cmd"' in managed_names
-    assert '"update-ccx.ps1"' in managed_names
     assert "update-devkit" not in managed_names
+    assert "update-ccx.ps1" not in managed_names
 
 
 def test_windows_managed_paths_respect_home_without_overwriting_it():
@@ -806,9 +806,10 @@ def test_update_ccx_sh_preserves_existing_source_root(tmp_path):
     assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{caller_source_root}\n"
 
 
-def test_windows_updater_launchers_have_independent_git_bash_contract():
+def test_windows_updater_cmd_launcher_has_independent_git_bash_contract():
+    # update-ccx.ps1 の委譲シムは v13 で廃止された。Windows の実行正本は
+    # update-ccx.cmd (Git for Windows Bash launcher) 経由の update-ccx.sh のみ。
     cmd = (SCRIPTS / "update-ccx.cmd").read_text(encoding="utf-8")
-    powershell = (SCRIPTS / "update-ccx.ps1").read_text(encoding="utf-8")
 
     cmd_search = (
         r"%ProgramFiles%\Git\bin\bash.exe",
@@ -816,25 +817,8 @@ def test_windows_updater_launchers_have_independent_git_bash_contract():
         "where git.exe",
         r"%~dp1..\bin\bash.exe",
     )
-    ps_search = (
-        'Join-Path $env:ProgramFiles "Git\\bin\\bash.exe"',
-        "${env:ProgramFiles(x86)}",
-        "where.exe git.exe",
-        '"bin\\bash.exe"',
-    )
-    ps_bootstrap = (
-        'Join-Path $PSScriptRoot "update-ccx.sh"',
-        '".codex\\devkit\\source-root.txt"',
-        '"plugins\\devkit\\scripts\\update-ccx.sh"',
-    )
-
-    for text, expected in (
-        (cmd, cmd_search),
-        (powershell, ps_search),
-        (powershell, ps_bootstrap),
-    ):
-        positions = [text.index(item) for item in expected]
-        assert positions == sorted(positions)
+    positions = [cmd.index(item) for item in cmd_search]
+    assert positions == sorted(positions)
 
     assert cmd.index(r"%~dp0update-ccx.sh") < cmd.index("call :resolve_update_script")
     cmd_fallback = cmd.rsplit(":resolve_update_script", 1)[1]
@@ -843,20 +827,14 @@ def test_windows_updater_launchers_have_independent_git_bash_contract():
         r".codex\devkit\source-root.txt"
     )
 
-    ps_fallback = powershell.split("function Find-UpdateScript", 1)[1]
-    assert ps_fallback.index("$env:HOME") < ps_fallback.index("$env:USERPROFILE")
-    assert ps_fallback.index("$env:USERPROFILE") < ps_fallback.index(
-        '".codex\\devkit\\source-root.txt"'
-    )
-
     assert r"System32\bash.exe" not in cmd
-    assert r"System32\bash.exe" not in powershell
     assert "update-ccx.ps1" not in cmd
-    assert "update-ccx.cmd" not in powershell
     assert '"%DEVKIT_BASH%" "%DEVKIT_UPDATE_SH%" %*' in cmd
     assert "exit /b %ERRORLEVEL%" in cmd
-    assert "& $bash $updateScript @UpdaterArgs" in powershell
-    assert "exit $LASTEXITCODE" in powershell
+
+
+def test_update_ccx_ps1_shim_is_retired():
+    assert not (SCRIPTS / "update-ccx.ps1").exists()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows launcher runtime smoke")
