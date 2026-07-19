@@ -32,6 +32,8 @@ exit /b 0
 
 :resolve_update_script
 set "DEVKIT_SOURCE_ROOT="
-if exist "%USERPROFILE%\.codex\devkit\source-root.txt" set /p "DEVKIT_SOURCE_ROOT="<"%USERPROFILE%\.codex\devkit\source-root.txt"
+set "DEVKIT_USER_HOME=%HOME%"
+if not defined DEVKIT_USER_HOME set "DEVKIT_USER_HOME=%USERPROFILE%"
+if exist "%DEVKIT_USER_HOME%\.codex\devkit\source-root.txt" set /p "DEVKIT_SOURCE_ROOT="<"%DEVKIT_USER_HOME%\.codex\devkit\source-root.txt"
 if defined DEVKIT_SOURCE_ROOT set "DEVKIT_UPDATE_SH=%DEVKIT_SOURCE_ROOT%\plugins\devkit\scripts\update-ccx.sh"
 exit /b 0

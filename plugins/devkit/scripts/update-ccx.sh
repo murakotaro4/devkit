@@ -20,6 +20,27 @@ RUN_MODE="run"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+windows_path_to_posix() {
+    local input_path="$1"
+    local normalized=""
+
+    if command -v cygpath &>/dev/null; then
+        normalized="$(cygpath -u "$input_path" 2>/dev/null || true)"
+    fi
+    if [[ -z "$normalized" && "$input_path" == /* ]]; then
+        normalized="$input_path"
+    fi
+    if [[ -z "$normalized" ]]; then
+        local slash_path="${input_path//\\//}"
+        if [[ "$slash_path" =~ ^([A-Za-z]):/(.*)$ ]]; then
+            normalized="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}"
+        fi
+    fi
+
+    [[ -n "$normalized" && "$normalized" == /* ]] || return 1
+    printf '%s\n' "${normalized%/}"
+}
+
 source_devkit_lib_for_update() {
     local lib_path="$SCRIPT_DIR/devkit-lib.sh"
     if [[ -f "$lib_path" ]]; then
@@ -293,8 +314,50 @@ section_prerequisites() {
     esac
 }
 
-ensure_fnm() {
+resolve_fnm_command() {
     if command -v fnm &>/dev/null; then
+        return 0
+    fi
+
+    local -a fnm_dirs=("$HOME/.local/share/fnm" "$HOME/.fnm")
+    if [[ "$OS_TYPE" == "windows" && -n "${LOCALAPPDATA:-}" ]]; then
+        local local_app_data=""
+        local_app_data="$(windows_path_to_posix "$LOCALAPPDATA" || true)"
+        if [[ -n "$local_app_data" ]]; then
+            fnm_dirs+=("$local_app_data/Microsoft/WinGet/Links")
+        fi
+    fi
+
+    local fnm_dir
+    for fnm_dir in "${fnm_dirs[@]}"; do
+        if [[ -x "$fnm_dir/fnm" || -x "$fnm_dir/fnm.exe" ]]; then
+            export PATH="$fnm_dir:$PATH"
+            hash -r 2>/dev/null
+            break
+        fi
+    done
+
+    command -v fnm &>/dev/null
+}
+
+initialize_fnm_environment() {
+    command -v fnm &>/dev/null || return 0
+    [[ -z "${FNM_MULTISHELL_PATH:-}" ]] || return 0
+
+    local fnm_environment=""
+    if fnm_environment="$(fnm env --shell bash 2>/dev/null)" && [[ -n "$fnm_environment" ]] && eval "$fnm_environment"; then
+        echo "OK fnm: non-interactive shell environment initialized"
+        return 0
+    fi
+
+    echo "WARN fnm: failed to initialize the non-interactive shell environment"
+    WARNINGS+=("fnm: non-interactive shell environment initialization failed")
+    return 0
+}
+
+ensure_fnm() {
+    if resolve_fnm_command; then
+        initialize_fnm_environment
         echo "OK fnm: already installed ($(fnm --version 2>/dev/null))"
         return 0
     fi
@@ -322,7 +385,9 @@ ensure_fnm() {
     esac
 
     export PATH="$HOME/.local/share/fnm:$HOME/.fnm:$PATH"
-    eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)" 2>/dev/null
+    hash -r 2>/dev/null
+    resolve_fnm_command || true
+    initialize_fnm_environment
     if command -v fnm &>/dev/null; then
         echo "OK ($(fnm --version 2>/dev/null))"
     else
@@ -540,28 +605,64 @@ section_update() {
     echo "[After]  $(join_summary_parts "${after_parts[@]}")"
 }
 
+windows_path_from_posix() {
+    local input_path="$1"
+    command -v cygpath &>/dev/null || return 1
+
+    local normalized=""
+    normalized="$(cygpath -w "$input_path" 2>/dev/null || true)"
+    [[ -n "$normalized" ]] || return 1
+    printf '%s\n' "$normalized"
+}
+
 install_windows_update_shim() {
     local shim_path="$1"
+    local target_command_path="$2"
     if [[ -d "$shim_path" && ! -L "$shim_path" ]]; then
         echo "BLOCKED_EXISTING_DIR: $shim_path" >&2
         return 1
     fi
+
+    local windows_target=""
+    if ! windows_target="$(windows_path_from_posix "$target_command_path")"; then
+        windows_target='%USERPROFILE%\.codex\bin\update-ccx.cmd'
+        echo "WARN DevKit managed file: cygpath could not resolve the installed update-ccx.cmd; using USERPROFILE fallback" >&2
+        WARNINGS+=("DevKit managed file: update-ccx.cmd shim uses USERPROFILE fallback")
+    fi
+
     mkdir -p "$(dirname "$shim_path")"
     rm -f -- "$shim_path"
-    printf '@echo off\r\nsetlocal\r\ncall "%%USERPROFILE%%\\.codex\\bin\\update-ccx.cmd" %%*\r\nexit /b %%ERRORLEVEL%%\r\n' > "$shim_path"
+    printf '@echo off\r\nsetlocal\r\ncall "%s" %%*\r\nexit /b %%ERRORLEVEL%%\r\n' "$windows_target" > "$shim_path"
 }
 
 install_windows_codex_config() {
+    local config_script_path="$1"
     if ! command -v powershell.exe &>/dev/null; then
         echo "FAILED Codex config: powershell.exe is not available"
         ERRORS+=("Codex config: powershell.exe is not available")
         return 1
     fi
 
-    if ! powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+    local windows_config_script=""
+    local windows_home=""
+    if ! windows_config_script="$(windows_path_from_posix "$config_script_path")" || \
+       ! windows_home="$(windows_path_from_posix "$HOME")"; then
+        if [[ -z "${USERPROFILE:-}" ]]; then
+            echo "FAILED Codex config: managed paths could not be converted and USERPROFILE is unavailable"
+            ERRORS+=("Codex config: managed path resolution failed")
+            return 1
+        fi
+        windows_config_script="$USERPROFILE\.codex\bin\devkit-codex-config.ps1"
+        windows_home="$USERPROFILE"
+        echo "WARN Codex config: cygpath could not resolve managed paths; using USERPROFILE fallback" >&2
+        WARNINGS+=("Codex config: managed path resolution uses USERPROFILE fallback")
+    fi
+
+    if ! DEVKIT_CODEX_CONFIG_SCRIPT="$windows_config_script" DEVKIT_WINDOWS_HOME="$windows_home" \
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
 $ErrorActionPreference = "Stop"
-. (Join-Path $env:USERPROFILE ".codex\bin\devkit-codex-config.ps1")
-$configResult = Install-DevKitCodexConfig -UserHome $env:USERPROFILE -OsName "windows"
+. $env:DEVKIT_CODEX_CONFIG_SCRIPT
+$configResult = Install-DevKitCodexConfig -UserHome $env:DEVKIT_WINDOWS_HOME -OsName "windows"
 if ($configResult.BootstrappedLocalOverlay) {
   Write-Warning "Codex config.local.toml was bootstrapped from the existing config."
 }
@@ -627,11 +728,11 @@ section_managed_copy() {
     chmod +x "$codex_bin/update-ccx.sh"
     devkit_persist_codex_source_root "$HOME" "$repo_root"
     if [[ "$OS_TYPE" == "windows" ]]; then
-        if ! install_windows_update_shim "$local_bin/update-ccx.cmd"; then
+        if ! install_windows_update_shim "$local_bin/update-ccx.cmd" "$codex_bin/update-ccx.cmd"; then
             ERRORS+=("DevKit managed file: failed to update update-ccx.cmd shim")
             return 1
         fi
-        install_windows_codex_config || true
+        install_windows_codex_config "$codex_bin/devkit-codex-config.ps1" || true
     else
         install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
     fi

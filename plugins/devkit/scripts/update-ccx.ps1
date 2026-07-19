@@ -44,7 +44,11 @@ function Find-UpdateScript {
     return $adjacent
   }
 
-  $stateFile = Join-Path $env:USERPROFILE ".codex\devkit\source-root.txt"
+  $userHome = $env:HOME
+  if ([string]::IsNullOrWhiteSpace($userHome)) {
+    $userHome = $env:USERPROFILE
+  }
+  $stateFile = Join-Path $userHome ".codex\devkit\source-root.txt"
   if (Test-Path -LiteralPath $stateFile -PathType Leaf) {
     $sourceRoot = Get-Content -LiteralPath $stateFile -TotalCount 1 -ErrorAction SilentlyContinue |
       Select-Object -First 1

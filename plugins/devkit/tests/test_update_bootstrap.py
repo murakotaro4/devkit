@@ -57,6 +57,50 @@ def test_managed_updater_copy_excludes_retired_update_devkit_files():
     assert "update-devkit" not in managed_names
 
 
+def test_windows_managed_paths_respect_home_without_overwriting_it():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    shim = shell.split("install_windows_update_shim()", 1)[1].split(
+        "install_windows_codex_config()", 1
+    )[0]
+    config = shell.split("install_windows_codex_config()", 1)[1].split(
+        "section_managed_copy()", 1
+    )[0]
+    managed = shell.split("section_managed_copy()", 1)[1].split(
+        "codex_marketplace_section()", 1
+    )[0]
+
+    assert "initialize_windows_home" not in shell
+    assert 'export HOME=' not in shell
+    assert "windows_path_from_posix()" in shell
+    assert 'cygpath -w "$input_path"' in shell
+    assert 'windows_path_from_posix "$target_command_path"' in shim
+    assert "using USERPROFILE fallback" in shim
+    assert "DEVKIT_CODEX_CONFIG_SCRIPT" in config
+    assert 'windows_path_from_posix "$config_script_path"' in config
+    assert 'windows_path_from_posix "$HOME"' in config
+    assert 'codex_bin="$HOME/.codex/bin"' in managed
+    assert 'install_windows_update_shim "$local_bin/update-ccx.cmd" "$codex_bin/update-ccx.cmd"' in managed
+    assert 'install_windows_codex_config "$codex_bin/devkit-codex-config.ps1"' in managed
+
+
+def test_fnm_noninteractive_environment_is_initialized_before_early_return():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    resolver = shell.split("resolve_fnm_command()", 1)[1].split(
+        "initialize_fnm_environment()", 1
+    )[0]
+    initializer = shell.split("initialize_fnm_environment()", 1)[1].split("ensure_fnm()", 1)[0]
+    ensure = shell.split("ensure_fnm()", 1)[1].split("ensure_nodejs()", 1)[0]
+
+    assert '"$HOME/.local/share/fnm"' in resolver
+    assert '"$local_app_data/Microsoft/WinGet/Links"' in resolver
+    assert '[[ -z "${FNM_MULTISHELL_PATH:-}" ]]' in initializer
+    assert "fnm env --shell bash" in initializer
+    assert 'eval "$fnm_environment"' in initializer
+    assert 'WARNINGS+=("fnm: non-interactive shell environment initialization failed")' in initializer
+    assert ensure.index("resolve_fnm_command") < ensure.index("OK fnm: already installed")
+    assert ensure.index("initialize_fnm_environment") < ensure.index("OK fnm: already installed")
+
+
 def test_updater_self_refresh_defines_all_retired_name_prune_targets():
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
     powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
@@ -670,8 +714,15 @@ def test_windows_updater_launchers_have_independent_git_bash_contract():
 
     assert cmd.index(r"%~dp0update-ccx.sh") < cmd.index("call :resolve_update_script")
     cmd_fallback = cmd.rsplit(":resolve_update_script", 1)[1]
-    assert cmd_fallback.index(r"%USERPROFILE%\.codex\devkit\source-root.txt") < (
-        cmd_fallback.index(r"plugins\devkit\scripts\update-ccx.sh")
+    assert cmd_fallback.index(r"%HOME%") < cmd_fallback.index(r"%USERPROFILE%")
+    assert cmd_fallback.index(r"%USERPROFILE%") < cmd_fallback.index(
+        r".codex\devkit\source-root.txt"
+    )
+
+    ps_fallback = powershell.split("function Find-UpdateScript", 1)[1]
+    assert ps_fallback.index("$env:HOME") < ps_fallback.index("$env:USERPROFILE")
+    assert ps_fallback.index("$env:USERPROFILE") < ps_fallback.index(
+        '".codex\\devkit\\source-root.txt"'
     )
 
     assert r"System32\bash.exe" not in cmd
@@ -713,7 +764,8 @@ def test_update_ccx_cmd_uses_source_root_fallback_when_adjacent_shell_is_missing
     )
 
     env = os.environ.copy()
-    env["USERPROFILE"] = str(home)
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(tmp_path / "different-profile")
     result = subprocess.run(
         ["cmd.exe", "/d", "/c", str(installed_bin / "update-ccx.cmd"), "sentinel"],
         env=env,

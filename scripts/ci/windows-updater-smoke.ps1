@@ -111,6 +111,8 @@ $legacyLocalBinRemnantNames = @(
 )
 $managedPaths = @($managedFileNames | ForEach-Object { Join-Path $codexBin $_ })
 $managedTemplatePaths = @($managedTemplateFileNames | ForEach-Object { Join-Path $codexTemplates $_ })
+$alternateHome = Join-Path $env:USERPROFILE "home-mismatch-smoke"
+$userProfileCodexBin = $codexBin
 $codexRemnantPaths = @($legacyCodexBinRemnantNames | ForEach-Object { Join-Path $codexBin $_ })
 $localRemnantPaths = @($legacyLocalBinRemnantNames | ForEach-Object { Join-Path $localBin $_ })
 $remnantPaths = @($codexRemnantPaths) + @($localRemnantPaths)
@@ -211,6 +213,18 @@ Assert-True (@($noOpResult.actions).Count -eq 0) "sync second apply reports acti
 
 Write-Output "=== Phase boundary: reset managed USERPROFILE state ==="
 Reset-ManagedState
+$env:HOME = $alternateHome
+$codexBin = Join-Path $env:HOME ".codex\bin"
+$localBin = Join-Path $env:HOME ".local\bin"
+$stateFile = Join-Path $env:HOME ".codex\devkit\source-root.txt"
+$codexTemplates = Join-Path $env:HOME ".codex\devkit\templates\codex"
+$managedPaths = @($managedFileNames | ForEach-Object { Join-Path $codexBin $_ })
+$managedTemplatePaths = @($managedTemplateFileNames | ForEach-Object { Join-Path $codexTemplates $_ })
+$codexRemnantPaths = @($legacyCodexBinRemnantNames | ForEach-Object { Join-Path $codexBin $_ })
+$localRemnantPaths = @($legacyLocalBinRemnantNames | ForEach-Object { Join-Path $localBin $_ })
+$remnantPaths = @($codexRemnantPaths) + @($localRemnantPaths)
+$shimPath = Join-Path $localBin "update-ccx.cmd"
+Reset-ManagedState
 Add-Remnants
 foreach ($path in $remnantPaths) {
   Assert-True (Test-Path -LiteralPath $path -PathType Leaf) ("phase B remnant seeded: {0}" -f $path)
@@ -223,20 +237,24 @@ Assert-True ($run1.ExitCode -eq 0) "source-root updater exits with code 0"
 Assert-True ($run1.Output.Contains("OK All done", [StringComparison]::Ordinal)) "source-root updater reports OK All done"
 Assert-ManagedFilesMatchSource -Message "source-root updater" -IncludeTemplates
 Assert-True (Test-Path -LiteralPath $shimPath -PathType Leaf) "source-root updater creates local command shim"
+$shimContent = Get-Content -LiteralPath $shimPath -Raw
+$expectedShimCall = 'call "{0}" %*' -f (Join-Path $codexBin "update-ccx.cmd")
+Assert-True ($shimContent.Contains($expectedShimCall, [StringComparison]::OrdinalIgnoreCase)) "source-root updater shim targets the managed command under HOME"
 Assert-NoRemnants -Message "source-root updater"
 Assert-True (Test-Path -LiteralPath $stateFile -PathType Leaf) "source-root updater writes source-root state file"
 $persistedRoot = (Get-Content -LiteralPath $stateFile -Raw).Trim()
 Assert-True ((Get-NormalizedPath $persistedRoot) -eq (Get-NormalizedPath $checkoutRoot)) "source-root state resolves to checkout root"
+Assert-True (-not (Test-Path -LiteralPath (Join-Path $userProfileCodexBin "update-ccx.cmd"))) "Windows updater respects HOME instead of writing managed files under USERPROFILE"
 
 $installedPaths = @($managedPaths) + @($managedTemplatePaths) + @($shimPath)
 $run1Hashes = Get-PathHashes -Paths $installedPaths
 
 Write-Output "=== Phase B2: installed updater execution ==="
-$installedUpdater = Join-Path $codexBin "update-ccx.cmd"
+$installedUpdater = $shimPath
 $run2 = Invoke-Updater -LauncherPath $installedUpdater
-Assert-True ($run2.ExitCode -eq 0) "installed updater exits with code 0"
-Assert-True ($run2.Output.Contains("OK All done", [StringComparison]::Ordinal)) "installed updater reports OK All done"
-Assert-HashesEqual -Expected $run1Hashes -Message "installed updater preserves managed files and shim hashes"
-Assert-NoRemnants -Message "installed updater"
+Assert-True ($run2.ExitCode -eq 0) "installed updater shim exits with code 0"
+Assert-True ($run2.Output.Contains("OK All done", [StringComparison]::Ordinal)) "installed updater shim reports OK All done"
+Assert-HashesEqual -Expected $run1Hashes -Message "installed updater shim preserves managed files and shim hashes"
+Assert-NoRemnants -Message "installed updater shim"
 
 Write-Output "OK: Windows updater smoke completed"

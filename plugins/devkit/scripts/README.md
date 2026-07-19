@@ -40,6 +40,8 @@ update-ccx --devkit-only
 
 Windows でも updater のロジックは `update-ccx.sh` だけに置きます。`update-ccx.cmd` と 1 リリース残置する `update-ccx.ps1` は、Git for Windows の Bash と、同居または `~/.codex/devkit/source-root.txt` 配下の `update-ccx.sh` を見つけて委譲するだけです。WSL の `System32\bash.exe` は使いません。
 
+Windows でも呼び出し側が設定した `HOME` を尊重し、managed files は `$HOME` 配下へ配置します。生成する cmd shim と Codex config templating はコピー先の実パスを参照し、ランチャーの source-root fallback は `HOME`、次に `USERPROFILE` の順で探します。また、非対話 shell では fnm の shell 環境を明示初期化し、失敗時は警告して継続します。
+
 PowerShell を残す責務は、`update-ccx.sh` からの Claude Code native installer 呼び出しと、`devkit-codex-config.ps1` による Windows Codex config templating の 2 点です。旧 PowerShell updater 固有の npm repair、`.npmrc` legacy Codex prefix migration、レジストリからの PATH 再読込は廃止します。install 直後にコマンドが PATH へ現れない場合は警告し、ターミナル再起動を案内します。
 
 Windows での継続更新には Git for Windows が必須です。ランチャーは標準の 2 箇所、次に `where git` から導出した `Git\bin\bash.exe` の順で探索します。
