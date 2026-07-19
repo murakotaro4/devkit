@@ -520,6 +520,10 @@
           "count": 2
         },
         {
+          "path": "plugins/devkit/tests/test_prune_legacy_cursor_sync.py",
+          "count": 3
+        },
+        {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
           "count": 10
         }
