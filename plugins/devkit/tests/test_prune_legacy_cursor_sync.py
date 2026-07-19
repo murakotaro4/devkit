@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from hashlib import sha256
 from pathlib import Path
 
@@ -16,6 +17,18 @@ PLUGIN_ROOT = ROOT / "plugins/devkit"
 SCRIPT = PLUGIN_ROOT / "skills/setup/scripts/prune_legacy_cursor_sync.py"
 STUB = PLUGIN_ROOT / "skills/setup/scripts/sync_cursor_skills.py"
 MANIFEST_NAME = ".devkit-sync-manifest.json"
+
+
+def _probe_symlink_support() -> bool:
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            probe_dir = Path(tmp_dir)
+            target = probe_dir / "target"
+            target.mkdir()
+            (probe_dir / "link").symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        return False
+    return True
 
 
 def write_manifest(target: Path, files: dict[str, str]) -> Path:
@@ -127,7 +140,7 @@ def test_unlisted_user_assets_are_untouched(tmp_path):
 
 
 def test_symlink_entry_is_preserved_as_irregular(tmp_path):
-    if not hasattr(os, "symlink"):
+    if not _probe_symlink_support():
         pytest.skip("symlink unavailable")
     target = tmp_path / ".cursor"
     target.mkdir()
@@ -148,6 +161,8 @@ def test_symlink_entry_is_preserved_as_irregular(tmp_path):
 
 
 def test_intermediate_symlink_is_preserved_as_irregular(tmp_path):
+    if not _probe_symlink_support():
+        pytest.skip("symlink unavailable")
     target = tmp_path / ".cursor"
     target.mkdir()
     external = tmp_path / "external"
@@ -166,6 +181,8 @@ def test_intermediate_symlink_is_preserved_as_irregular(tmp_path):
 
 
 def test_manifest_symlink_is_rejected_without_touching_external_file(tmp_path):
+    if not _probe_symlink_support():
+        pytest.skip("symlink unavailable")
     target = tmp_path / ".cursor"
     target.mkdir()
     external = tmp_path / "manifest.json"
@@ -194,6 +211,8 @@ def test_manifest_directory_is_rejected_without_removal(tmp_path):
 
 
 def test_target_root_symlink_is_noop(tmp_path):
+    if not _probe_symlink_support():
+        pytest.skip("symlink unavailable")
     external = tmp_path / "external"
     external.mkdir()
     manifest = external / MANIFEST_NAME
@@ -306,6 +325,34 @@ def make_fake_codex(bin_dir: Path) -> None:
     codex.chmod(0o755)
 
 
+def make_fake_python3(bin_dir: Path) -> None:
+    python3 = bin_dir / "python3"
+    python3.write_text(
+        f'#!/bin/bash\nexec "{Path(sys.executable).as_posix()}" "$@"\n',
+        encoding="utf-8",
+    )
+    python3.chmod(0o755)
+
+
+def make_fake_claude(bin_dir: Path) -> None:
+    claude = bin_dir / "claude"
+    claude.write_text(
+        """#!/bin/bash
+if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ] && [ "$4" = "--json" ]; then
+  printf '[{"name":"murakotaro4","source":"github","repo":"murakotaro4/devkit"}]\\n'
+  exit 0
+fi
+if [ "$1" = "plugin" ] && [ "$2" = "list" ] && [ "$3" = "--json" ]; then
+  printf '[{"id":"devkit@murakotaro4","scope":"user"}]\\n'
+  exit 0
+fi
+exit 0
+""",
+        encoding="utf-8",
+    )
+    claude.chmod(0o755)
+
+
 def run_update_wrapper(home: Path, source_root: Path, bin_dir: Path) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
@@ -329,6 +376,8 @@ def test_posix_wrapper_prunes_manifest_assets(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     make_fake_codex(bin_dir)
+    make_fake_python3(bin_dir)
+    make_fake_claude(bin_dir)
 
     result = run_update_wrapper(home, ROOT, bin_dir)
 
@@ -397,6 +446,8 @@ def test_posix_wrapper_collects_prune_failure_and_continues(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     make_fake_codex(bin_dir)
+    make_fake_python3(bin_dir)
+    make_fake_claude(bin_dir)
 
     result = run_update_wrapper(home, ROOT, bin_dir)
 
