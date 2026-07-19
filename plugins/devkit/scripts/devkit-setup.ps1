@@ -57,7 +57,9 @@ try {
   Write-Host "  update-ccx"
   Write-Host ""
   Write-Host "Manual update command:"
-  Write-Host "  `"$($managed.CodexBin)\update-ccx.cmd`" --devkit-only"
+  # 引用符付きパスをそのまま貼ると PowerShell は文字列式として評価してしまうため、
+  # 呼び出し演算子 (&) を付けて実行可能な形で案内する。
+  Write-Host "  & `"$($managed.CodexBin)\update-ccx.cmd`" --devkit-only"
   exit 0
 } catch {
   Write-Error $_

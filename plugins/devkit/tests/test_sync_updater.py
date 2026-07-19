@@ -236,6 +236,31 @@ def test_sync_prunes_all_update_devkit_remnants_and_records_actions(tmp_path):
         assert f"prune:{path.resolve()}" in actions
 
 
+def test_sync_prunes_retired_ps1_shim_on_windows_only(tmp_path):
+    # v12 -> v13 で廃止した update-ccx.ps1 は Windows でだけ DevKit が管理していた。
+    # POSIX で同名ファイルを消すと、ユーザーが自作した wrapper を失う。
+    for platform, should_prune in (("windows", True), ("posix", False)):
+        home = tmp_path / f"home-{platform}"
+        source_base = tmp_path / platform
+        source_base.mkdir()
+        source = _source_tree(source_base)
+        codex_bin = home / ".codex/bin"
+        codex_bin.mkdir(parents=True)
+        shims = [codex_bin / name for name in sync_updater.LEGACY_CODEX_BIN_FILES_WINDOWS_ONLY]
+        for shim in shims:
+            shim.write_text("legacy shim\n", encoding="utf-8")
+
+        _, actions = sync_updater.sync_updater(home, source, platform, False)
+
+        for shim in shims:
+            if should_prune:
+                assert not shim.exists(), f"{platform}: {shim.name} が prune されていない"
+                assert f"prune:{shim.resolve()}" in actions
+            else:
+                assert shim.is_file(), f"{platform}: 管理外の {shim.name} を消してはいけない"
+                assert f"prune:{shim.resolve()}" not in actions
+
+
 def test_sync_raises_when_updater_remnant_survives_prune(tmp_path, monkeypatch):
     home = tmp_path / "home"
     source = _source_tree(tmp_path)
