@@ -326,7 +326,6 @@ def test_update_ccx_cygpath_failure_userprofile_fallback_preserves_sentinels(tmp
 
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
-    check_skill_surface.write_executable(fake_bin / "cygpath", "#!/bin/sh\nexit 1\n")
 
     def run_fallback(label: str, home_value: Path, userprofile_value: Path) -> tuple[subprocess.CompletedProcess, Path]:
         ps_log = tmp_path / f"powershell-calls-{label}.log"
@@ -348,10 +347,16 @@ def test_update_ccx_cygpath_failure_userprofile_fallback_preserves_sentinels(tmp
         env["USERPROFILE"] = str(userprofile_value)
         env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
 
+        # cygpath は PATH 上の stub では shadow できない。CI の Git Bash は
+        # 拡張子なしの stub を実行可能と見なさず実 cygpath.exe を解決してしまい、
+        # fallback 分岐に入らなかった(実際に devkit-checks-windows が落ちた)。
+        # 同一シェル内の関数定義なら外部コマンドより優先され、`command -v` も
+        # 成功するため、環境に依存せず決定論的に失敗させられる。
         script = "\n".join(
             [
                 "set -euo pipefail",
                 f"source {check_skill_surface.shell_path(lib_script)}",
+                "cygpath() { return 1; }",
                 f'install_windows_codex_config "{fake_user_home.as_posix()}/.codex/bin/devkit-codex-config.ps1"',
             ]
         )
