@@ -785,7 +785,10 @@ section_managed_copy() {
         fi
         install_windows_codex_config "$codex_bin/devkit-codex-config.ps1" || true
     else
-        install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
+        if ! install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"; then
+            ERRORS+=("DevKit managed file: failed to update update-ccx shim")
+            return 1
+        fi
     fi
     local legacy_path
     local -a legacy_updater_paths=(

@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -33,7 +34,7 @@ def _source_tree(tmp_path: Path) -> Path:
 def _shell_shim_from_devkit_lib(target_script: Path) -> bytes:
     source = DEVKIT_LIB_SH.read_text(encoding="utf-8")
     match = re.search(
-        r'install_devkit_shell_shim\(\) \{.*?cat >"\$shim_path" <<EOF\n(?P<shim>.*?)\nEOF',
+        r'install_devkit_shell_shim\(\) \{.*?cat >"\$temporary_path" <<EOF\n(?P<shim>.*?)\nEOF',
         source,
         re.DOTALL,
     )
@@ -41,6 +42,74 @@ def _shell_shim_from_devkit_lib(target_script: Path) -> bytes:
     shim = match.group("shim")
     assert "$target_script" in shim, "shell shim に target_script 展開がない"
     return (shim.replace("$target_script", str(target_script)).replace(r"\$@", "$@") + "\n").encode()
+
+
+def _shell_function(source: str, name: str) -> str:
+    match = re.search(rf"^{re.escape(name)}\(\) \{{\n(?P<body>.*?)^\}}\n", source, re.MULTILINE | re.DOTALL)
+    assert match, f"{name} の関数本体を抽出できない"
+    return match.group("body")
+
+
+def test_managed_file_self_replacement_keeps_running_original_inode(tmp_path):
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash is unavailable")
+
+    running_script = tmp_path / "self-update.sh"
+    replacement_script = tmp_path / "replacement.sh"
+    replacement_script.write_text(
+        "#!/bin/bash\nprintf 'replacement version\\n'\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    padding = "".join(f": padding_{index:05d}\n" for index in range(20000))
+    running_script.write_text(
+        "#!/bin/bash\n"
+        "set -euo pipefail\n"
+        'source "$1"\n'
+        'ensure_managed_file "$2" "$0" true\n'
+        f"{padding}"
+        "printf 'SELF_REPLACE_COMPLETED\\n'\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, running_script.as_posix(), DEVKIT_LIB_SH.as_posix(), replacement_script.as_posix()],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "SELF_REPLACE_COMPLETED\n"
+    assert running_script.read_bytes() == replacement_script.read_bytes()
+
+
+def test_managed_shell_writes_use_atomic_rename_contract():
+    source = DEVKIT_LIB_SH.read_text(encoding="utf-8")
+    managed_file = _shell_function(source, "ensure_managed_file")
+    shell_shim = _shell_function(source, "install_devkit_shell_shim")
+
+    assert 'mktemp "${destination_path}.devkit-tmp.XXXXXX"' in managed_file
+    assert 'cp -p "$source_path" "$temporary_path"' in managed_file
+    assert 'chmod +x "$temporary_path"' in managed_file
+    assert 'mv -f "$temporary_path" "$destination_path"' in managed_file
+    assert 'cp "$source_path" "$destination_path"' not in managed_file
+    assert managed_file.count('rm -f -- "$temporary_path"') >= 3
+    assert managed_file.index('cp -p "$source_path" "$temporary_path"') < managed_file.index(
+        'chmod +x "$temporary_path"'
+    ) < managed_file.index('mv -f "$temporary_path" "$destination_path"')
+
+    assert 'mktemp "${shim_path}.devkit-tmp.XXXXXX"' in shell_shim
+    assert 'cat >"$temporary_path" <<EOF' in shell_shim
+    assert 'chmod +x "$temporary_path"' in shell_shim
+    assert 'mv -f "$temporary_path" "$shim_path"' in shell_shim
+    assert 'cat >"$shim_path"' not in shell_shim
+    assert shell_shim.count('rm -f -- "$temporary_path"') >= 3
+    assert shell_shim.index('cat >"$temporary_path" <<EOF') < shell_shim.index(
+        'chmod +x "$temporary_path"'
+    ) < shell_shim.index('mv -f "$temporary_path" "$shim_path"')
 
 
 def _cmd_shim_from_devkit_lib(target_command: Path) -> bytes:

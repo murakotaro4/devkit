@@ -331,19 +331,51 @@ ensure_managed_file() {
   fi
 
   ensure_devkit_dir "$(dirname "$destination_path")"
-  cp "$source_path" "$destination_path"
+  local temporary_path
+  if ! temporary_path="$(mktemp "${destination_path}.devkit-tmp.XXXXXX")"; then
+    printf 'FAILED_TO_CREATE_TEMP_FILE: %s\n' "$destination_path" >&2
+    return 1
+  fi
+  if ! cp -p "$source_path" "$temporary_path"; then
+    rm -f -- "$temporary_path"
+    return 1
+  fi
+  if [[ -x "$source_path" ]] && ! chmod +x "$temporary_path"; then
+    rm -f -- "$temporary_path"
+    return 1
+  fi
+  if ! mv -f "$temporary_path" "$destination_path"; then
+    rm -f -- "$temporary_path"
+    return 1
+  fi
 }
 
 install_devkit_shell_shim() {
   local shim_path="$1"
   local target_script="$2"
   ensure_devkit_dir "$(dirname "$shim_path")"
-  cat >"$shim_path" <<EOF
+  local temporary_path
+  if ! temporary_path="$(mktemp "${shim_path}.devkit-tmp.XXXXXX")"; then
+    printf 'FAILED_TO_CREATE_TEMP_FILE: %s\n' "$shim_path" >&2
+    return 1
+  fi
+  if ! cat >"$temporary_path" <<EOF
 #!/bin/bash
 set -euo pipefail
 exec "$target_script" "\$@"
 EOF
-  chmod +x "$shim_path"
+  then
+    rm -f -- "$temporary_path"
+    return 1
+  fi
+  if ! chmod +x "$temporary_path"; then
+    rm -f -- "$temporary_path"
+    return 1
+  fi
+  if ! mv -f "$temporary_path" "$shim_path"; then
+    rm -f -- "$temporary_path"
+    return 1
+  fi
 }
 
 devkit_legacy_skill_entry_name() {
