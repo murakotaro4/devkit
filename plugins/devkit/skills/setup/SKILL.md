@@ -31,7 +31,7 @@ statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う
 - `.claude/devkit-rules.json`: 同期 version、同期時刻、テンプレート SHA-256 を記録する。
 - `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`(ユーザーレベル): `<!-- devkit:thought-db:start -->` / `<!-- devkit:thought-db:end -->` 区間へ、思想 DB(`~/repos/thought-db`)への参照ブロックを同期する。thought-db が存在しない環境では skip として報告する。
 - POSIX: plugin 同梱の `update-ccx.sh` / `devkit-lib.sh` を `~/.codex/bin/` へ、`update-ccx` shim を `~/.local/bin/` へ同期する。
-- Windows: setup 実行環境が解決するユーザーホームへ、bash 正本チェーンの `update-ccx.sh` / `devkit-lib.sh`、Git Bash launcher の `update-ccx.cmd`、1 リリース残置の委譲シム `update-ccx.ps1`、Windows helper の `devkit-lib.ps1` / `devkit-setup.ps1` / `devkit-codex-config.ps1` を同期し、実際のコピー先を参照する `update-ccx.cmd` shim を置く。同期後に bash updater を実行するときは呼び出し側の `HOME` を尊重し、launcher の source-root fallback は `HOME`、次に `USERPROFILE` の順とする。旧 updater 名の残骸は両 OS で prune する。
+- Windows: setup 実行環境が解決するユーザーホームへ、bash 正本チェーンの `update-ccx.sh` / `devkit-lib.sh`、Git Bash launcher の `update-ccx.cmd`、1 リリース残置の委譲シム `update-ccx.ps1`、Windows helper の `devkit-lib.ps1` / `devkit-setup.ps1` / `devkit-codex-config.ps1` を同期し、実際のコピー先を参照する `update-ccx.cmd` shim を置く。同期後に bash updater を実行するときは呼び出し側の `HOME` を尊重し、launcher の source-root fallback は `HOME`、次に `USERPROFILE` の順とする。updater が保存する `source-root.txt` は Windows 絶対パスとし、bash 側では旧 POSIX 形式も読み続ける。旧 updater 名の残骸は両 OS で prune する。
 - Windows updater が PowerShell へ残す責務は、Claude Code native installer、Codex config templating、v6 migration marker 前の旧日次タスク cleanup の 3 点とする。
 - Cursor: v10.1.0 の manifest が存在する場合だけ、旧独自同期で配置した資産を hash 一致を確認して安全に prune する。
 - Claude 親のみ: plugin 同梱の `statusline/install.js` で Claude Code の statusline 設定を確認し、ユーザー承認後に適用する。

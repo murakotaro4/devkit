@@ -41,6 +41,21 @@ windows_path_to_posix() {
     printf '%s\n' "${normalized%/}"
 }
 
+source_root_path_for_shell() {
+    local source_root="$1"
+    case "$(uname -s)" in
+        MINGW*|MSYS*)
+            local normalized=""
+            normalized="$(windows_path_to_posix "$source_root" || true)"
+            if [[ -n "$normalized" ]]; then
+                printf '%s\n' "$normalized"
+                return 0
+            fi
+            ;;
+    esac
+    printf '%s\n' "$source_root"
+}
+
 source_devkit_lib_for_update() {
     local lib_path="$SCRIPT_DIR/devkit-lib.sh"
     if [[ -f "$lib_path" ]]; then
@@ -53,6 +68,7 @@ source_devkit_lib_for_update() {
             local state_file="$HOME/.codex/devkit/source-root.txt"
             if [[ -f "$state_file" ]]; then
                 normal_root="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//' || true)"
+                normal_root="$(source_root_path_for_shell "$normal_root")"
             fi
         fi
         if [[ -z "${DEVKIT_SOURCE_ROOT:-}" && -n "$normal_root" ]]; then
@@ -76,6 +92,7 @@ source_devkit_lib_for_update() {
     local state_file="$HOME/.codex/devkit/source-root.txt"
     if [[ -f "$state_file" ]]; then
         repo_root="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//' || true)"
+        repo_root="$(source_root_path_for_shell "$repo_root")"
         if [[ -n "$repo_root" ]]; then
             repo_candidates+=("$repo_root")
         fi

@@ -83,6 +83,31 @@ def test_windows_managed_paths_respect_home_without_overwriting_it():
     assert 'install_windows_codex_config "$codex_bin/devkit-codex-config.ps1"' in managed
 
 
+def test_windows_source_root_state_is_native_and_shell_readers_accept_both_forms():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    library = (SCRIPTS / "devkit-lib.sh").read_text(encoding="utf-8")
+    bootstrap = shell.split("source_devkit_lib_for_update()", 1)[1].split(
+        "source_devkit_lib_for_update || exit 1", 1
+    )[0]
+    persisted_reader = library.split("devkit_read_persisted_source_root()", 1)[1].split(
+        "devkit_persist_codex_source_root()", 1
+    )[0]
+    persisted_writer = library.split("devkit_persist_codex_source_root()", 1)[1].split(
+        "devkit_script_checkout_root()", 1
+    )[0]
+
+    assert "source_root_path_for_shell()" in shell
+    assert bootstrap.count('source_root_path_for_shell "$') == 2
+    assert "devkit_source_root_to_shell_path()" in library
+    assert 'windows_path_to_posix "$source_root"' in library
+    assert 'candidate="$(devkit_source_root_to_shell_path "$candidate" || true)"' in persisted_reader
+    assert "devkit_source_root_to_state_path()" in library
+    assert 'windows_path_from_posix "$source_root"' in library
+    assert 'cygpath -w "$source_root"' in library
+    assert 'state_root="$(devkit_source_root_to_state_path "$repo_root" || true)"' in persisted_writer
+    assert "persisting POSIX path fallback" in persisted_writer
+
+
 def test_fnm_noninteractive_environment_is_initialized_before_early_return():
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
     resolver = shell.split("resolve_fnm_command()", 1)[1].split(
@@ -472,6 +497,61 @@ def bash_path() -> str:
     if not bash:
         raise AssertionError("bash が見つからない: PATH で bash を解決できません")
     return str(Path(bash).resolve())
+
+
+def test_source_root_state_round_trips_windows_and_legacy_posix_forms(tmp_path):
+    home = tmp_path / "home"
+    repo_root = tmp_path / "checkout"
+    (home / ".codex" / "devkit").mkdir(parents=True)
+    (repo_root / "plugins" / "devkit").mkdir(parents=True)
+
+    probe = r'''
+source "$1"
+repo_root="$2"
+user_home="$3"
+uname() { printf '%s\n' 'MINGW64_NT-10.0'; }
+windows_path_to_posix() {
+  case "$1" in
+    'C:\checkout') printf '%s\n' "$repo_root" ;;
+    "$repo_root") printf '%s\n' "$repo_root" ;;
+    *) return 1 ;;
+  esac
+}
+windows_path_from_posix() {
+  [[ "$1" == "$repo_root" ]] || return 1
+  printf '%s\n' 'C:\checkout'
+}
+state_file="$(devkit_codex_source_root_state_file "$user_home")"
+printf '%s\n' 'C:\checkout' >"$state_file"
+windows_read="$(devkit_read_persisted_source_root "$user_home")"
+printf '%s\n' "$repo_root" >"$state_file"
+posix_read="$(devkit_read_persisted_source_root "$user_home")"
+[[ -n "$windows_read" && "$windows_read" == "$posix_read" ]] || exit 20
+[[ -d "$windows_read/plugins/devkit" ]] || exit 21
+devkit_persist_codex_source_root "$user_home" "$repo_root"
+printf '%s\n%s\n%s\n' "$windows_read" "$posix_read" "$(tr -d '\r\n' <"$state_file")"
+'''
+    result = subprocess.run(
+        [
+            bash_path(),
+            "-c",
+            probe,
+            "source-root-probe",
+            (SCRIPTS / "devkit-lib.sh").as_posix(),
+            repo_root.as_posix(),
+            home.as_posix(),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    windows_read, posix_read, persisted = result.stdout.splitlines()
+    assert windows_read
+    assert windows_read == posix_read
+    assert persisted == r"C:\checkout"
 
 
 def test_update_ccx_sh_bootstraps_missing_lib_from_persisted_source_root(tmp_path):

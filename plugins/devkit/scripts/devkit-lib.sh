@@ -13,6 +13,57 @@ devkit_codex_source_root_state_file() {
   printf '%s\n' "$user_home/.codex/devkit/source-root.txt"
 }
 
+devkit_is_windows_posix_shell() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+devkit_source_root_to_shell_path() {
+  local source_root="$1"
+  if ! devkit_is_windows_posix_shell; then
+    printf '%s\n' "$source_root"
+    return 0
+  fi
+
+  local normalized=""
+  if declare -F windows_path_to_posix >/dev/null 2>&1; then
+    normalized="$(windows_path_to_posix "$source_root" 2>/dev/null || true)"
+  elif command -v cygpath >/dev/null 2>&1; then
+    normalized="$(cygpath -u "$source_root" 2>/dev/null || true)"
+  fi
+  if [[ -z "$normalized" && "$source_root" == /* ]]; then
+    normalized="$source_root"
+  fi
+  if [[ -z "$normalized" ]]; then
+    local slash_path="${source_root//\\//}"
+    if [[ "$slash_path" =~ ^([A-Za-z]):/(.*)$ ]]; then
+      normalized="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}"
+    fi
+  fi
+
+  [[ -n "$normalized" ]] || return 1
+  printf '%s\n' "${normalized%/}"
+}
+
+devkit_source_root_to_state_path() {
+  local source_root="$1"
+  if ! devkit_is_windows_posix_shell; then
+    printf '%s\n' "$source_root"
+    return 0
+  fi
+
+  local normalized=""
+  if declare -F windows_path_from_posix >/dev/null 2>&1; then
+    normalized="$(windows_path_from_posix "$source_root" 2>/dev/null || true)"
+  elif command -v cygpath >/dev/null 2>&1; then
+    normalized="$(cygpath -w "$source_root" 2>/dev/null || true)"
+  fi
+  [[ -n "$normalized" ]] || return 1
+  printf '%s\n' "$normalized"
+}
+
 devkit_default_source_root() {
   if [[ -n "${DEVKIT_SOURCE_ROOT:-}" ]]; then
     printf '%s\n' "$DEVKIT_SOURCE_ROOT"
@@ -38,6 +89,8 @@ devkit_read_persisted_source_root() {
   local candidate
   candidate="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//')"
   [[ -n "$candidate" ]] || return 1
+  candidate="$(devkit_source_root_to_shell_path "$candidate" || true)"
+  [[ -n "$candidate" ]] || return 1
 
   local repo_root
   repo_root="$(devkit_repo_root_from_source_hint "$candidate" || true)"
@@ -48,10 +101,18 @@ devkit_read_persisted_source_root() {
 devkit_persist_codex_source_root() {
   local user_home="$1"
   local repo_root="$2"
-  local state_file
+  local state_file state_root
   state_file="$(devkit_codex_source_root_state_file "$user_home")"
   ensure_devkit_dir "$(dirname "$state_file")"
-  printf '%s\n' "$repo_root" >"$state_file"
+  state_root="$(devkit_source_root_to_state_path "$repo_root" || true)"
+  if [[ -z "$state_root" ]]; then
+    state_root="$repo_root"
+    printf 'WARN DevKit source root: could not convert checkout path to Windows format; persisting POSIX path fallback\n' >&2
+    if [[ "$(declare -p WARNINGS 2>/dev/null || true)" == "declare -a"* ]]; then
+      WARNINGS+=("DevKit source root: Windows path conversion failed; persisted POSIX fallback")
+    fi
+  fi
+  printf '%s\n' "$state_root" >"$state_file"
 }
 
 devkit_script_checkout_root() {
