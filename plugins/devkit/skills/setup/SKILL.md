@@ -31,7 +31,7 @@ statusline 適用は Claude Code 固有機能のため Claude 親だけで扱う
 - `.claude/devkit-rules.json`: 同期 version、同期時刻、テンプレート SHA-256 を記録する。
 - `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`(ユーザーレベル): `<!-- devkit:thought-db:start -->` / `<!-- devkit:thought-db:end -->` 区間へ、思想 DB(`~/repos/thought-db`)への参照ブロックを同期する。thought-db が存在しない環境では skip として報告する。
 - POSIX: plugin 同梱の `update-ccx.sh` / `devkit-lib.sh` を `~/.codex/bin/` へ、`update-ccx` shim を `~/.local/bin/` へ同期する。
-- Windows: plugin 同梱の `update-ccx.ps1` / `update-ccx.cmd` / `devkit-lib.ps1` / `devkit-setup.ps1` / `devkit-codex-config.ps1` を `~/.codex/bin/` へ、`update-ccx.cmd` shim を `~/.local/bin/` へ同期する。旧 updater 名の残骸は両 OS で prune する。
+- Windows: bash 正本チェーンの `update-ccx.sh` / `devkit-lib.sh`、Git Bash launcher の `update-ccx.cmd`、1 リリース残置の委譲シム `update-ccx.ps1`、Windows helper の `devkit-lib.ps1` / `devkit-setup.ps1` / `devkit-codex-config.ps1` を `~/.codex/bin/` へ同期し、`update-ccx.cmd` shim を `~/.local/bin/` へ置く。旧 updater 名の残骸は両 OS で prune する。
 - Cursor: v10.1.0 の manifest が存在する場合だけ、旧独自同期で配置した資産を hash 一致を確認して安全に prune する。
 - Claude 親のみ: plugin 同梱の `statusline/install.js` で Claude Code の statusline 設定を確認し、ユーザー承認後に適用する。
 - Windows のみ: Windows Terminal のフォント(UDEV Gothic NF)設定を確認し、ユーザー承認後に適用する。
@@ -109,7 +109,7 @@ SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
 uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/sync_updater.py" --format json
 ```
 
-結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。POSIX では `~/.codex/bin/update-ccx.sh` に実行権を付け、両 OS とも `~/.local/bin/` の shim を plugin 同梱 `devkit-lib` の実装と同形式で同期する。旧 updater 名の残骸があれば削除し、`actions` に記録する。`~/.codex/devkit/source-root.txt` は変更しない。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
+結果 JSON の `changed` / `skipped` / `actions` を確認して報告する。POSIX では `~/.codex/bin/update-ccx.sh` に実行権を付ける。Windows の実行正本も `update-ccx.sh` で、`update-ccx.cmd` は Git for Windows の Bash launcher、`update-ccx.ps1` は 1 リリース残置する直接委譲シムとして同期する。両 OS とも `~/.local/bin/` の shim を plugin 同梱 `devkit-lib` の実装と同形式で同期する。旧 updater 名の残骸があれば削除し、`actions` に記録する。`~/.codex/devkit/source-root.txt` は変更しない。変更予定だけを確認する場合は `--check` を付けると書き込みを行わない。
 
 ```bash
 SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"

@@ -384,66 +384,6 @@ def assert_no_opencode(lines: list[str], label: str) -> None:
         raise AssertionError(f"{label} invoked opencode package update: {lines}")
 
 
-def extract_named_function(source: str, name: str) -> str:
-    marker = f"function {name} "
-    start = source.find(marker)
-    if start == -1:
-        raise AssertionError(f"missing function {name}")
-
-    next_function = source.find("\nfunction ", start + len(marker))
-    if next_function == -1:
-        return source[start:]
-    return source[start:next_function]
-
-
-def assert_ordered_text_subset(text: str, expected: list[str], label: str) -> None:
-    position = 0
-    for expected_text in expected:
-        found = text.find(expected_text, position)
-        if found == -1:
-            raise AssertionError(f"{label} missing expected text {expected_text!r}")
-        position = found + len(expected_text)
-
-
-def assert_powershell_codex_plugin_update_contract(problems: list[str]) -> None:
-    update = (PLUGIN_DIR / "scripts/update-ccx.ps1").read_text(encoding="utf-8")
-    try:
-        block = extract_named_function(update, "Update-DevKitCodexPlugin")
-        assert_ordered_text_subset(
-            block,
-            [
-                "Get-DevKitCodexMarketplaceState",
-                "Test-DevKitCodexMarketplaceExpected",
-                '@("plugin", "marketplace", "upgrade", "murakotaro4")',
-                '@("plugin", "add", "devkit@murakotaro4")',
-            ],
-            "PowerShell Codex plugin update",
-        )
-        if "Test-DevKitCodexPluginEnabled" in block:
-            raise AssertionError("PowerShell Codex plugin update must add devkit unconditionally after marketplace upgrade")
-    except AssertionError as exc:
-        problems.append(str(exc))
-
-
-def assert_powershell_claude_plugin_update_contract(problems: list[str]) -> None:
-    update = (PLUGIN_DIR / "scripts/update-ccx.ps1").read_text(encoding="utf-8")
-    try:
-        block = extract_named_function(update, "Update-DevKitClaudePlugin")
-        assert_ordered_text_subset(
-            block,
-            [
-                '@("plugin", "marketplace", "update", "murakotaro4")',
-                '@("plugin", "marketplace", "remove", "--scope", "user", "murakotaro4")',
-                '@("plugin", "marketplace", "add", "--scope", "user", "murakotaro4/devkit")',
-                '@("plugin", "update", "--scope", "user", "devkit@murakotaro4")',
-                '@("plugin", "install", "--scope", "user", "devkit@murakotaro4")',
-            ],
-            "PowerShell Claude plugin update",
-        )
-    except AssertionError as exc:
-        problems.append(str(exc))
-
-
 def assert_default_claude_plugin_update(calls: list[str], label: str) -> None:
     assert_ordered_subset(
         calls,
@@ -835,9 +775,6 @@ def main() -> int:
     problems: list[str] = []
     assert_skill_surface(problems)
     assert_marketplace_manifest(problems)
-    assert_powershell_codex_plugin_update_contract(problems)
-    assert_powershell_claude_plugin_update_contract(problems)
-
     try:
         run_codex_marketplace_smoke_checks()
     except (AssertionError, subprocess.CalledProcessError) as exc:

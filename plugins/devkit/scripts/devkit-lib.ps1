@@ -391,11 +391,13 @@ function Install-DevKitManagedFiles([string]$RepoRoot, [string]$UserHome) {
   Ensure-DevKitDir $codexDevKitTemplates
 
   foreach ($fileName in @(
-    "update-ccx.ps1",
+    "update-ccx.sh",
+    "devkit-lib.sh",
     "update-ccx.cmd",
     "devkit-lib.ps1",
     "devkit-setup.ps1",
-    "devkit-codex-config.ps1"
+    "devkit-codex-config.ps1",
+    "update-ccx.ps1"
   )) {
     Ensure-DevKitManagedFile `
       -SourcePath (Join-Path $scriptsRoot $fileName) `

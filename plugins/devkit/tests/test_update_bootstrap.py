@@ -17,7 +17,6 @@ SCRIPTS = ROOT / "plugins" / "devkit" / "scripts"
 
 def test_update_ccx_scripts_have_claude_plugin_section():
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
-    powershell = (SCRIPTS / "update-ccx.ps1").read_text(encoding="utf-8")
 
     for expected in (
         "=== [Claude Plugin] ===",
@@ -30,30 +29,31 @@ def test_update_ccx_scripts_have_claude_plugin_section():
     ):
         assert expected in shell
 
-    for expected in (
-        "=== [Claude Plugin] ===",
-        '@("plugin", "marketplace", "update", "murakotaro4")',
-        '@("plugin", "marketplace", "remove", "--scope", "user", "murakotaro4")',
-        '@("plugin", "marketplace", "add", "--scope", "user", "murakotaro4/devkit")',
-        '@("plugin", "update", "--scope", "user", "devkit@murakotaro4")',
-        '@("plugin", "install", "--scope", "user", "devkit@murakotaro4")',
-        "/reload-plugins",
-    ):
-        assert expected in powershell
-
 
 def test_managed_updater_copy_excludes_retired_update_devkit_files():
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
-    shell_copy_names = shell.split("for script_name in ", 1)[1].split("; do", 1)[0].split()
-    assert shell_copy_names == ["update-ccx.sh", "devkit-lib.sh"]
+    managed_section = shell.split("section_managed_copy()", 1)[1].split(
+        "codex_marketplace_section()", 1
+    )[0]
+    ordered_copy_markers = (
+        "for script_name in update-ccx.sh devkit-lib.sh",
+        'ensure_managed_file "$plugin_scripts/update-ccx.cmd"',
+        "for script_name in devkit-lib.ps1 devkit-setup.ps1 devkit-codex-config.ps1",
+        "for script_name in config.shared.toml config.windows.toml",
+        'ensure_managed_file "$plugin_scripts/update-ccx.ps1"',
+    )
+    positions = [managed_section.index(marker) for marker in ordered_copy_markers]
+    assert positions == sorted(positions)
 
     powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
     managed_function = powershell.split("function Install-DevKitManagedFiles", 1)[1].split(
         "function Test-DevKitPathLooksManaged", 1
     )[0]
     managed_names = managed_function.split("foreach ($fileName in @(", 1)[1].split("))", 1)[0]
-    assert '"update-ccx.ps1"' in managed_names
+    assert '"update-ccx.sh"' in managed_names
+    assert '"devkit-lib.sh"' in managed_names
     assert '"update-ccx.cmd"' in managed_names
+    assert '"update-ccx.ps1"' in managed_names
     assert "update-devkit" not in managed_names
 
 
@@ -638,560 +638,90 @@ def test_update_ccx_sh_preserves_existing_source_root(tmp_path):
     assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{caller_source_root}\n"
 
 
-def test_update_ccx_ps1_bootstraps_missing_lib_from_persisted_source_root(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
+def test_windows_updater_launchers_have_independent_git_bash_contract():
+    cmd = (SCRIPTS / "update-ccx.cmd").read_text(encoding="utf-8")
+    powershell = (SCRIPTS / "update-ccx.ps1").read_text(encoding="utf-8")
+
+    cmd_search = (
+        r"%ProgramFiles%\Git\bin\bash.exe",
+        r"%ProgramFiles(x86)%\Git\bin\bash.exe",
+        "where git.exe",
+        r"%~dp1..\bin\bash.exe",
+    )
+    ps_search = (
+        'Join-Path $env:ProgramFiles "Git\\bin\\bash.exe"',
+        "${env:ProgramFiles(x86)}",
+        "where.exe git.exe",
+        '"bin\\bash.exe"',
+    )
+    ps_bootstrap = (
+        'Join-Path $PSScriptRoot "update-ccx.sh"',
+        '".codex\\devkit\\source-root.txt"',
+        '"plugins\\devkit\\scripts\\update-ccx.sh"',
+    )
+
+    for text, expected in (
+        (cmd, cmd_search),
+        (powershell, ps_search),
+        (powershell, ps_bootstrap),
+    ):
+        positions = [text.index(item) for item in expected]
+        assert positions == sorted(positions)
+
+    assert cmd.index(r"%~dp0update-ccx.sh") < cmd.index("call :resolve_update_script")
+    cmd_fallback = cmd.rsplit(":resolve_update_script", 1)[1]
+    assert cmd_fallback.index(r"%USERPROFILE%\.codex\devkit\source-root.txt") < (
+        cmd_fallback.index(r"plugins\devkit\scripts\update-ccx.sh")
+    )
+
+    assert r"System32\bash.exe" not in cmd
+    assert r"System32\bash.exe" not in powershell
+    assert "update-ccx.ps1" not in cmd
+    assert "update-ccx.cmd" not in powershell
+    assert '"%DEVKIT_BASH%" "%DEVKIT_UPDATE_SH%" %*' in cmd
+    assert "exit /b %ERRORLEVEL%" in cmd
+    assert "& $bash $updateScript @UpdaterArgs" in powershell
+    assert "exit $LASTEXITCODE" in powershell
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows launcher runtime smoke")
+def test_update_ccx_cmd_uses_source_root_fallback_when_adjacent_shell_is_missing(tmp_path):
+    bash_candidates = [
+        Path(os.environ.get("ProgramFiles", "")) / "Git/bin/bash.exe",
+        Path(os.environ.get("ProgramFiles(x86)", "")) / "Git/bin/bash.exe",
+    ]
+    git = shutil.which("git.exe")
+    if git:
+        bash_candidates.append(Path(git).parent.parent / "bin/bash.exe")
+    if not any(candidate.is_file() for candidate in bash_candidates):
+        pytest.skip("Git for Windows bash is not installed")
 
     home = tmp_path / "home"
-    codex_bin = home / ".codex" / "bin"
+    installed_bin = home / ".codex" / "bin"
     state_dir = home / ".codex" / "devkit"
-    codex_bin.mkdir(parents=True)
+    source_root = tmp_path / "checkout"
+    source_scripts = source_root / "plugins" / "devkit" / "scripts"
+    installed_bin.mkdir(parents=True)
     state_dir.mkdir(parents=True)
-    (state_dir / "source-root.txt").write_text(f"{ROOT}\n", encoding="utf-8")
-    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
-
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(codex_bin / "update-ccx.ps1"),
-            "--version",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert (codex_bin / "devkit-lib.ps1").is_file()
-
-
-def test_update_ccx_ps1_bootstraps_missing_lib_from_default_checkout(tmp_path):
-    require_symlink_support()
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    codex_bin = home / ".codex" / "bin"
-    default_checkout = home / "cursor" / "devkit"
-    codex_bin.mkdir(parents=True)
-    default_checkout.parent.mkdir(parents=True)
-    default_checkout.symlink_to(ROOT, target_is_directory=True)
-    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
-
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(codex_bin / "update-ccx.ps1"),
-            "--version",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert (codex_bin / "devkit-lib.ps1").is_file()
-
-
-def test_update_ccx_ps1_ignores_stale_persisted_source_root(tmp_path):
-    require_symlink_support()
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    codex_bin = home / ".codex" / "bin"
-    state_dir = home / ".codex" / "devkit"
-    default_checkout = home / "cursor" / "devkit"
-    codex_bin.mkdir(parents=True)
-    state_dir.mkdir(parents=True)
-    default_checkout.parent.mkdir(parents=True)
-    default_checkout.symlink_to(ROOT, target_is_directory=True)
-    (state_dir / "source-root.txt").write_text(f"{tmp_path / 'missing'}\n", encoding="utf-8")
-    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
-
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(codex_bin / "update-ccx.ps1"),
-            "--version",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert (codex_bin / "devkit-lib.ps1").is_file()
-
-
-def test_update_ccx_ps1_prefers_default_checkout_over_existing_stale_persisted_root(tmp_path):
-    require_symlink_support()
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    codex_bin = home / ".codex" / "bin"
-    state_dir = home / ".codex" / "devkit"
-    default_checkout = home / "cursor" / "devkit"
-    stale_root = tmp_path / "stale"
-    stale_scripts = stale_root / "plugins" / "devkit" / "scripts"
-    codex_bin.mkdir(parents=True)
-    state_dir.mkdir(parents=True)
-    default_checkout.parent.mkdir(parents=True)
-    stale_scripts.mkdir(parents=True)
-    default_checkout.symlink_to(ROOT, target_is_directory=True)
-    (stale_scripts / "devkit-lib.ps1").write_text('throw "stale lib"\n', encoding="utf-8")
-    (state_dir / "source-root.txt").write_text(f"{stale_root}\n", encoding="utf-8")
-    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
-
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(codex_bin / "update-ccx.ps1"),
-            "--version",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert (codex_bin / "devkit-lib.ps1").read_text(encoding="utf-8") != 'throw "stale lib"\n'
-
-
-def test_update_ccx_ps1_sets_bootstrap_source_root_before_sourcing_lib(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    codex_bin = home / ".codex" / "bin"
-    default_checkout = home / "cursor" / "devkit"
-    default_scripts = default_checkout / "plugins" / "devkit" / "scripts"
-    codex_bin.mkdir(parents=True)
-    default_scripts.mkdir(parents=True)
-    (default_scripts / "devkit-lib.ps1").write_text(
-        'Set-Content -LiteralPath (Join-Path $env:USERPROFILE "selected-root.txt") -Value $env:DEVKIT_SOURCE_ROOT\n',
+    source_scripts.mkdir(parents=True)
+    shutil.copyfile(SCRIPTS / "update-ccx.cmd", installed_bin / "update-ccx.cmd")
+    (state_dir / "source-root.txt").write_text(f"{source_root}\n", encoding="utf-8")
+    marker_path = source_root / "called.txt"
+    (source_scripts / "update-ccx.sh").write_text(
+        '#!/bin/bash\nprintf "%s\\n" "$1" > "$(dirname "$0")/../../../called.txt"\n',
         encoding="utf-8",
     )
-    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
 
     env = os.environ.copy()
-    env["HOME"] = str(home)
     env["USERPROFILE"] = str(home)
-
     result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(codex_bin / "update-ccx.ps1"),
-            "--version",
-        ],
+        ["cmd.exe", "/d", "/c", str(installed_bin / "update-ccx.cmd"), "sentinel"],
         env=env,
         check=False,
         capture_output=True,
         text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(default_checkout)
-
-
-def test_update_ccx_ps1_sets_normal_source_root_before_sourcing_existing_lib(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    codex_bin = home / ".codex" / "bin"
-    default_checkout = home / "cursor" / "devkit"
-    default_scripts = default_checkout / "plugins" / "devkit" / "scripts"
-    codex_bin.mkdir(parents=True)
-    default_scripts.mkdir(parents=True)
-    (codex_bin / "devkit-lib.ps1").write_text(
-        'Set-Content -LiteralPath (Join-Path $env:USERPROFILE "selected-root.txt") -Value $env:DEVKIT_SOURCE_ROOT\n',
         encoding="utf-8",
     )
-    (default_scripts / "devkit-lib.ps1").write_text("# default lib marker\n", encoding="utf-8")
-    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
-
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(codex_bin / "update-ccx.ps1"),
-            "--version",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(default_checkout)
-
-
-def test_update_ccx_ps1_preserves_existing_source_root(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    codex_bin = home / ".codex" / "bin"
-    default_checkout = home / "cursor" / "devkit"
-    default_scripts = default_checkout / "plugins" / "devkit" / "scripts"
-    caller_source_root = tmp_path / "caller-source"
-    codex_bin.mkdir(parents=True)
-    default_scripts.mkdir(parents=True)
-    caller_source_root.mkdir()
-    (codex_bin / "devkit-lib.ps1").write_text(
-        'Set-Content -LiteralPath (Join-Path $env:USERPROFILE "selected-root.txt") -Value $env:DEVKIT_SOURCE_ROOT\n',
-        encoding="utf-8",
-    )
-    (default_scripts / "devkit-lib.ps1").write_text("# default lib marker\n", encoding="utf-8")
-    shutil.copyfile(SCRIPTS / "update-ccx.ps1", codex_bin / "update-ccx.ps1")
-
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-    env["DEVKIT_SOURCE_ROOT"] = str(caller_source_root)
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(codex_bin / "update-ccx.ps1"),
-            "--version",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert (home / "selected-root.txt").read_text(encoding="utf-8").strip() == str(caller_source_root)
-
-
-def test_update_ccx_ps1_prunes_legacy_cursor_sync_when_manifest_exists(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    managed = home / ".cursor/skills/setup/SKILL.md"
-    managed.parent.mkdir(parents=True)
-    managed.write_bytes(b"managed\n")
-    manifest = home / ".cursor/.devkit-sync-manifest.json"
-    manifest.write_text(
-        json.dumps({"version": 1, "files": {"skills/setup/SKILL.md": sha256(managed.read_bytes()).hexdigest()}}),
-        encoding="utf-8",
-    )
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_codex = fake_bin / "codex"
-    fake_codex.write_text('#!/bin/bash\nprintf \'{}\\n\'\n', encoding="utf-8")
-    fake_codex.chmod(0o755)
-
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-    env["DEVKIT_SOURCE_ROOT"] = str(ROOT)
-    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(SCRIPTS / "update-ccx.ps1"),
-            "--devkit-only",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert not managed.exists()
-    assert not manifest.exists()
-
-
-def test_update_ccx_ps1_cursor_prune_failure_is_aggregated_and_later_sections_continue(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    (home / ".cursor").mkdir(parents=True)
-    (home / ".cursor/.devkit-sync-manifest.json").write_text("{invalid", encoding="utf-8")
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_codex = fake_bin / "codex"
-    fake_codex.write_text('#!/bin/bash\nprintf \'{}\\n\'\n', encoding="utf-8")
-    fake_codex.chmod(0o755)
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-    env["DEVKIT_SOURCE_ROOT"] = str(ROOT)
-    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(SCRIPTS / "update-ccx.ps1"),
-            "--devkit-only",
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 1
-    assert "Cursor legacy sync prune failed" in result.stdout
-    assert "=== [Codex Plugin] ===" in result.stdout
-    assert (home / ".codex/config.toml").is_file()
-
-
-def test_update_ccx_ps1_dangling_cursor_manifest_symlink_is_not_skipped(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    home = tmp_path / "home"
-    cursor = home / ".cursor"
-    cursor.mkdir(parents=True)
-    manifest = cursor / ".devkit-sync-manifest.json"
-    try:
-        manifest.symlink_to(tmp_path / "missing-manifest.json")
-    except OSError as error:
-        pytest.skip(f"symlink is not available: {error}")
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_codex = fake_bin / "codex"
-    fake_codex.write_text('#!/bin/bash\nprintf \'{}\\n\'\n', encoding="utf-8")
-    fake_codex.chmod(0o755)
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-    env["DEVKIT_SOURCE_ROOT"] = str(ROOT)
-    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoLogo",
-            "-NoProfile",
-            "-File",
-            str(SCRIPTS / "update-ccx.ps1"),
-            "--devkit-only",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-
-    assert result.returncode == 1
-    assert "Cursor legacy sync prune failed" in result.stdout
-    assert "SKIPPED: Legacy Cursor sync manifest not found" not in result.stdout
-    assert "=== [Codex Plugin] ===" in result.stdout
-    assert manifest.is_symlink()
-
-
-def test_update_ccx_ps1_cursor_prune_failure_does_not_throw_from_prune_function():
-    text = (SCRIPTS / "update-ccx.ps1").read_text(encoding="utf-8")
-    function_body = text.split("function Remove-DevKitLegacyCursorSync", 1)[1].split(
-        "function Section-DevKit", 1
-    )[0]
-
-    assert "Add-ResultError" in function_body
-    assert "throw" not in function_body
-
-
-# devkit-lib.ps1 の dot-source をスクリプトトップレベルで行うことを PowerShell AST で検証する。
-# v7.0.1 未満の update-ccx.ps1 は Import-DevKitLibForUpdate 関数の内側で devkit-lib.ps1 を
-# dot-source していた。PowerShell は関数内 dot-source のスコープを関数 return と同時に破棄する
-# ため、後段の Section-DevKit が Get-DevKitRepoRoot を解決できず必ず失敗していた (PR #5)。
-# この回帰を検知するため、regex による行マッチではなく AST で構造を検証する。
-_AST_SCOPE_CHECK_SCRIPT = r"""
-param(
-  [Parameter(Mandatory = $true)]
-  [string]$ScriptPath
-)
-
-$ErrorActionPreference = "Stop"
-
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile($ScriptPath, [ref]$tokens, [ref]$parseErrors)
-
-if ($parseErrors.Count -gt 0) {
-  Write-Host ("FAIL: parse errors: {0}" -f (($parseErrors | ForEach-Object { $_.Message }) -join " | "))
-  exit 1
-}
-
-function Test-HasChildScopeAncestor([System.Management.Automation.Language.Ast]$Node) {
-  $current = $Node.Parent
-  while ($null -ne $current) {
-    if ($current -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
-      return $true
-    }
-    if ($current -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
-      return $true
-    }
-    $current = $current.Parent
-  }
-  return $false
-}
-
-function Test-TargetsDevKitLib([System.Management.Automation.Language.CommandAst]$CmdAst) {
-  if ($CmdAst.CommandElements.Count -eq 0) {
-    return $false
-  }
-  $targetText = $CmdAst.CommandElements[0].Extent.Text
-  if ($targetText -match "Resolve-DevKitLibForUpdate") {
-    return $true
-  }
-  if ($targetText -match "devkit-lib\.ps1") {
-    return $true
-  }
-  return $false
-}
-
-$allCommandAsts = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
-
-$dotSourceAsts = @($allCommandAsts | Where-Object { $_.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot })
-
-$devkitLibDotSources = @($dotSourceAsts | Where-Object { Test-TargetsDevKitLib $_ })
-
-if ($devkitLibDotSources.Count -ne 1) {
-  Write-Host ("FAIL: expected exactly 1 dot-source targeting Resolve-DevKitLibForUpdate/devkit-lib.ps1, found {0}" -f $devkitLibDotSources.Count)
-  exit 1
-}
-
-$devkitLibDotSource = $devkitLibDotSources[0]
-
-if (Test-HasChildScopeAncestor $devkitLibDotSource) {
-  Write-Host "FAIL: devkit-lib dot-source has a FunctionDefinitionAst/ScriptBlockExpressionAst ancestor (child-scoped, not script-level)"
-  exit 1
-}
-
-$topLevelMainCalls = @($allCommandAsts | Where-Object {
-  ($_.GetCommandName() -eq "Main") -and -not (Test-HasChildScopeAncestor $_)
-})
-
-if ($topLevelMainCalls.Count -ne 1) {
-  Write-Host ("FAIL: expected exactly 1 top-level Main invocation, found {0}" -f $topLevelMainCalls.Count)
-  exit 1
-}
-
-$mainCall = $topLevelMainCalls[0]
-
-if ($devkitLibDotSource.Extent.StartOffset -ge $mainCall.Extent.StartOffset) {
-  Write-Host "FAIL: devkit-lib dot-source must precede the top-level Main invocation"
-  exit 1
-}
-
-$childScopedDevKitLibDotSources = @($dotSourceAsts | Where-Object {
-  (Test-TargetsDevKitLib $_) -and (Test-HasChildScopeAncestor $_)
-})
-
-if ($childScopedDevKitLibDotSources.Count -ne 0) {
-  Write-Host ("FAIL: found {0} devkit-lib dot-source(s) nested inside a function definition or script block expression" -f $childScopedDevKitLibDotSources.Count)
-  exit 1
-}
-
-Write-Host "OK"
-exit 0
-"""
-
-
-def test_update_ccx_ps1_dot_sources_devkit_lib_at_script_scope(tmp_path):
-    pwsh = shutil.which("pwsh")
-    if not pwsh:
-        pytest.skip("pwsh is not installed")
-
-    checker_path = tmp_path / "check_dot_source_scope.ps1"
-    checker_path.write_text(_AST_SCOPE_CHECK_SCRIPT, encoding="utf-8")
-
-    result = subprocess.run(
-        [
-            pwsh,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(checker_path),
-            "-ScriptPath",
-            str(SCRIPTS / "update-ccx.ps1"),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert "OK" in result.stdout
+    assert marker_path.read_text(encoding="utf-8") == "sentinel\n"

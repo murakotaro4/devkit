@@ -72,8 +72,8 @@ function Invoke-JsonPython([string[]]$Arguments) {
   }
 }
 
-function Invoke-Updater([string]$ScriptPath) {
-  $output = @(& pwsh -NoProfile -ExecutionPolicy Bypass -File $ScriptPath --devkit-only 2>&1)
+function Invoke-Updater([string]$LauncherPath) {
+  $output = @(& cmd.exe /d /c ('"{0}" --devkit-only' -f $LauncherPath) 2>&1)
   $exitCode = $LASTEXITCODE
   $output | ForEach-Object { Write-Host ([string]$_) }
   return [pscustomobject]@{
@@ -87,14 +87,19 @@ $codexBin = Join-Path $env:USERPROFILE ".codex\bin"
 $localBin = Join-Path $env:USERPROFILE ".local\bin"
 $stateFile = Join-Path $env:USERPROFILE ".codex\devkit\source-root.txt"
 $sourceScripts = Join-Path $checkoutRoot "plugins\devkit\scripts"
+$sourceTemplates = Join-Path $checkoutRoot "plugins\devkit\templates\codex"
+$codexTemplates = Join-Path $env:USERPROFILE ".codex\devkit\templates\codex"
 $syncScript = Join-Path $checkoutRoot "plugins\devkit\skills\setup\scripts\sync_updater.py"
 $managedFileNames = @(
-  "update-ccx.ps1",
+  "update-ccx.sh",
+  "devkit-lib.sh",
   "update-ccx.cmd",
   "devkit-lib.ps1",
   "devkit-setup.ps1",
-  "devkit-codex-config.ps1"
+  "devkit-codex-config.ps1",
+  "update-ccx.ps1"
 )
+$managedTemplateFileNames = @("config.shared.toml", "config.windows.toml")
 $legacyCodexBinRemnantNames = @(
   "update-devkit.sh",
   "update-devkit.ps1",
@@ -105,13 +110,14 @@ $legacyLocalBinRemnantNames = @(
   "update-devkit.cmd"
 )
 $managedPaths = @($managedFileNames | ForEach-Object { Join-Path $codexBin $_ })
+$managedTemplatePaths = @($managedTemplateFileNames | ForEach-Object { Join-Path $codexTemplates $_ })
 $codexRemnantPaths = @($legacyCodexBinRemnantNames | ForEach-Object { Join-Path $codexBin $_ })
 $localRemnantPaths = @($legacyLocalBinRemnantNames | ForEach-Object { Join-Path $localBin $_ })
 $remnantPaths = @($codexRemnantPaths) + @($localRemnantPaths)
 $shimPath = Join-Path $localBin "update-ccx.cmd"
 
 function Reset-ManagedState {
-  foreach ($path in @($managedPaths) + @($remnantPaths) + @($shimPath, $stateFile)) {
+  foreach ($path in @($managedPaths) + @($managedTemplatePaths) + @($remnantPaths) + @($shimPath, $stateFile)) {
     if (Test-Path -LiteralPath $path) {
       Remove-Item -LiteralPath $path -Force
     }
@@ -130,7 +136,7 @@ function Add-Remnants {
   }
 }
 
-function Assert-ManagedFilesMatchSource([string]$Message) {
+function Assert-ManagedFilesMatchSource([string]$Message, [switch]$IncludeTemplates) {
   foreach ($name in $managedFileNames) {
     $source = Join-Path $sourceScripts $name
     $destination = Join-Path $codexBin $name
@@ -138,6 +144,16 @@ function Assert-ManagedFilesMatchSource([string]$Message) {
     $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
     $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
     Assert-True ($sourceHash -eq $destinationHash) ("{0}: managed file matches source: {1}" -f $Message, $name)
+  }
+  if ($IncludeTemplates) {
+    foreach ($name in $managedTemplateFileNames) {
+      $source = Join-Path $sourceTemplates $name
+      $destination = Join-Path $codexTemplates $name
+      Assert-True (Test-Path -LiteralPath $destination -PathType Leaf) ("{0}: managed template exists: {1}" -f $Message, $name)
+      $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+      $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+      Assert-True ($sourceHash -eq $destinationHash) ("{0}: managed template matches source: {1}" -f $Message, $name)
+    }
   }
 }
 
@@ -201,25 +217,25 @@ foreach ($path in $remnantPaths) {
 }
 
 Write-Output "=== Phase B1: source-root updater execution ==="
-$sourceUpdater = Join-Path $sourceScripts "update-ccx.ps1"
-$run1 = Invoke-Updater -ScriptPath $sourceUpdater
+$sourceUpdater = Join-Path $sourceScripts "update-ccx.cmd"
+$run1 = Invoke-Updater -LauncherPath $sourceUpdater
 Assert-True ($run1.ExitCode -eq 0) "source-root updater exits with code 0"
-Assert-True ($run1.Output.Contains("OK: All done", [StringComparison]::Ordinal)) "source-root updater reports OK: All done"
-Assert-ManagedFilesMatchSource -Message "source-root updater"
+Assert-True ($run1.Output.Contains("OK All done", [StringComparison]::Ordinal)) "source-root updater reports OK All done"
+Assert-ManagedFilesMatchSource -Message "source-root updater" -IncludeTemplates
 Assert-True (Test-Path -LiteralPath $shimPath -PathType Leaf) "source-root updater creates local command shim"
 Assert-NoRemnants -Message "source-root updater"
 Assert-True (Test-Path -LiteralPath $stateFile -PathType Leaf) "source-root updater writes source-root state file"
 $persistedRoot = (Get-Content -LiteralPath $stateFile -Raw).Trim()
 Assert-True ((Get-NormalizedPath $persistedRoot) -eq (Get-NormalizedPath $checkoutRoot)) "source-root state resolves to checkout root"
 
-$installedPaths = @($managedPaths) + @($shimPath)
+$installedPaths = @($managedPaths) + @($managedTemplatePaths) + @($shimPath)
 $run1Hashes = Get-PathHashes -Paths $installedPaths
 
 Write-Output "=== Phase B2: installed updater execution ==="
-$installedUpdater = Join-Path $codexBin "update-ccx.ps1"
-$run2 = Invoke-Updater -ScriptPath $installedUpdater
+$installedUpdater = Join-Path $codexBin "update-ccx.cmd"
+$run2 = Invoke-Updater -LauncherPath $installedUpdater
 Assert-True ($run2.ExitCode -eq 0) "installed updater exits with code 0"
-Assert-True ($run2.Output.Contains("OK: All done", [StringComparison]::Ordinal)) "installed updater reports OK: All done"
+Assert-True ($run2.Output.Contains("OK All done", [StringComparison]::Ordinal)) "installed updater reports OK All done"
 Assert-HashesEqual -Expected $run1Hashes -Message "installed updater preserves managed files and shim hashes"
 Assert-NoRemnants -Message "installed updater"
 

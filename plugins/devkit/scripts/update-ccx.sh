@@ -366,6 +366,10 @@ ensure_claude() {
             if powershell.exe -Command "irm https://claude.ai/install.ps1 | iex" >/dev/null 2>&1; then
                 hash -r 2>/dev/null
                 echo "OK"
+                if ! command -v claude &>/dev/null; then
+                    echo "WARN Claude Code: installed, but the command is not on PATH yet. Restart the terminal."
+                    WARNINGS+=("Claude Code: restart the terminal to refresh PATH")
+                fi
             else
                 echo "ERROR"
                 ERRORS+=("Claude Code: native install failed")
@@ -401,6 +405,11 @@ ensure_codex() {
     echo -n "Installing Codex CLI... "
     if npm install -g @openai/codex >/dev/null 2>&1; then
         echo "OK"
+        hash -r 2>/dev/null
+        if [[ "$OS_TYPE" == "windows" ]] && ! command -v codex &>/dev/null; then
+            echo "WARN Codex CLI: installed, but the command is not on PATH yet. Restart the terminal."
+            WARNINGS+=("Codex CLI: restart the terminal to refresh PATH")
+        fi
     else
         echo "ERROR"
         ERRORS+=("Codex CLI: npm install failed")
@@ -531,19 +540,59 @@ section_update() {
     echo "[After]  $(join_summary_parts "${after_parts[@]}")"
 }
 
+install_windows_update_shim() {
+    local shim_path="$1"
+    if [[ -d "$shim_path" && ! -L "$shim_path" ]]; then
+        echo "BLOCKED_EXISTING_DIR: $shim_path" >&2
+        return 1
+    fi
+    mkdir -p "$(dirname "$shim_path")"
+    rm -f -- "$shim_path"
+    printf '@echo off\r\nsetlocal\r\ncall "%%USERPROFILE%%\\.codex\\bin\\update-ccx.cmd" %%*\r\nexit /b %%ERRORLEVEL%%\r\n' > "$shim_path"
+}
+
+install_windows_codex_config() {
+    if ! command -v powershell.exe &>/dev/null; then
+        echo "FAILED Codex config: powershell.exe is not available"
+        ERRORS+=("Codex config: powershell.exe is not available")
+        return 1
+    fi
+
+    if ! powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+$ErrorActionPreference = "Stop"
+. (Join-Path $env:USERPROFILE ".codex\bin\devkit-codex-config.ps1")
+$configResult = Install-DevKitCodexConfig -UserHome $env:USERPROFILE -OsName "windows"
+if ($configResult.BootstrappedLocalOverlay) {
+  Write-Warning "Codex config.local.toml was bootstrapped from the existing config."
+}
+if ($configResult.BackupPath) {
+  Write-Host ("Codex config backup saved to: {0}" -f $configResult.BackupPath)
+}
+'; then
+        echo "FAILED Codex config templating"
+        ERRORS+=("Codex config: templating failed")
+        return 1
+    fi
+
+    echo "OK Codex config templated"
+}
+
 section_managed_copy() {
     echo ""
     echo "=== [DevKit Managed Files] ==="
 
-    local repo_root plugin_scripts codex_bin local_bin script_name
+    local repo_root plugin_root plugin_scripts template_root codex_bin local_bin codex_templates script_name
     if ! repo_root="$(ensure_devkit_repo_root_cached)"; then
         ERRORS+=("DevKit checkout: update failed")
         return 1
     fi
 
-    plugin_scripts="$repo_root/plugins/devkit/scripts"
+    plugin_root="$repo_root/plugins/devkit"
+    plugin_scripts="$plugin_root/scripts"
+    template_root="$plugin_root/templates/codex"
     codex_bin="$HOME/.codex/bin"
     local_bin="$HOME/.local/bin"
+    codex_templates="$HOME/.codex/devkit/templates/codex"
 
     for script_name in update-ccx.sh devkit-lib.sh; do
         if ! ensure_managed_file "$plugin_scripts/$script_name" "$codex_bin/$script_name" true; then
@@ -552,9 +601,40 @@ section_managed_copy() {
         fi
     done
 
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        if ! ensure_managed_file "$plugin_scripts/update-ccx.cmd" "$codex_bin/update-ccx.cmd" true; then
+            ERRORS+=("DevKit managed file: failed to update update-ccx.cmd")
+            return 1
+        fi
+        for script_name in devkit-lib.ps1 devkit-setup.ps1 devkit-codex-config.ps1; do
+            if ! ensure_managed_file "$plugin_scripts/$script_name" "$codex_bin/$script_name" true; then
+                ERRORS+=("DevKit managed file: failed to update $script_name")
+                return 1
+            fi
+        done
+        for script_name in config.shared.toml config.windows.toml; do
+            if ! ensure_managed_file "$template_root/$script_name" "$codex_templates/$script_name" true; then
+                ERRORS+=("DevKit managed file: failed to update $script_name")
+                return 1
+            fi
+        done
+        if ! ensure_managed_file "$plugin_scripts/update-ccx.ps1" "$codex_bin/update-ccx.ps1" true; then
+            ERRORS+=("DevKit managed file: failed to update update-ccx.ps1")
+            return 1
+        fi
+    fi
+
     chmod +x "$codex_bin/update-ccx.sh"
     devkit_persist_codex_source_root "$HOME" "$repo_root"
-    install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        if ! install_windows_update_shim "$local_bin/update-ccx.cmd"; then
+            ERRORS+=("DevKit managed file: failed to update update-ccx.cmd shim")
+            return 1
+        fi
+        install_windows_codex_config || true
+    else
+        install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
+    fi
     local legacy_path
     local -a legacy_updater_paths=(
         "$codex_bin/update-devkit.sh"
