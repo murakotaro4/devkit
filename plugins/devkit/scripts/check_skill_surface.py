@@ -346,6 +346,7 @@ def run_update_devkit_smoke(
                 "DEVKIT_FAKE_CLAUDE_SCOPE": claude_scope,
                 "DEVKIT_FAKE_CLAUDE_LIST_FAIL": "1" if claude_list_fail else "0",
                 "HOME": home,
+                "USERPROFILE": home,
                 "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
             }
         )
