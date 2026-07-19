@@ -87,19 +87,3 @@ def test_ordered_subset_accepts_interleaved_commands():
         ["codex plugin list --json", "codex plugin marketplace upgrade murakotaro4"],
         "unit",
     )
-
-
-def test_powershell_codex_plugin_update_contract_is_enforced():
-    problems: list[str] = []
-
-    check_skill_surface.assert_powershell_codex_plugin_update_contract(problems)
-
-    assert problems == []
-
-
-def test_powershell_claude_plugin_update_contract_is_enforced():
-    problems: list[str] = []
-
-    check_skill_surface.assert_powershell_claude_plugin_update_contract(problems)
-
-    assert problems == []

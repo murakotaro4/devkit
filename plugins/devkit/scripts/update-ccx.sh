@@ -20,6 +20,42 @@ RUN_MODE="run"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+windows_path_to_posix() {
+    local input_path="$1"
+    local normalized=""
+
+    if command -v cygpath &>/dev/null; then
+        normalized="$(cygpath -u "$input_path" 2>/dev/null || true)"
+    fi
+    if [[ -z "$normalized" && "$input_path" == /* ]]; then
+        normalized="$input_path"
+    fi
+    if [[ -z "$normalized" ]]; then
+        local slash_path="${input_path//\\//}"
+        if [[ "$slash_path" =~ ^([A-Za-z]):/(.*)$ ]]; then
+            normalized="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}"
+        fi
+    fi
+
+    [[ -n "$normalized" && "$normalized" == /* ]] || return 1
+    printf '%s\n' "${normalized%/}"
+}
+
+source_root_path_for_shell() {
+    local source_root="$1"
+    case "$(uname -s)" in
+        MINGW*|MSYS*)
+            local normalized=""
+            normalized="$(windows_path_to_posix "$source_root" || true)"
+            if [[ -n "$normalized" ]]; then
+                printf '%s\n' "$normalized"
+                return 0
+            fi
+            ;;
+    esac
+    printf '%s\n' "$source_root"
+}
+
 source_devkit_lib_for_update() {
     local lib_path="$SCRIPT_DIR/devkit-lib.sh"
     if [[ -f "$lib_path" ]]; then
@@ -32,6 +68,7 @@ source_devkit_lib_for_update() {
             local state_file="$HOME/.codex/devkit/source-root.txt"
             if [[ -f "$state_file" ]]; then
                 normal_root="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//' || true)"
+                normal_root="$(source_root_path_for_shell "$normal_root")"
             fi
         fi
         if [[ -z "${DEVKIT_SOURCE_ROOT:-}" && -n "$normal_root" ]]; then
@@ -55,6 +92,7 @@ source_devkit_lib_for_update() {
     local state_file="$HOME/.codex/devkit/source-root.txt"
     if [[ -f "$state_file" ]]; then
         repo_root="$(head -n 1 "$state_file" | tr -d '\r' | sed 's/[[:space:]]*$//' || true)"
+        repo_root="$(source_root_path_for_shell "$repo_root")"
         if [[ -n "$repo_root" ]]; then
             repo_candidates+=("$repo_root")
         fi
@@ -293,8 +331,50 @@ section_prerequisites() {
     esac
 }
 
-ensure_fnm() {
+resolve_fnm_command() {
     if command -v fnm &>/dev/null; then
+        return 0
+    fi
+
+    local -a fnm_dirs=("$HOME/.local/share/fnm" "$HOME/.fnm")
+    if [[ "$OS_TYPE" == "windows" && -n "${LOCALAPPDATA:-}" ]]; then
+        local local_app_data=""
+        local_app_data="$(windows_path_to_posix "$LOCALAPPDATA" || true)"
+        if [[ -n "$local_app_data" ]]; then
+            fnm_dirs+=("$local_app_data/Microsoft/WinGet/Links")
+        fi
+    fi
+
+    local fnm_dir
+    for fnm_dir in "${fnm_dirs[@]}"; do
+        if [[ -x "$fnm_dir/fnm" || -x "$fnm_dir/fnm.exe" ]]; then
+            export PATH="$fnm_dir:$PATH"
+            hash -r 2>/dev/null
+            break
+        fi
+    done
+
+    command -v fnm &>/dev/null
+}
+
+initialize_fnm_environment() {
+    command -v fnm &>/dev/null || return 0
+    [[ -z "${FNM_MULTISHELL_PATH:-}" ]] || return 0
+
+    local fnm_environment=""
+    if fnm_environment="$(fnm env --shell bash 2>/dev/null)" && [[ -n "$fnm_environment" ]] && eval "$fnm_environment"; then
+        echo "OK fnm: non-interactive shell environment initialized"
+        return 0
+    fi
+
+    echo "WARN fnm: failed to initialize the non-interactive shell environment"
+    WARNINGS+=("fnm: non-interactive shell environment initialization failed")
+    return 0
+}
+
+ensure_fnm() {
+    if resolve_fnm_command; then
+        initialize_fnm_environment
         echo "OK fnm: already installed ($(fnm --version 2>/dev/null))"
         return 0
     fi
@@ -322,7 +402,9 @@ ensure_fnm() {
     esac
 
     export PATH="$HOME/.local/share/fnm:$HOME/.fnm:$PATH"
-    eval "$(fnm env --use-on-cd --shell bash 2>/dev/null)" 2>/dev/null
+    hash -r 2>/dev/null
+    resolve_fnm_command || true
+    initialize_fnm_environment
     if command -v fnm &>/dev/null; then
         echo "OK ($(fnm --version 2>/dev/null))"
     else
@@ -366,6 +448,10 @@ ensure_claude() {
             if powershell.exe -Command "irm https://claude.ai/install.ps1 | iex" >/dev/null 2>&1; then
                 hash -r 2>/dev/null
                 echo "OK"
+                if ! command -v claude &>/dev/null; then
+                    echo "WARN Claude Code: installed, but the command is not on PATH yet. Restart the terminal."
+                    WARNINGS+=("Claude Code: restart the terminal to refresh PATH")
+                fi
             else
                 echo "ERROR"
                 ERRORS+=("Claude Code: native install failed")
@@ -401,6 +487,11 @@ ensure_codex() {
     echo -n "Installing Codex CLI... "
     if npm install -g @openai/codex >/dev/null 2>&1; then
         echo "OK"
+        hash -r 2>/dev/null
+        if [[ "$OS_TYPE" == "windows" ]] && ! command -v codex &>/dev/null; then
+            echo "WARN Codex CLI: installed, but the command is not on PATH yet. Restart the terminal."
+            WARNINGS+=("Codex CLI: restart the terminal to refresh PATH")
+        fi
     else
         echo "ERROR"
         ERRORS+=("Codex CLI: npm install failed")
@@ -531,19 +622,129 @@ section_update() {
     echo "[After]  $(join_summary_parts "${after_parts[@]}")"
 }
 
+windows_path_from_posix() {
+    local input_path="$1"
+    command -v cygpath &>/dev/null || return 1
+
+    local normalized=""
+    normalized="$(cygpath -w "$input_path" 2>/dev/null || true)"
+    [[ -n "$normalized" ]] || return 1
+    printf '%s\n' "$normalized"
+}
+
+install_windows_update_shim() {
+    local shim_path="$1"
+    local target_command_path="$2"
+    if [[ -d "$shim_path" && ! -L "$shim_path" ]]; then
+        echo "BLOCKED_EXISTING_DIR: $shim_path" >&2
+        return 1
+    fi
+
+    local windows_target=""
+    if ! windows_target="$(windows_path_from_posix "$target_command_path")"; then
+        windows_target='%USERPROFILE%\.codex\bin\update-ccx.cmd'
+        echo "WARN DevKit managed file: cygpath could not resolve the installed update-ccx.cmd; using USERPROFILE fallback" >&2
+        WARNINGS+=("DevKit managed file: update-ccx.cmd shim uses USERPROFILE fallback")
+    fi
+
+    mkdir -p "$(dirname "$shim_path")"
+    rm -f -- "$shim_path"
+    printf '@echo off\r\nsetlocal\r\ncall "%s" %%*\r\nexit /b %%ERRORLEVEL%%\r\n' "$windows_target" > "$shim_path"
+}
+
+install_windows_codex_config() {
+    local config_script_path="$1"
+    if ! command -v powershell.exe &>/dev/null; then
+        echo "FAILED Codex config: powershell.exe is not available"
+        ERRORS+=("Codex config: powershell.exe is not available")
+        return 1
+    fi
+
+    local windows_config_script=""
+    local windows_home=""
+    if ! windows_config_script="$(windows_path_from_posix "$config_script_path")" || \
+       ! windows_home="$(windows_path_from_posix "$HOME")"; then
+        if [[ -z "${USERPROFILE:-}" ]]; then
+            echo "FAILED Codex config: managed paths could not be converted and USERPROFILE is unavailable"
+            ERRORS+=("Codex config: managed path resolution failed")
+            return 1
+        fi
+        windows_config_script="$USERPROFILE\.codex\bin\devkit-codex-config.ps1"
+        windows_home="$USERPROFILE"
+        echo "WARN Codex config: cygpath could not resolve managed paths; using USERPROFILE fallback" >&2
+        WARNINGS+=("Codex config: managed path resolution uses USERPROFILE fallback")
+    fi
+
+    if ! DEVKIT_CODEX_CONFIG_SCRIPT="$windows_config_script" DEVKIT_WINDOWS_HOME="$windows_home" \
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+$ErrorActionPreference = "Stop"
+. $env:DEVKIT_CODEX_CONFIG_SCRIPT
+$configResult = Install-DevKitCodexConfig -UserHome $env:DEVKIT_WINDOWS_HOME -OsName "windows"
+if ($configResult.BootstrappedLocalOverlay) {
+  Write-Warning "Codex config.local.toml was bootstrapped from the existing config."
+}
+if ($configResult.BackupPath) {
+  Write-Host ("Codex config backup saved to: {0}" -f $configResult.BackupPath)
+}
+'; then
+        echo "FAILED Codex config templating"
+        ERRORS+=("Codex config: templating failed")
+        return 1
+    fi
+
+    echo "OK Codex config templated"
+}
+
+remove_windows_legacy_scheduled_task() {
+    local powershell_lib_path="$1"
+    if ! command -v powershell.exe &>/dev/null; then
+        echo "WARN DevKit migration: powershell.exe is unavailable; legacy scheduled task cleanup skipped" >&2
+        WARNINGS+=("DevKit migration: legacy scheduled task cleanup skipped because powershell.exe is unavailable")
+        return 0
+    fi
+
+    local windows_powershell_lib=""
+    if ! windows_powershell_lib="$(windows_path_from_posix "$powershell_lib_path")"; then
+        if [[ -z "${USERPROFILE:-}" ]]; then
+            echo "WARN DevKit migration: devkit-lib.ps1 path could not be resolved; legacy scheduled task cleanup skipped" >&2
+            WARNINGS+=("DevKit migration: legacy scheduled task cleanup skipped because devkit-lib.ps1 path resolution failed")
+            return 0
+        fi
+        windows_powershell_lib="$USERPROFILE\.codex\bin\devkit-lib.ps1"
+        echo "WARN DevKit migration: cygpath could not resolve devkit-lib.ps1; using USERPROFILE fallback" >&2
+        WARNINGS+=("DevKit migration: legacy scheduled task cleanup uses USERPROFILE fallback")
+    fi
+
+    if ! DEVKIT_POWERSHELL_LIB="$windows_powershell_lib" \
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+$ErrorActionPreference = "Stop"
+. $env:DEVKIT_POWERSHELL_LIB
+Remove-DevKitLegacyScheduledTask
+'; then
+        echo "WARN DevKit migration: legacy scheduled task cleanup failed; continuing migration" >&2
+        WARNINGS+=("DevKit migration: legacy scheduled task cleanup failed")
+        return 0
+    fi
+
+    echo "OK legacy scheduled task removed"
+}
+
 section_managed_copy() {
     echo ""
     echo "=== [DevKit Managed Files] ==="
 
-    local repo_root plugin_scripts codex_bin local_bin script_name
+    local repo_root plugin_root plugin_scripts template_root codex_bin local_bin codex_templates script_name
     if ! repo_root="$(ensure_devkit_repo_root_cached)"; then
         ERRORS+=("DevKit checkout: update failed")
         return 1
     fi
 
-    plugin_scripts="$repo_root/plugins/devkit/scripts"
+    plugin_root="$repo_root/plugins/devkit"
+    plugin_scripts="$plugin_root/scripts"
+    template_root="$plugin_root/templates/codex"
     codex_bin="$HOME/.codex/bin"
     local_bin="$HOME/.local/bin"
+    codex_templates="$HOME/.codex/devkit/templates/codex"
 
     for script_name in update-ccx.sh devkit-lib.sh; do
         if ! ensure_managed_file "$plugin_scripts/$script_name" "$codex_bin/$script_name" true; then
@@ -552,9 +753,40 @@ section_managed_copy() {
         fi
     done
 
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        if ! ensure_managed_file "$plugin_scripts/update-ccx.cmd" "$codex_bin/update-ccx.cmd" true; then
+            ERRORS+=("DevKit managed file: failed to update update-ccx.cmd")
+            return 1
+        fi
+        for script_name in devkit-lib.ps1 devkit-setup.ps1 devkit-codex-config.ps1; do
+            if ! ensure_managed_file "$plugin_scripts/$script_name" "$codex_bin/$script_name" true; then
+                ERRORS+=("DevKit managed file: failed to update $script_name")
+                return 1
+            fi
+        done
+        for script_name in config.shared.toml config.windows.toml; do
+            if ! ensure_managed_file "$template_root/$script_name" "$codex_templates/$script_name" true; then
+                ERRORS+=("DevKit managed file: failed to update $script_name")
+                return 1
+            fi
+        done
+        if ! ensure_managed_file "$plugin_scripts/update-ccx.ps1" "$codex_bin/update-ccx.ps1" true; then
+            ERRORS+=("DevKit managed file: failed to update update-ccx.ps1")
+            return 1
+        fi
+    fi
+
     chmod +x "$codex_bin/update-ccx.sh"
     devkit_persist_codex_source_root "$HOME" "$repo_root"
-    install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        if ! install_windows_update_shim "$local_bin/update-ccx.cmd" "$codex_bin/update-ccx.cmd"; then
+            ERRORS+=("DevKit managed file: failed to update update-ccx.cmd shim")
+            return 1
+        fi
+        install_windows_codex_config "$codex_bin/devkit-codex-config.ps1" || true
+    else
+        install_devkit_shell_shim "$local_bin/update-ccx" "$codex_bin/update-ccx.sh"
+    fi
     local legacy_path
     local -a legacy_updater_paths=(
         "$codex_bin/update-devkit.sh"
@@ -929,12 +1161,32 @@ section_prune_legacy_assets() {
         return 1
     fi
 
+    if [[ "$OS_TYPE" == "windows" && ! -f "$HOME/.codex/devkit/.migrated-v6" ]]; then
+        remove_windows_legacy_scheduled_task "$HOME/.codex/bin/devkit-lib.ps1"
+    fi
+
     if prune_legacy_devkit_assets "$HOME" "$repo_root"; then
         echo "OK legacy assets pruned"
     else
         ERRORS+=("DevKit migration: legacy asset prune failed")
         return 1
     fi
+}
+
+resolve_cursor_prune_python() {
+    if python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+        printf 'python3\n'
+        return 0
+    fi
+    if python -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+        printf 'python\n'
+        return 0
+    fi
+    if py -3 -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+        printf 'py\n'
+        return 0
+    fi
+    return 1
 }
 
 section_prune_cursor_sync() {
@@ -949,15 +1201,16 @@ section_prune_cursor_sync() {
         echo "SKIP legacy Cursor sync manifest is not available"
         return 0
     fi
-    if ! command -v python3 &>/dev/null; then
-        echo "WARN python3 is not available; skipping legacy Cursor sync prune"
-        WARNINGS+=("Cursor legacy sync: python3 not available; prune skipped")
-        return 0
-    fi
-    if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
+    local python_kind=""
+    if ! python_kind="$(resolve_cursor_prune_python)"; then
         echo "WARN Python 3.10 or newer is not available; skipping legacy Cursor sync prune"
         WARNINGS+=("Cursor legacy sync: Python 3.10 or newer not available; prune skipped")
         return 0
+    fi
+
+    local -a python_command=("$python_kind")
+    if [[ "$python_kind" == "py" ]]; then
+        python_command=(py -3)
     fi
 
     local repo_root prune_output
@@ -966,7 +1219,7 @@ section_prune_cursor_sync() {
         return 1
     fi
 
-    if ! prune_output="$(python3 "$repo_root/plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py" \
+    if ! prune_output="$("${python_command[@]}" "$repo_root/plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py" \
         --target "$HOME/.cursor" \
         --format json)"; then
         echo "FAILED legacy Cursor sync prune"

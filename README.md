@@ -93,7 +93,7 @@ update-ccx
 update-ccx --version
 ```
 
-`update-ccx` が唯一の updater コマンドです。旧名称 `update-devkit` は廃止され、`/setup` または updater 自身の更新時に残骸を prune します。互換 shim や fallback は提供しません。
+`update-ccx` が唯一の updater コマンドです。実装正本は全 OS 共通の `update-ccx.sh` です。旧名称 `update-devkit` は廃止され、`/setup` または updater 自身の更新時に残骸を prune します。
 
 `update-ccx` が行うこと:
 
@@ -111,7 +111,7 @@ update-ccx --version
 
 ## Windows
 
-Windows の初回 bootstrap は marketplace 配下の `devkit-setup.ps1` を使います。
+Windows の初回 bootstrap は marketplace 配下の `devkit-setup.ps1` を使います。継続更新は `update-ccx.cmd` が Git for Windows の Bash で `update-ccx.sh` を起動します。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\devkit-setup.ps1"
@@ -123,49 +123,21 @@ Windows だけ `~/.codex/config.toml` の合成を行います。合成時は De
 
 macOS / Linux / WSL では config 合成を行いません。Codex plugin 登録を正本として扱います。
 
-### Windows: v5 からの移行
+### Windows updater stage 1 breaking change
 
-事前条件はありません。旧 updater のままで問題ありません。v6 の `update-ccx.ps1` は `devkit-lib` 欠落時に一回きり self-heal します。
+Windows の updater 実装を PowerShell から bash 正本へ一本化しました。`update-ccx.cmd` は Git for Windows の Bash launcher で、`update-ccx.ps1` は旧チェーン互換のため 1 リリースだけ残す直接委譲シムです。両者は互いを呼ばず、同居する `update-ccx.sh`、次に `~/.codex/devkit/source-root.txt` が指す checkout の script を探します。WSL の `System32\bash.exe` は使いません。
 
-`update-ccx` を 1 回実行すると、次を自動で処理します。
+Windows でも明示された `HOME` を尊重し、managed files は `$HOME` 配下へ配置します。生成する cmd shim と Codex config templating はコピー先の実パスを参照し、ランチャーの source-root fallback は `HOME`、次に `USERPROFILE` の順で探します。`source-root.txt` は Windows launcher が直接扱える Windows 絶対パスで保存し、bash 側は旧 POSIX 形式と Windows 形式の両方を読めます。非対話 Git Bash では fnm の shell 環境も updater が初期化し、初期化できない場合は警告して後続処理を継続します。
 
-- repo pull
-- managed copy 更新
-- 旧 symlink / 旧配布物の prune
-- 旧日次タスク `DevKitSkillsDailyUpdate` の解除 <!-- migration-allow -->
-- Codex marketplace 登録と `devkit@murakotaro4` の plugin add
-- `config.toml` 合成。Codex が管理する runtime section は保持します
+PowerShell の残置責務は次の 3 点だけです。
 
-確認:
+- `update-ccx.sh` から Windows の Claude Code native installer を呼ぶ
+- `devkit-codex-config.ps1` を dot-source して Codex config templating を行う
+- v6 migration marker を書く前に `devkit-lib.ps1` の `Remove-DevKitLegacyScheduledTask` で旧日次タスクを削除する
 
-- `codex plugin list` に `devkit@murakotaro4` が installed / enabled として表示される
-- 新しい Codex セッションで `$dig-goal` が見える
+旧 `update-ccx.ps1` 固有の npm repair、`.npmrc` legacy Codex prefix migration、レジストリからの PATH 再読込は廃止しました。install 成功直後にコマンドが PATH へ現れない場合、updater は警告とターミナル再起動案内を出して処理を続けます。
 
-`RepoNightlyMaintainer-*` 系の旧タスクが残っている場合は、v6 で廃止した repo-maintainer の残骸です。必要に応じて手動で解除してください。
-
-```powershell
-Get-ScheduledTask -TaskName "RepoNightlyMaintainer-*" | Unregister-ScheduledTask -Confirm:$false
-```
-
-`%USERPROFILE%` 配下に `*.linkbak` が残っている場合は、手動で削除してください。
-
-### Windows: DevKit refresh が「Get-DevKitRepoRoot」で失敗する場合
-
-症状: `update-ccx` の `DevKit refresh` 段階が次のようなエラーで必ず失敗する。
-
-```
-用語 'Get-DevKitRepoRoot' は、コマンドレット、関数、スクリプト ファイル、または操作可能なプログラムの名前として認識されません。
-```
-
-原因: v7.0.1 未満のインストール済み `~/.codex/bin/update-ccx.ps1` は `devkit-lib.ps1` を関数の内側で dot-source していました。PowerShell の関数内 dot-source は関数の return と同時にスコープが消えるため、後続の `Section-DevKit` が `Get-DevKitRepoRoot` を呼べません。DevKit refresh 自体が新しい updater スクリプトの配布工程のため、旧ビルドのままではこのバグを自己更新で解消できません。
-
-復旧(一度だけ手動実行が必要):
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\update-ccx.ps1" --devkit-only
-```
-
-marketplace clone にある修正済み updater を一度直接実行すると、`~/.codex/bin/update-ccx.ps1` が新しいスクリプトに置き換わります。以後は通常どおり `update-ccx` を使えます。
+Git for Windows が見つからない場合は exit 1 で停止します。探索順は `%ProgramFiles%\Git\bin\bash.exe`、`%ProgramFiles(x86)%\Git\bin\bash.exe`、`where git` の `Git\cmd\git.exe` から導出する `Git\bin\bash.exe` です。
 
 ## Manual Cleanup
 
