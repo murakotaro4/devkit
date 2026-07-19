@@ -16,3 +16,15 @@ def _clean_git_env(monkeypatch):
     for key in list(os.environ):
         if key.startswith("GIT_"):
             monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_home_env(monkeypatch, tmp_path_factory):
+    # os.environ.copy() でサブプロセスへ環境を継承するテストが、実ユーザーの
+    # HOME / USERPROFILE(= 実ホーム)を掴んでしまう経路を塞ぐ。実際に
+    # ~/.codex/devkit/source-root.txt が実環境で破壊された事故を踏まえ、
+    # テストごとに専用の疑似ホームを明示的に設定する(未設定のまま放置しない)。
+    # 個別テストが独自の一時ホームを使う場合はこの後で上書きしてよい。
+    fake_home = tmp_path_factory.mktemp("devkit-test-home")
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
