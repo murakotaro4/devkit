@@ -77,7 +77,7 @@ update 系 script の共通 library です。
 - v9 dig-goal migration marker と統合前 live skill directory prune
 - v6 migration marker と旧資産 prune
 
-managed file と shell shim は、宛先と同じディレクトリの一時ファイルへ内容と実行権限を整えてから atomic rename で差し替えます。実行中の `update-ccx.sh` 自身を更新しても、起動済み Bash は元の inode を最後まで読み続けられます。
+managed file と shell shim は、宛先と同じディレクトリの一時ファイルへ内容と実行権限を整えてから atomic rename で差し替えます。実行中の `update-ccx.sh` 自身を更新しても、起動済み Bash は元の inode を最後まで読み続けられます。`sync_updater.py`（`/setup` 経由）の updater 配置も同じ atomic rename（tempfile + `os.replace`）方式です。また `update-ccx.sh` は末尾で `main` 直後に `exit` するため、実行中の自己上書きでも以降のファイル再読込が起きません。
 
 ## Checks
 

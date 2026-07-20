@@ -298,7 +298,7 @@ def test_update_ccx_cmd_to_bash_chain_forwards_isolated_home_and_preserves_senti
 
 
 def _truncated_update_ccx_sh(tmp_path: Path) -> Path:
-    """update-ccx.sh から末尾の `main "$@"` 呼び出しを除いたコピーを作る。
+    """update-ccx.sh から末尾の `main "$@"; exit $?` 呼び出しを除いたコピーを作る。
 
     source しても main() が自動実行されず、個別関数だけを直接呼び出せる。
     update-ccx.sh はトップレベルで `source_devkit_lib_for_update || exit 1` を実行し
@@ -306,7 +306,7 @@ def _truncated_update_ccx_sh(tmp_path: Path) -> Path:
     """
     source = UPDATE_CCX_SH.read_text(encoding="utf-8")
     lines = source.splitlines()
-    assert lines[-1].strip() == 'main "$@"', "update-ccx.sh の末尾行の前提が変わった(要更新)"
+    assert lines[-1].strip() == 'main "$@"; exit $?', "update-ccx.sh の末尾行の前提が変わった(要更新)"
     truncated = "\n".join(lines[:-1]) + "\n"
     lib_path = tmp_path / "update-ccx-lib.sh"
     lib_path.write_text(truncated, encoding="utf-8")
