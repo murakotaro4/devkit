@@ -186,7 +186,7 @@ selected_task と write_scope だけを変更。「ついで修正」禁止。ro
 
 ### VERIFY
 
-(1) trigger を直接再現する検証または対象箇所の targeted test (2) 影響 subsystem の test/lint/typecheck/build (3) repo 規約が要求する full gate (4) diff 全体の自己レビュー。コマンド・終了 status・主要結果を記録する。「実行したはず」「おそらく成功」は禁止。実装・修正の総試行回数は 2 回まで。2 回目でも required verification を通せなければ `failed` とし、成功扱いの PR を作らない。VERIFY 成功後、INDEPENDENT_REVIEW に進む前に selected_task の実装を作業 branch へ commit する(target repo の commit 規約に従う)。レビューは branch の commit 済み diff を対象にする。
+(1) trigger を直接再現する検証または対象箇所の targeted test (2) 影響 subsystem の test/lint/typecheck/build (3) repo 規約が要求する full gate (4) diff 全体の自己レビュー。コマンド・終了 status・主要結果を記録する。「実行したはず」「おそらく成功」は禁止。実装・修正の総試行回数は 2 回まで。2 回目でも required verification を通せなければ `failed` とし、成功扱いの PR を作らない。VERIFY 成功後、INDEPENDENT_REVIEW に進む前に selected_task の実装を作業 branch へ commit する(target repo の commit 規約に従う)。レビューは branch の commit 済み diff を対象にする。commit 前に、対象差分(staged diff)へ secret 検査を行う(credential・token・API key・秘密鍵・接続文字列のパターン検査。repo に detect-secrets 等の導入済みツールがあればそれを優先し、なければ pattern grep で代替する)。push 前にも push 対象 commit 群の diff 全体へ同じ検査を行う(2 層)。検出した場合は commit / push を中止し、該当箇所を write_scope 内で除去できるなら除去して再検証、除去できなければ秘密情報を含む出力を避けて proposal または failed へ降格する。検出内容の値そのものを結果・Issue・PR に転記しない。
 
 ### INDEPENDENT_REVIEW
 

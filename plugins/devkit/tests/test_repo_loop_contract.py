@@ -93,6 +93,16 @@ def test_security_proposal_avoids_public_disclosure():
     assert "セキュリティ観点の改善候補あり" in text
 
 
+def test_secret_scan_before_commit_and_push():
+    text = _skill_text()
+    assert "secret 検査" in text
+    assert "staged diff" in text
+    assert "2 層" in text
+    assert "detect-secrets" in text or "pattern grep" in text
+    assert "commit / push を中止" in text
+    assert "値そのものを結果・Issue・PR に転記しない" in text
+
+
 def test_noop_is_normal_outcome():
     text = _skill_text()
     assert "noop" in text
