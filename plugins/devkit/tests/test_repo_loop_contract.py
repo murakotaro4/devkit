@@ -117,6 +117,15 @@ def test_risk_includes_none_before_risk_gate():
     assert "none" in text
 
 
+def test_worktree_cleanup_at_run_end():
+    text = _skill_text()
+    assert "git worktree remove" in text
+    assert "--force" in text
+    assert "この run が作成した一時 worktree" in text
+    assert "branch は削除しない" in text
+    assert "他セッションの worktree" in text
+
+
 def test_thoughtdb_readonly_and_nonfatal_missing():
     text = _skill_text()
     assert "read-only" in text

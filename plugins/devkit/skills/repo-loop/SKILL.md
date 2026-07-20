@@ -180,6 +180,8 @@ GitHub と認証が利用可能なら Issue を作成。既存 Issue が trigger
 
 人間向け要約に加え、最終行付近へ機械可読 JSON を出力する。RISK_GATE 到達前に終了した run では `risk` は `none` とする。
 
+run の終端(outcome 確定後)に、この run が作成した一時 worktree を `git worktree remove`(`--force` は使わない)で削除する。Draft PR / failure record に必要な branch は削除しない(push 済み branch は remote に保持される)。未追跡ファイル等で remove が拒否された場合は `--force` せずパスを結果に報告して残す。この run が作成した worktree 以外(ユーザーの checkout・他セッションの worktree)には触れない。
+
 ```json
 {
   "schema": "repo-loop-result/v1",
