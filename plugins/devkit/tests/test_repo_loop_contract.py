@@ -245,3 +245,14 @@ def test_progress_visibility_section():
 def test_shared_skill_contract_reference():
     text = _skill_text()
     assert "スキル共通契約" in text
+
+
+def test_harness_detection_section():
+    text = _skill_text()
+    assert "## ハーネス判定" in text
+    assert "AskUserQuestion" in text
+    assert "spawn_agent" in text
+    assert "request_user_input" in text
+    assert "判定キーに使わない" in text
+    assert "手動実行の重大な不明点確認" in text
+    assert "進捗提示にのみ使う" in text

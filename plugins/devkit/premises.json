@@ -255,6 +255,10 @@
           "count": 9
         },
         {
+          "path": "plugins/devkit/skills/repo-loop/SKILL.md",
+          "count": 5
+        },
+        {
           "path": "plugins/devkit/skills/setup/SKILL.md",
           "count": 5
         },
@@ -285,6 +289,10 @@
         {
           "path": "plugins/devkit/tests/test_refactor_skill.py",
           "count": 4
+        },
+        {
+          "path": "plugins/devkit/tests/test_repo_loop_contract.py",
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",

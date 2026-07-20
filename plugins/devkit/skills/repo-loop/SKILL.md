@@ -16,6 +16,23 @@ $ARGUMENTS
 
 共通動作の正本として devkit リポジトリの `AGENTS.md`「スキル共通契約」を参照する。配布先には `AGENTS.md` が同梱されないため、実行に必要な要点は本 SKILL.md 内に自己完結で記す。利用可能なタスク管理ツールがあれば workflow の step を登録し、開始時 `in_progress`・完了時 `completed` へ更新する。質問が必要な重大な不明点がある場合のみ、利用可能な質問手段で確認する(軽微な不明点は仮定を明示して進める)。
 
+## ハーネス判定
+
+正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。この SKILL.md は Claude 親 / Codex 親の二層構成で実行する。要点:
+
+- `AskUserQuestion` が使える -> Claude 親。
+- なければ `spawn_agent` が使える -> Codex 親。
+- どちらでもない -> 判定不能として扱う。
+- `request_user_input` は plan mode 依存で不安定なため、判定キーに使わない(Codex 親 plan mode の質問手段としてのみ使う)。
+
+質問手段:
+
+- Claude 親: `AskUserQuestion`
+- Codex 親 plan mode: `request_user_input`
+- Codex 親通常 mode / 判定不能: 選択肢を箇条書きで提示して自由文回答を求める
+
+repo-loop は非対話実行では質問しないため、この判定は手動実行の重大な不明点確認と進捗提示にのみ使う。
+
 ## 進捗可視化
 
 正本は `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。委譲ジョブ・長時間ジョブは 1 ジョブ = 1 タスクとしてタスクリストへ登録し(TaskCreate / TaskUpdate が使える場合)、開始時 `in_progress`・完了時 `completed` へ更新する。進捗の実体確認は `git status` / `git diff` で行う。
