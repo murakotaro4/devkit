@@ -256,17 +256,17 @@ def test_cursor_and_worktree_delegation_contract():
     text = _skill_text()
     delegation = _section(text, "### 6. 実装委譲(backend)")
     repair = _section(text, "### 8. 修正ループ")
-    for token in ("--model composer-2.5", "--trust", "--force", "chat-id.txt"):
+    for token in ("--model cursor-grok-4.5-high", "--trust", "--force", "chat-id.txt"):
         assert token in delegation
     assert 'codex -a never exec -C "<worktree>"' in delegation
     assert '--workspace "<worktree>"' in delegation + repair
     assert (
         'cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force '
-        '--model composer-2.5 --workspace "<worktree>" --output-format text "<実装指示>"'
+        '--model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>"'
     ) in delegation
     assert (
         'cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force '
-        '--model composer-2.5 --workspace "<worktree>" --output-format text "<指摘と修正指示>"'
+        '--model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<指摘と修正指示>"'
     ) in repair
     assert "sandbox なし" in text
     assert "commit 禁止" in delegation

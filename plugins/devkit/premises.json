@@ -68,16 +68,18 @@
       ]
     },
     {
-      "id": "cursor-composer-model",
-      "summary": "cursor-agent に明示指定する Cursor 自社モデル名",
-      "current_value": "composer-2.5",
+      "id": "cursor-agent-model",
+      "summary": "cursor-agent に明示指定するモデル名",
+      "current_value": "cursor-grok-4.5-high",
       "value_patterns": [
-        "(?<![A-Za-z0-9_])composer-2\\.5(?![A-Za-z0-9_])"
+        "(?<![A-Za-z0-9_])cursor-grok-4\\.5-high(?![A-Za-z0-9_-])"
       ],
-      "obsolete_value_patterns": [],
-      "verify_hint": "cursor-agent --help / Cursor changelog / web 検索",
+      "obsolete_value_patterns": [
+        "(?<![A-Za-z0-9_])composer-2\\.5(?![A-Za-z0-9_-])"
+      ],
+      "verify_hint": "cursor-agent --list-models / Cursor changelog / web 検索",
       "update_notes": "auto はサードパーティへルーティングされうるため常に明示。dig-goal の全コマンド例と契約テストを同時更新",
-      "last_verified": "2026-07-12",
+      "last_verified": "2026-07-20",
       "occurrences": [
         {
           "path": "plugins/devkit/skills/dig-goal/SKILL.md",
