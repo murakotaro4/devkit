@@ -77,7 +77,7 @@ def test_install_static_contract():
     assert "copyFileSync" in text
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_statusline_node_smoke_with_stdin_rates(tmp_path):
     work = tmp_path / "repo"
     work.mkdir()
@@ -135,7 +135,7 @@ def test_statusline_node_smoke_with_stdin_rates(tmp_path):
         assert "status-test" in lines[0]
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_statusline_no_fetch_uses_stale_usage_cache(tmp_path):
     work = tmp_path / "repo"
     work.mkdir()
@@ -178,7 +178,7 @@ def test_statusline_no_fetch_uses_stale_usage_cache(tmp_path):
     assert "ago" in output
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_statusline_weekly_reset_remaining(tmp_path):
     work = tmp_path / "repo"
     work.mkdir()
@@ -212,7 +212,7 @@ def test_statusline_weekly_reset_remaining(tmp_path):
     assert "d" in output
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_statusline_cost_usd_fallback(tmp_path):
     work = tmp_path / "repo"
     work.mkdir()
@@ -239,7 +239,7 @@ def test_statusline_cost_usd_fallback(tmp_path):
     assert "$8.23" in _strip_ansi(result.stdout)
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_statusline_cost_jpy_from_cache(tmp_path):
     work = tmp_path / "repo"
     work.mkdir()
@@ -272,7 +272,7 @@ def test_statusline_cost_jpy_from_cache(tmp_path):
     assert "¥1,235" in _strip_ansi(result.stdout)
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_statusline_cost_uses_usd_with_recent_fx_failure_cache(tmp_path):
     work = tmp_path / "repo"
     work.mkdir()
@@ -306,7 +306,7 @@ def test_statusline_cost_uses_usd_with_recent_fx_failure_cache(tmp_path):
     assert "¥" not in output
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_statusline_cost_missing_hides_cost_segment(tmp_path):
     work = tmp_path / "repo"
     work.mkdir()
@@ -335,7 +335,7 @@ def test_statusline_cost_missing_hides_cost_segment(tmp_path):
     assert "¥" not in output
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 @pytest.mark.parametrize("stdin", ["", "{not-json"])
 def test_statusline_empty_or_broken_stdin_exits_zero(tmp_path, stdin):
     env = _node_env(tmp_path)
@@ -356,7 +356,7 @@ def test_statusline_empty_or_broken_stdin_exits_zero(tmp_path, stdin):
     assert " | " in result.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_install_is_idempotent_and_writes_managed_command(tmp_path):
     env = _node_env(tmp_path)
 
@@ -384,7 +384,7 @@ def test_install_is_idempotent_and_writes_managed_command(tmp_path):
     assert json.loads(check.stdout)["state"] == "managed"
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_install_check_reports_state_without_changes(tmp_path):
     env = _node_env(tmp_path)
 
@@ -397,7 +397,7 @@ def test_install_check_reports_state_without_changes(tmp_path):
     assert not (tmp_path / "home").exists()
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(shutil.which("node") is None, reason="[tool:node] node is not installed")
 def test_install_foreign_statusline_requires_force(tmp_path):
     env = _node_env(tmp_path)
     claude_dir = tmp_path / "home" / ".claude"

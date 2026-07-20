@@ -43,6 +43,9 @@ jobs:
           echo "DEVKIT_VERSION_BASE_REF=${DEVKIT_VERSION_BASE_REF}"
 
       - name: Run harness verify
+        env:
+          DEVKIT_STRICT_SKIPS: "1"
+          DEVKIT_ALLOWED_SKIP_PREFIXES: "[platform]"
         run: uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
 
       - name: Summary
@@ -95,6 +98,9 @@ jobs:
         run: uv sync --project plugins/devkit
 
       - name: Run harness verify
+        env:
+          DEVKIT_STRICT_SKIPS: "1"
+          DEVKIT_ALLOWED_SKIP_PREFIXES: "[platform],[symlink]"
         run: uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py verify-full
 
   devkit-checks-windows-updater-smoke:

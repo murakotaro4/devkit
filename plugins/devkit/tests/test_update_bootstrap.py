@@ -4,11 +4,12 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
+
+from conftest import require_symlink_support
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -281,7 +282,7 @@ def test_devkit_python_resolver_ignores_windows_store_stub_via_execution_probe()
     assert result.stderr == ""
 
 
-def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
+def test_v9_migration_contract_is_present_in_both_libraries():
     shell = (SCRIPTS / "devkit-lib.sh").read_text(encoding="utf-8")
     powershell = (SCRIPTS / "devkit-lib.ps1").read_text(encoding="utf-8")
 
@@ -314,9 +315,11 @@ def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):
     assert "Test-DevKitPathPresent" in powershell_reparse
     assert "Test-Path" not in powershell_reparse
 
+
+def test_v9_migration_contract_runtime_pwsh_probe(tmp_path):
     pwsh = shutil.which("pwsh")
     if not pwsh:
-        return
+        pytest.skip("[tool:pwsh] pwsh is not installed")
 
     # One runtime probe covers marker-missing prune/create and marker-present no-op.
     home = tmp_path / "pwsh-home"
@@ -461,8 +464,7 @@ def test_v9_shell_migration_preserves_unmanaged_same_name_skills(tmp_path):
 
 
 def test_v9_shell_migration_handles_dangling_symlink_provenance(tmp_path):
-    if not _probe_symlink_support():
-        pytest.skip("symlinks are unavailable")
+    require_symlink_support()
 
     home = tmp_path / "home"
     marker_dir = home / ".codex" / "devkit"
@@ -533,31 +535,36 @@ def test_v9_shell_migration_is_noop_when_marker_exists(tmp_path):
     assert sentinel.is_file()
 
 
-def _probe_symlink_support() -> bool:
-    try:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            probe_dir = Path(tmp_dir)
-            target = probe_dir / "target"
-            target.mkdir()
-            (probe_dir / "link").symlink_to(target, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        return False
-    return True
-
-
-SYMLINK_SUPPORTED = _probe_symlink_support()
-
-
-def require_symlink_support() -> None:
-    if not SYMLINK_SUPPORTED:
-        pytest.skip("Windows runner など symlink 作成権限がない環境では実行できません")
-
-
 def bash_path() -> str:
     bash = shutil.which("bash")
     if not bash:
         raise AssertionError("bash が見つからない: PATH で bash を解決できません")
     return str(Path(bash).resolve())
+
+
+def normalize_git_bash_path(value: str) -> Path:
+    """Git Bash が出力したパス文字列を、ネイティブ Path として比較可能な形へ正規化する。
+
+    POSIX では文字列比較がそのまま成立するため素通しする。Windows では Git Bash が
+    HOME 等を POSIX パス表記(例: /c/Users/...)へ変換して出力するため、bash 経由の
+    cygpath -w でネイティブ Windows パスへ変換してから比較する。
+    """
+    stripped = value.strip()
+    if os.name != "nt":
+        return Path(stripped)
+
+    result = subprocess.run(
+        [bash_path(), "-c", 'cygpath -w "$1"', "_", stripped],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        raise AssertionError(
+            f"cygpath -w によるパス正規化に失敗した: input={stripped!r} "
+            f"returncode={result.returncode} stderr={result.stderr!r}"
+        )
+    return Path(result.stdout.strip())
 
 
 def test_source_root_state_round_trips_windows_and_legacy_posix_forms(tmp_path):
@@ -728,10 +735,6 @@ def test_update_ccx_sh_prefers_default_checkout_over_existing_stale_persisted_ro
     assert (codex_bin / "devkit-lib.sh").read_text(encoding="utf-8") != "return 42\n"
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
-)
 def test_update_ccx_sh_exports_bootstrap_source_root_before_sourcing_lib(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
@@ -758,13 +761,11 @@ def test_update_ccx_sh_exports_bootstrap_source_root_before_sourcing_lib(tmp_pat
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{default_checkout}\n"
+    assert normalize_git_bash_path(
+        (home / "selected-root.txt").read_text(encoding="utf-8")
+    ) == default_checkout
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
-)
 def test_update_ccx_sh_exports_normal_source_root_before_sourcing_existing_lib(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
@@ -792,13 +793,11 @@ def test_update_ccx_sh_exports_normal_source_root_before_sourcing_existing_lib(t
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{default_checkout}\n"
+    assert normalize_git_bash_path(
+        (home / "selected-root.txt").read_text(encoding="utf-8")
+    ) == default_checkout
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
-)
 def test_update_ccx_sh_bootstraps_from_existing_source_root(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
@@ -827,13 +826,11 @@ def test_update_ccx_sh_bootstraps_from_existing_source_root(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert (codex_bin / "devkit-lib.sh").is_file()
-    assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{caller_source_root}\n"
+    assert normalize_git_bash_path(
+        (home / "selected-root.txt").read_text(encoding="utf-8")
+    ) == caller_source_root
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="Git Bash が HOME を POSIX パスへ変換するためパス文字列比較が成立しない (CI Linux で検証)",
-)
 def test_update_ccx_sh_preserves_existing_source_root(tmp_path):
     home = tmp_path / "home"
     codex_bin = home / ".codex" / "bin"
@@ -864,7 +861,9 @@ def test_update_ccx_sh_preserves_existing_source_root(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert (home / "selected-root.txt").read_text(encoding="utf-8") == f"{caller_source_root}\n"
+    assert normalize_git_bash_path(
+        (home / "selected-root.txt").read_text(encoding="utf-8")
+    ) == caller_source_root
 
 
 def test_windows_updater_cmd_launcher_has_independent_git_bash_contract():
@@ -898,7 +897,7 @@ def test_update_ccx_ps1_shim_is_retired():
     assert not (SCRIPTS / "update-ccx.ps1").exists()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows launcher runtime smoke")
+@pytest.mark.skipif(os.name != "nt", reason="[platform] Windows launcher runtime smoke")
 def test_update_ccx_cmd_uses_source_root_fallback_when_adjacent_shell_is_missing(tmp_path):
     bash_candidates = [
         Path(os.environ.get("ProgramFiles", "")) / "Git/bin/bash.exe",
@@ -908,7 +907,7 @@ def test_update_ccx_cmd_uses_source_root_fallback_when_adjacent_shell_is_missing
     if git:
         bash_candidates.append(Path(git).parent.parent / "bin/bash.exe")
     if not any(candidate.is_file() for candidate in bash_candidates):
-        pytest.skip("Git for Windows bash is not installed")
+        pytest.skip("[tool:bash] Git for Windows bash is not installed")
 
     home = tmp_path / "home"
     installed_bin = home / ".codex" / "bin"
