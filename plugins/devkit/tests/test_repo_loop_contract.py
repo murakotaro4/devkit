@@ -75,6 +75,20 @@ def test_independent_review_covers_all_file_changes_with_context():
     assert "レビュー指示文として渡す" in text
     assert "objective・selected_task・write_scope" in text
     assert "VERIFY の検証結果" in text
+    assert (
+        'review --base <remote>/<default> "<objective・selected_task・write_scope・検証結果の要約>"'
+        in text
+    )
+    assert "positional PROMPT" in text
+
+
+def test_security_proposal_avoids_public_disclosure():
+    text = _skill_text()
+    assert "脆弱性の詳細" in text
+    assert "公開 Issue に書かない" in text
+    assert "private vulnerability reporting" in text or "security advisory" in text
+    assert "最終報告" in text
+    assert "セキュリティ観点の改善候補あり" in text
 
 
 def test_noop_is_normal_outcome():
