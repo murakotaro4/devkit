@@ -86,6 +86,25 @@ def test_inventory_and_prioritization_flow_headings():
     assert "S/A/B/C" in text
     assert "選択肢付き質問" in text
 
+    step3_start = text.index("### 3. 優先順位付け")
+    step4_start = text.index("### 4. リファクタリング計画")
+    step3 = text[step3_start:step4_start]
+    assert "multiSelect" in step3
+    assert "2〜4" in step3
+    assert "3+2" in step3
+    assert "候補 0 件" in step3
+    assert "候補 1 件" in step3
+    assert "引き継ぐ / 見送る" in step3
+    assert "番号" in step3
+    assert "このグループからは選ばない" in step3
+    assert "選択合計が 0 件" in step3
+    assert "要調査" in step3
+    assert "調査を先行し、結果を計画化する" in step3
+    assert "推奨案:" not in text
+    assert "保守案:" not in text
+    assert "調査案:" not in text
+    assert "レポートのみ:" not in text
+
 
 def test_harness_detection_section():
     text = _skill_text()
