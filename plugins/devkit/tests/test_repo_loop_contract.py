@@ -240,6 +240,12 @@ def test_progress_visibility_section():
     text = _skill_text()
     assert "## 進捗可視化" in text
     assert "1 ジョブ = 1 タスク" in text
+    assert "委譲・長時間ジョブの進捗可視化" in text
+    assert "run_in_background" in text
+    assert "完了自動通知" in text
+    assert "TaskOutput" in text
+    assert "停滞" in text
+    assert "黙って待たず" in text
 
 
 def test_shared_skill_contract_reference():
