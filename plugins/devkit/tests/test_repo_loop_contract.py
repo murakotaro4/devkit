@@ -94,10 +94,11 @@ def test_worktree_required():
 
 def test_init_fetches_latest_origin_for_observation():
     text = _skill_text()
-    assert "git fetch origin" in text
-    assert "origin/<default>" in text
+    assert "git fetch <remote>" in text
+    assert "<remote>/<default>" in text
     assert "観測基準" in text
     assert "fetch 不能なら警告" in text
+    assert "既定名は" in text and "origin" in text
 
 
 def test_prepare_worktree_revalidates_evidence_and_unique_branch():
@@ -108,6 +109,28 @@ def test_prepare_worktree_revalidates_evidence_and_unique_branch():
     assert "最新 base 上で再検証" in text
     assert "解消済みなら実装せず" in text
     assert "noop" in text
+    assert "<remote>/<default>" in text
+
+
+def test_commit_before_independent_review():
+    text = _skill_text()
+    assert "レビュー前に selected_task の実装を作業 branch へ commit する" in text
+    assert "commit 済み diff" in text
+    assert "レビュー済み commit の push" in text
+    assert "--base <remote>/<default>" in text
+
+
+def test_envelope_scope_constrains_write_scope():
+    text = _skill_text()
+    assert "envelope で `scope` が与えられた場合" in text
+    assert "部分集合" in text
+    assert "scope 外の変更が必要と判明したら実装せず" in text
+
+
+def test_resolved_remote_used_throughout():
+    text = _skill_text()
+    assert "以降の fetch / base 解決 / レビュー / publication の全工程でその remote を使う" in text
+    assert "origin/<default>" not in text
 
 
 def test_risk_includes_none_before_risk_gate():

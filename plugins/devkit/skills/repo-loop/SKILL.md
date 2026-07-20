@@ -124,7 +124,7 @@ flowchart TD
 
 ### INIT
 
-git repo root 解決、remote / default branch / 現在 SHA / working tree 状態確認、trigger 正規化、`run_key` 生成。通常 checkout には書き込まない。可能なら `git fetch origin` を行い、最新 `origin/<default>` を観測基準にする(fetch 不能なら警告を記録して継続)。
+git repo root 解決、remote / default branch / 現在 SHA / working tree 状態確認、trigger 正規化、`run_key` 生成。通常 checkout には書き込まない。remote 名を解決し(既定名は `origin`)、以降の fetch / base 解決 / レビュー / publication の全工程でその remote を使う。可能なら `git fetch <remote>` を行い、最新 `<remote>/<default>` を観測基準にする(fetch 不能なら警告を記録して継続)。
 
 ### LOAD_CONTEXT
 
@@ -140,7 +140,7 @@ trigger に直接関係する証拠を最優先(failing CI/check/log、open Issu
 
 ### PLAN
 
-objective / selected_task / evidence / write_scope / 各 path の変更内容 / baseline と事後の検証コマンド / non-goals / risk / branch 名 / 出口(Draft PR or 提案 Issue)を実装前に確定。`write_scope` は実装中に狭めてよいが拡張禁止。拡張が必要なら実装を停止し `proposal` へ遷移。
+objective / selected_task / evidence / write_scope / 各 path の変更内容 / baseline と事後の検証コマンド / non-goals / risk / branch 名 / 出口(Draft PR or 提案 Issue)を実装前に確定。`write_scope` は実装中に狭めてよいが拡張禁止。拡張が必要なら実装を停止し `proposal` へ遷移。envelope で `scope` が与えられた場合、write_scope はその部分集合に限定する。scope 外の変更が必要と判明したら実装せず `proposal` へ降格する。
 
 ### RISK_GATE
 
@@ -150,7 +150,7 @@ objective / selected_task / evidence / write_scope / 各 path の変更内容 / 
 
 ### PREPARE_WORKTREE
 
-`origin/<default>` を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本とし、既存 branch と衝突する場合(および schedule / event 起点の自動実行)は `run_key` の先頭 8 文字などの一意サフィックスを付ける。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。worktree 作成後、selected_task の evidence を最新 base 上で再検証し、既に解消済みなら実装せず `noop` へ遷移する。
+`<remote>/<default>`(INIT で解決した remote。既定名は origin)を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本とし、既存 branch と衝突する場合(および schedule / event 起点の自動実行)は `run_key` の先頭 8 文字などの一意サフィックスを付ける。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。worktree 作成後、selected_task の evidence を最新 base 上で再検証し、既に解消済みなら実装せず `noop` へ遷移する。
 
 ### BASELINE
 
@@ -162,15 +162,15 @@ selected_task と write_scope だけを変更。「ついで修正」禁止。ro
 
 ### VERIFY
 
-(1) trigger を直接再現する検証または対象箇所の targeted test (2) 影響 subsystem の test/lint/typecheck/build (3) repo 規約が要求する full gate (4) diff 全体の自己レビュー。コマンド・終了 status・主要結果を記録する。「実行したはず」「おそらく成功」は禁止。実装・修正の総試行回数は 2 回まで。2 回目でも required verification を通せなければ `failed` とし、成功扱いの PR を作らない。
+(1) trigger を直接再現する検証または対象箇所の targeted test (2) 影響 subsystem の test/lint/typecheck/build (3) repo 規約が要求する full gate (4) diff 全体の自己レビュー。コマンド・終了 status・主要結果を記録する。「実行したはず」「おそらく成功」は禁止。実装・修正の総試行回数は 2 回まで。2 回目でも required verification を通せなければ `failed` とし、成功扱いの PR を作らない。VERIFY 成功後、INDEPENDENT_REVIEW に進む前に selected_task の実装を作業 branch へ commit する(target repo の commit 規約に従う)。レビューは branch の commit 済み diff を対象にする。
 
 ### INDEPENDENT_REVIEW
 
-コード変更では利用可能な独立 backend で計画・diff・検証証拠をレビューする。第一候補は worktree 内での `codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base origin/<default> < /dev/null`、利用不能なら独立サブエージェントへ diff と計画を渡す。観点: objective 充足 / scope 外変更 / regression・security・edge case / tests が failure を先に捉え修正後に成功するか / docs・config 整合 / rollback 可能性。指摘があれば write_scope 内で修正して再検証。独立レビュー手段がすべて利用不能な場合: 対象 repo のルール(AGENTS.md 等)が独立レビューを必須とする場合は Draft PR を公開せず `proposal` へ降格する。必須としない repo のみ、レビュー未実施の事実を Draft PR に明記し人間 review 必須のまま公開してよい(自動 merge はないため review 不能だけを理由に成果を破棄する必要はない)。
+コード変更では利用可能な独立 backend で計画・diff・検証証拠をレビューする。レビュー前に selected_task の実装を作業 branch へ commit する(target repo の commit 規約に従う)。レビューは branch の commit 済み diff を対象にする。第一候補は worktree 内での `codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null`、利用不能なら独立サブエージェントへ diff と計画を渡す。観点: objective 充足 / scope 外変更 / regression・security・edge case / tests が failure を先に捉え修正後に成功するか / docs・config 整合 / rollback 可能性。指摘があれば write_scope 内で修正して再検証。独立レビュー手段がすべて利用不能な場合: 対象 repo のルール(AGENTS.md 等)が独立レビューを必須とする場合は Draft PR を公開せず `proposal` へ降格する。必須としない repo のみ、レビュー未実施の事実を Draft PR に明記し人間 review 必須のまま公開してよい(自動 merge はないため review 不能だけを理由に成果を破棄する必要はない)。
 
 ### PUBLISH_DRAFT_PR
 
-target repo の commit 規約優先(なければ Conventional Commits)。commit・push・Draft PR 作成まで実行。ready 化・merge・auto-merge は行わない。PR は 1 objective に限定。PR 本文の節: `## Trigger` / `## Objective` / `## Why this task was selected` / `## Changes` / `## Verification` / `## Risk and guardrails` / `## Non-goals` / `## Review status` + 末尾に `<!-- repo-loop-run:<run_key> -->`。ThoughtDB の非公開情報は記載しない。force push と default branch への直接 push は禁止する。
+target repo の commit 規約優先(なければ Conventional Commits)。レビュー済み commit の push(レビュー修正があれば追加 commit)・Draft PR 作成まで実行。ready 化・merge・auto-merge は行わない。PR は 1 objective に限定。PR 本文の節: `## Trigger` / `## Objective` / `## Why this task was selected` / `## Changes` / `## Verification` / `## Risk and guardrails` / `## Non-goals` / `## Review status` + 末尾に `<!-- repo-loop-run:<run_key> -->`。ThoughtDB の非公開情報は記載しない。force push と default branch への直接 push は禁止する。
 
 ### PUBLISH_PROPOSAL / PUBLISH_FAILURE
 
