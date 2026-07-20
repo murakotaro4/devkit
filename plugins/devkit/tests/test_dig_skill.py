@@ -170,6 +170,13 @@ def test_pinned_model_effort_and_stdin_contract():
         and "< /dev/null" not in line
     ]
     assert not offenders
+    cursor_offenders = [
+        line
+        for line in text.splitlines()
+        if ("$(cursor-agent create-chat" in line or 'cursor-agent -p --resume "' in line)
+        and "< /dev/null" not in line
+    ]
+    assert not cursor_offenders
 
 
 def test_plan_review_and_approval_contract():
@@ -245,11 +252,11 @@ def test_cursor_and_worktree_delegation_contract():
     assert '--workspace "<worktree>"' in delegation + repair
     assert (
         'cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force '
-        '--model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>"'
+        '--model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null'
     ) in delegation
     assert (
         'cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force '
-        '--model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<指摘と修正指示>"'
+        '--model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<指摘と修正指示>" < /dev/null'
     ) in repair
     assert "sandbox なし" in text
     assert "commit 禁止" in delegation

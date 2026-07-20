@@ -36,6 +36,10 @@ update-ccx --devkit-only
 
 旧 Cursor 同期資産の移行掃除は `plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py` に安全ロジックを集約します。manifest の hash と一致する通常ファイルだけを prune し、ユーザー改変・symlink・manifest 非掲載ファイルは保持します。`~/.cursor/`、manifest、Python 3.10 以上のいずれかが無い環境では skip し、prune 自体の失敗は他 section の実行後に updater 全体を非ゼロ終了させます。`sync_cursor_skills.py` は v10.1.0 updater の初回更新を成立させる一時互換 stub で、同期せず同じ prune へ委譲します。
 
+`plugins/devkit/skills/setup/scripts/sync_claude_env.py` は、`~/.claude/settings.json` の他設定を保持したまま Claude Code の compaction env 2 キーを同期します。既存ファイルは timestamp 付きバックアップの成功後に atomic replace し、壊れた JSON、object でない `env`、symlink、ディレクトリは無変更で非ゼロ終了します。
+
+`plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py` は Windows の `%LOCALAPPDATA%\cursor-agent` で `cursor-agent.cmd` / `agent.cmd` を呼ぶ Git Bash シムを内容と実行 bit の両方で冪等同期します。非 Windows、LOCALAPPDATA 未設定、cursor-agent 未導入は理由付きで skip し、不規則なシムパスは上書きしません。
+
 #### Windows: bash 正本への一本化(stage 2 完了)
 
 Windows でも updater のロジックは `update-ccx.sh` だけに置きます。`update-ccx.cmd` は、Git for Windows の Bash と、同居または `~/.codex/devkit/source-root.txt` 配下の `update-ccx.sh` を見つけて委譲するだけです。旧チェーン互換の直接委譲シム `update-ccx.ps1` は廃止済みです。WSL の `System32\bash.exe` は使いません。
@@ -111,6 +115,7 @@ git 追跡下の text metadata file に UTF-8 BOM が混入していないかを
 - `plugins/devkit/skills/` が `dig` / `goal-prompt` / `improve-skill` / `setup` / `refactor` / `memory-review` / `handoff` / `backlog` / `catch-up` / `commit-push` / `repo-loop` の 11 本と完全一致すること
 - `plugins/devkit/statusline/statusline.js` と `plugins/devkit/statusline/install.js` が存在すること
 - `plugins/devkit/skills/setup/scripts/setup_terminal_font.py` が存在すること
+- `plugins/devkit/skills/setup/scripts/sync_claude_env.py` と `sync_cursor_agent_shims.py` が存在すること
 - `plugins/devkit/templates/codex/config.shared.toml` と `config.windows.toml` が存在すること
 - 削除済み directory / script / duplicate manifest / scaffold が存在しないこと
 - ルート marketplace manifest の source directory が存在すること

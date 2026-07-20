@@ -68,6 +68,96 @@
       ]
     },
     {
+      "id": "claude-autocompact-window-env",
+      "summary": "Claude Code の積極的 compaction を有効化する window 環境変数名",
+      "current_value": "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])CLAUDE_CODE_AUTO_COMPACT_WINDOW(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "Claude Code settings documentation / environment variables reference",
+      "update_notes": "setup SKILL・同期スクリプト・契約テストを同時更新し、PCT 変数と組み合わせる",
+      "last_verified": "2026-07-20",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/setup/scripts/sync_claude_env.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_skill.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_sync_claude_env.py",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "claude-autocompact-pct-env",
+      "summary": "Claude Code の積極的 compaction 発動率を上書きする環境変数名",
+      "current_value": "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])CLAUDE_AUTOCOMPACT_PCT_OVERRIDE(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "Claude Code settings documentation / environment variables reference",
+      "update_notes": "setup SKILL・同期スクリプト・契約テストを同時更新し、WINDOW 変数と組み合わせる",
+      "last_verified": "2026-07-20",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/setup/scripts/sync_claude_env.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_skill.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_sync_claude_env.py",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "cursor-agent-windows-shim-target",
+      "summary": "cursor-agent Git Bash シムが委譲する Windows launcher 名",
+      "current_value": "cursor-agent.cmd",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])cursor-agent\\.cmd(?![A-Za-z0-9_.-])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "Windows cursor-agent installer layout and launcher smoke test",
+      "update_notes": "setup SKILL・同期スクリプト・README・契約テストを同時更新",
+      "last_verified": "2026-07-20",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_sync_cursor_agent_shims.py",
+          "count": 1
+        }
+      ]
+    },
+    {
       "id": "cursor-agent-model",
       "summary": "cursor-agent に明示指定するモデル名",
       "current_value": "cursor-grok-4.5-high",
@@ -408,7 +498,7 @@
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
-          "count": 6
+          "count": 8
         },
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
@@ -440,7 +530,11 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 5
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/tests/test_document_consistency.py",
+          "count": 1
         }
       ]
     },

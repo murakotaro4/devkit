@@ -111,7 +111,7 @@ goal-prompt は会話・仕様・計画から Goal プロンプトを `.claude/g
 - Claude サブエージェント委譲(Agent)も 1 委譲 = 1 タスクとしてタスクリストへ登録し、開始時 `in_progress`・完了時 `completed` へ更新する。Agent は元々バックグラウンド実行 + 完了自動通知のため追加の起動処置は不要。停滞検知の考え方は同じ
 - Codex 親: run_in_background / TaskOutput は使えない。`wait_agent` で黙って待たず、定期的に進捗をユーザーへ提示する
 - 実体の進捗確認は `git status` / `git diff` で行う(resume を進捗確認に使わない)
-- codex exec をバックグラウンド起動する場合も stdin を `< /dev/null` で閉じる
+- codex exec / cursor-agent をバックグラウンド起動する場合は stdin を `< /dev/null` で閉じる
 
 ### codex exec 実行形
 
@@ -136,7 +136,7 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 - `plugins/devkit/skills/dig/SKILL.md`: 深掘り・計画・worktree 実装・統合完遂 workflow の正本
 - `plugins/devkit/skills/goal-prompt/SKILL.md`: Goal プロンプト保存生成・起動プロンプト出力 workflow の正本
 - `plugins/devkit/skills/improve-skill/SKILL.md`: skill 改善 workflow の正本
-- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / uv)・thought-db 接続同期・updater 同期・旧 updater 名の残骸 prune・statusline 適用・Windows Terminal フォント適用 workflow の正本
+- `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / uv)・thought-db 接続同期・updater 同期・Claude Code compaction env 同期・cursor-agent Git Bash シム同期・旧 updater 名の残骸 prune・statusline 適用・Windows Terminal フォント適用 workflow の正本
 - `plugins/devkit/skills/refactor/SKILL.md`: 負債棚卸し・優先順位付け・計画作成 workflow の正本
 - `plugins/devkit/skills/memory-review/SKILL.md`: AI メモリ棚卸し・前提監査 workflow の正本
 - `plugins/devkit/skills/handoff/SKILL.md`: セッション引継ぎドキュメント書き出し workflow の正本

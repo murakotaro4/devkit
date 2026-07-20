@@ -30,6 +30,8 @@ EXPECTED_SKILLS = {
 REQUIRED_PATHS = {
     "plugins/devkit/premises.json",
     "plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py",
+    "plugins/devkit/skills/setup/scripts/sync_claude_env.py",
+    "plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py",
     "plugins/devkit/skills/setup/scripts/sync_cursor_skills.py",
     "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
     "plugins/devkit/statusline/install.js",
