@@ -473,7 +473,9 @@ def test_v9_shell_migration_handles_dangling_symlink_provenance(tmp_path):
 
     managed_link = home / ".agents" / "skills" / "dig"
     managed_link.parent.mkdir(parents=True)
-    managed_target = ROOT / "plugins" / "devkit" / "skills" / "dig"
+    # dangling 検証には「devkit source 配下だが実在しないパス」が必要。
+    # v14 で撤去済みの dig-goal ディレクトリを使う(dig / goal-prompt は実在するため不可)。
+    managed_target = ROOT / "plugins" / "devkit" / "skills" / "dig-goal"
     assert not managed_target.exists()
     try:
         managed_link_target = os.path.relpath(managed_target, start=managed_link.parent)

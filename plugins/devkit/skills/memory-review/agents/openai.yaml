@@ -1,4 +1,4 @@
 interface:
   display_name: "Memory Review"
   short_description: "Audit AI project memory for stale assumptions"
-  default_prompt: "Use $memory-review to audit CLAUDE.md, AGENTS.md, rules, and memory files for stale assumptions, contradictions, and unsafe automation, then hand large fixes to $dig-goal."
+  default_prompt: "Use $memory-review to audit CLAUDE.md, AGENTS.md, rules, and memory files for stale assumptions, contradictions, and unsafe automation, then hand large fixes to $dig."

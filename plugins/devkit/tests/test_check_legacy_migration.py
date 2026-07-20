@@ -34,33 +34,52 @@ def test_detects_representative_legacy_patterns(tmp_path):
     assert legacy_question_tool in tokens
 
 
-def test_detects_retired_dig_surfaces(tmp_path):
-    # Positive fixtures intentionally reconstruct retired tokens; tests/ is excluded in repo mode.
+def test_current_dig_and_goal_prompt_surfaces_are_not_detected(tmp_path):
+    current_tokens = (
+        "/dig",
+        "$dig",
+        "plugins/devkit/skills/dig/",
+        "/goal-prompt",
+        "$goal-prompt",
+        "skills/goal-prompt",
+        "devkit-dig-wt",
+        "devkit-dig-job",
+    )
+    _write(tmp_path / "docs" / "current.md", "\n".join(current_tokens) + "\n")
+
+    assert _findings(tmp_path) == []
+
+
+def test_detects_retired_dig_goal_bare_surfaces(tmp_path):
+    # Positive fixtures intentionally reconstruct the retired bare "dig-goal" token in its
+    # common surface forms; tests/ is excluded in repo mode so this fixture doesn't self-trigger.
     retired_tokens = (
-        "/" + "dig",
-        "/devkit:" + "dig",
-        "$" + "dig",
-        "plugins/devkit/skills/" + "dig/",
-        "/" + "goal-" + "prompt",
-        "devkit:" + "goal-" + "prompt",
-        "$" + "goal-" + "prompt",
-        "skills/" + "goal-" + "prompt",
+        "dig-" "goal",
+        "/" "dig-goal",
+        "skills/" "dig-goal",
     )
     _write(tmp_path / "docs" / "retired.md", "\n".join(retired_tokens) + "\n")
 
     tokens = {finding["token"] for finding in _findings(tmp_path)}
 
-    assert set(retired_tokens) <= tokens
+    assert tokens == {"dig-goal"}
+    assert len(_findings(tmp_path)) == len(retired_tokens)
 
 
-def test_current_dig_goal_surfaces_are_not_detected(tmp_path):
-    current_tokens = (
-        "/dig-goal",
-        "$dig-goal",
-        "devkit:dig-goal",
-        "plugins/devkit/skills/dig-goal/",
-    )
-    _write(tmp_path / "docs" / "current.md", "\n".join(current_tokens) + "\n")
+def test_detects_retired_dig_goal_worktree_and_job_dir_tokens(tmp_path):
+    retired_wt = "devkit-" "dig-goal-wt"
+    retired_job = "devkit-" "dig-goal-job"
+    _write(tmp_path / "docs" / "retired-dirs.md", f"{retired_wt}\n{retired_job}\n")
+
+    tokens = {finding["token"] for finding in _findings(tmp_path)}
+
+    assert retired_wt in tokens
+    assert retired_job in tokens
+
+
+def test_migrated_v9_dig_goal_marker_is_not_detected(tmp_path):
+    marker_line = "if not (home_path / \".codex/devkit/.migrated-v9-" "dig-goal\").is_file():"
+    _write(tmp_path / "docs" / "marker.md", marker_line + "\n")
 
     assert _findings(tmp_path) == []
 
@@ -76,14 +95,15 @@ def test_prune_implementations_are_allowed_exceptions(tmp_path):
     assert _findings(tmp_path) == []
 
 
-def test_retired_surface_replacement_points_to_dig_goal(tmp_path):
-    retired = "/" + "goal-" + "prompt"
+def test_retired_surface_replacement_points_to_dig_and_goal_prompt(tmp_path):
+    retired = "dig-" "goal"
     _write(tmp_path / "docs" / "retired.md", retired + "\n")
 
     findings = _findings(tmp_path)
 
     assert len(findings) == 1
-    assert "/dig-goal" in str(findings[0]["replacement"])
+    assert "/dig" in str(findings[0]["replacement"])
+    assert "/goal-prompt" in str(findings[0]["replacement"])
 
 
 def test_migration_allow_suppresses_line(tmp_path):
@@ -101,7 +121,7 @@ def test_changelog_is_allowed_exception(tmp_path):
 
 
 def test_readme_migration_notice_allows_only_that_section(tmp_path):
-    legacy = "discord-" "rust-" "skill"
+    legacy = "dig-" "goal"
     _write(
         tmp_path / "README.md",
         f"## Migration Notice\n{legacy}\n## Normal\n{legacy}\n",

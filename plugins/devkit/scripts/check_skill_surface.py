@@ -18,7 +18,8 @@ EXPECTED_SKILLS = {
     "backlog",
     "catch-up",
     "commit-push",
-    "dig-goal",
+    "dig",
+    "goal-prompt",
     "improve-skill",
     "setup",
     "refactor",
@@ -40,6 +41,7 @@ REMOVED_SKILL_DIRS = {
     "codex-search",
     "computer-use-chatgpt-pro",
     "deep-research",
+    "dig-goal",
     "discord-ops",
     "discord-rust-server-ops",
     "gpt-pro",
@@ -602,7 +604,7 @@ def run_prune_smoke_checks() -> None:
 
     with tempfile.TemporaryDirectory(prefix="devkit-prune-home-") as home:
         home_path = Path(home)
-        legacy_target = PLUGIN_DIR / "skills/dig-goal"
+        legacy_target = PLUGIN_DIR / "skills/dig"
         for root in (
             ".agents/skills",
             ".codex/skills",

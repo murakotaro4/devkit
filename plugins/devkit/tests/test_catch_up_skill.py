@@ -53,7 +53,7 @@ def test_harness_task_progress_and_boundaries():
     for heading in ("## ハーネス判定", "## タスクリスト連動", "## 進捗可視化"):
         assert heading in content
     assert "スキル共通契約" in content
-    for boundary in ("memory-review", "improve-skill retro", "dig-goal"):
+    for boundary in ("memory-review", "improve-skill retro", "dig"):
         assert boundary in content
     assert "workflow contract 自体の変更" in content
 

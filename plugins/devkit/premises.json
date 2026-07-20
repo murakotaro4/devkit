@@ -78,11 +78,11 @@
         "(?<![A-Za-z0-9_])composer-2\\.5(?![A-Za-z0-9_-])"
       ],
       "verify_hint": "cursor-agent --list-models / Cursor changelog / web 検索",
-      "update_notes": "auto はサードパーティへルーティングされうるため常に明示。dig-goal の全コマンド例と契約テストを同時更新",
+      "update_notes": "auto はサードパーティへルーティングされうるため常に明示。dig の全コマンド例と契約テストを同時更新",
       "last_verified": "2026-07-20",
       "occurrences": [
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
+          "path": "plugins/devkit/skills/dig/SKILL.md",
           "count": 5
         },
         {
@@ -90,7 +90,7 @@
           "count": 16
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 3
         }
       ]
@@ -128,8 +128,8 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
-          "count": 16
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 14
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
@@ -148,7 +148,7 @@
           "count": 2
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 7
         },
         {
@@ -181,8 +181,8 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
-          "count": 10
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 8
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
@@ -197,7 +197,7 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 3
         }
       ]
@@ -233,8 +233,12 @@
           "count": 8
         },
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
-          "count": 26
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 22
+        },
+        {
+          "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
+          "count": 4
         },
         {
           "path": "plugins/devkit/skills/handoff/SKILL.md",
@@ -277,8 +281,8 @@
           "count": 7
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
-          "count": 4
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_handoff_skill.py",
@@ -324,11 +328,11 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
+          "path": "plugins/devkit/skills/dig/SKILL.md",
           "count": 5
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 5
         }
       ]
@@ -354,8 +358,8 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
-          "count": 6
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 5
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
@@ -366,8 +370,8 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
-          "count": 4
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
@@ -395,7 +399,7 @@
       ],
       "occurrences": [
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
+          "path": "plugins/devkit/skills/dig/SKILL.md",
           "count": 1
         },
         {
@@ -411,7 +415,7 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 1
         }
       ]
@@ -427,61 +431,16 @@
       ],
       "obsolete_value_patterns": [],
       "verify_hint": "cursor-agent --help",
-      "update_notes": "dig-goal の cursor-agent 起動・resume 例と契約テストを同時更新",
+      "update_notes": "dig の cursor-agent 起動・resume 例と契約テストを同時更新",
       "last_verified": "2026-07-12",
       "occurrences": [
         {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
+          "path": "plugins/devkit/skills/dig/SKILL.md",
           "count": 8
         },
         {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
+          "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 5
-        }
-      ]
-    },
-    {
-      "id": "claude-cli-flags",
-      "summary": "Claude CLI 委譲に使う許可ツール・権限フラグ",
-      "current_value": "--allowedTools",
-      "value_patterns": [
-        "(?<![A-Za-z0-9_])--allowedTools(?![A-Za-z0-9_])",
-        "(?<![A-Za-z0-9_])--permission-mode(?![A-Za-z0-9_])"
-      ],
-      "obsolete_value_patterns": [],
-      "verify_hint": "claude --help",
-      "update_notes": "dig-goal の起動プロンプト例と契約テストを同時更新",
-      "last_verified": "2026-07-12",
-      "occurrences": [
-        {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
-          "count": 3
-        },
-        {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
-          "count": 4
-        }
-      ]
-    },
-    {
-      "id": "claude-goal-objective-limit",
-      "summary": "Claude Code 組み込み /goal の条件文(objective)上限文字数",
-      "current_value": "4000",
-      "value_patterns": [
-        "(?:^4000$|(?<![A-Za-z0-9_])4,000(?![A-Za-z0-9_]))"
-      ],
-      "obsolete_value_patterns": [],
-      "verify_hint": "Claude Code 組み込み /goal への長文貼付けで実測、または公式 docs で確認",
-      "update_notes": "dig-goal のインライン判定契約と契約テストを同時更新",
-      "last_verified": "2026-07-15",
-      "occurrences": [
-        {
-          "path": "plugins/devkit/skills/dig-goal/SKILL.md",
-          "count": 8
-        },
-        {
-          "path": "plugins/devkit/tests/test_dig_goal_skill.py",
-          "count": 2
         }
       ]
     },

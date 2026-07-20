@@ -10,7 +10,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DISTRIBUTED_SKILLS = (
-    "dig-goal",
+    "dig",
+    "goal-prompt",
     "improve-skill",
     "setup",
     "refactor",
@@ -21,9 +22,10 @@ DISTRIBUTED_SKILLS = (
     "commit-push",
     "repo-loop",
 )
-DELEGATING_SKILLS = ("dig-goal", "improve-skill", "memory-review", "catch-up", "repo-loop")
+DELEGATING_SKILLS = ("dig", "improve-skill", "memory-review", "catch-up", "repo-loop")
 PLUGIN_DESCRIPTION_SURFACES = (
-    "/dig-goal",
+    "/dig",
+    "/goal-prompt",
     "skill 改善",
     "setup",
     "refactor",
@@ -380,7 +382,7 @@ def test_delegating_skills_have_progress_visibility_contract():
             f"{skill_name} の SKILL.md が AGENTS.md の進捗可視化契約を参照していない"
         )
 
-        if skill_name in ("dig-goal", "repo-loop"):
+        if skill_name in ("dig", "repo-loop"):
             frontmatter = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
             assert frontmatter
             assert "allowed-tools" not in frontmatter.group(1)
@@ -413,8 +415,8 @@ def test_codex_model_pinned_to_current_generation():
 def test_codex_model_and_effort_contract_stays_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
-        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
-            "plugins/devkit/skills/dig-goal/SKILL.md"
+        "plugins/devkit/skills/dig/SKILL.md": _read(
+            "plugins/devkit/skills/dig/SKILL.md"
         ),
     }
     for doc_name, text in documents.items():
@@ -433,26 +435,40 @@ def test_codex_model_and_effort_contract_stays_in_sync():
         )
 
 
-def test_dig_goal_execution_mode_terms_stay_in_sync():
+def test_dig_default_completion_terms_stay_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
         "README.md": _read("README.md"),
-        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
-            "plugins/devkit/skills/dig-goal/SKILL.md"
+        "plugins/devkit/skills/dig/SKILL.md": _read(
+            "plugins/devkit/skills/dig/SKILL.md"
         ),
     }
     for doc_name, text in documents.items():
-        assert "自律度" in text, f"{doc_name} に使い分け軸(自律度)がない"
-        assert "現セッション自律実行" in text, f"{doc_name} に自律実行形態がない"
-        assert "起動プロンプト提示" in text, f"{doc_name} に例外形態がない"
+        assert "既定は実装完遂" in text, f"{doc_name} に既定は実装完遂の記載がない"
+
+    readme_without_migration_notice = re.sub(
+        r"## Migration Notice\n.*?(?=\n## )",
+        "",
+        documents["README.md"],
+        count=1,
+        flags=re.DOTALL,
+    )
+    retired_check_documents = {
+        "AGENTS.md": documents["AGENTS.md"],
+        "README.md": readme_without_migration_notice,
+        "plugins/devkit/skills/dig/SKILL.md": documents["plugins/devkit/skills/dig/SKILL.md"],
+    }
+    for doc_name, text in retired_check_documents.items():
+        assert "現セッション自律実行" not in text, f"{doc_name} に旧実行形態名が残っている: 現セッション自律実行"
+        assert "起動プロンプト提示" not in text, f"{doc_name} に旧実行形態名が残っている: 起動プロンプト提示"
 
 
 def test_pr_merge_completion_contract_stays_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
         "README.md": _read("README.md"),
-        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
-            "plugins/devkit/skills/dig-goal/SKILL.md"
+        "plugins/devkit/skills/dig/SKILL.md": _read(
+            "plugins/devkit/skills/dig/SKILL.md"
         ),
     }
     retired_contracts = (
@@ -475,40 +491,34 @@ def test_pr_merge_completion_contract_stays_in_sync():
         for retired in retired_contracts:
             assert retired not in text, f"{doc_name} に旧 PR 統合契約が残っている: {retired}"
 
-    for doc_name in ("plugins/devkit/skills/dig-goal/SKILL.md",):
+    for doc_name in ("plugins/devkit/skills/dig/SKILL.md",):
         assert "直接統合へ自動フォールバック" in documents[doc_name], (
             f"{doc_name} に直接統合への自動フォールバック契約がない"
         )
     assert "別の統合方法へ黙って切り替えない" in documents[
-        "plugins/devkit/skills/dig-goal/SKILL.md"
+        "plugins/devkit/skills/dig/SKILL.md"
     ]
 
 
-def test_dig_goal_auto_execution_contract_stays_in_sync():
+def test_goal_prompt_save_contract_stays_in_sync():
     documents = {
         "AGENTS.md": _read("AGENTS.md"),
         "README.md": _read("README.md"),
-        "plugins/devkit/skills/dig-goal/SKILL.md": _read(
-            "plugins/devkit/skills/dig-goal/SKILL.md"
-        ),
     }
     for doc_name, text in documents.items():
-        assert any(
-            all(token in line for token in ("現セッション自律実行", "同一セッション", "完遂"))
-            for line in text.splitlines()
-        ), f"{doc_name} に同一行の現セッション自律実行契約がない"
-        assert any(
-            all(token in line for token in ("起動プロンプト提示", "例外形態"))
-            for line in text.splitlines()
-        ), f"{doc_name} に同一行の例外形態契約がない"
-        for retired in (
-            "実行はユーザーの 1 アクションに分離",
-            "作成側はゴールファイルを保存しないのが既定",
-            "既定成果物は本文全文を含むインライン 1 ブロック",
-            "起動プロンプトと回収手順を提示して終了",
-            "成果物はレビュー済みの `/goal` 自己完結起動ブロック 1 個(既定)",
-        ):
-            assert retired not in text, f"{doc_name} に旧既定契約が残っている: {retired}"
+        assert ".claude/goal-runs/" in text, f"{doc_name} に goal-prompt の保存先(.claude/goal-runs/)の記載がない"
+        assert "上書きせず" in text, f"{doc_name} に goal-prompt の上書きせず連番の契約がない"
+
+    agents = documents["AGENTS.md"]
+    usage_heading = "## dig と goal-prompt の使い分け"
+    assert usage_heading in agents, "AGENTS.md に dig と goal-prompt の使い分け節がない"
+    usage_section = agents.split(usage_heading, 1)[1].split("\n## ", 1)[0]
+    assert "上書きせず" in usage_section, "AGENTS.md の使い分け節に上書きせず連番の契約がない"
+    assert "自動算出" in usage_section, "AGENTS.md の使い分け節に上限停止の自動算出契約がない"
+
+    goal_prompt_skill = _read("plugins/devkit/skills/goal-prompt/SKILL.md")
+    assert "上書きせず" in goal_prompt_skill, "goal-prompt/SKILL.md に上書きせず連番の契約がない"
+    assert "自動算出" in goal_prompt_skill, "goal-prompt/SKILL.md に上限停止の自動算出契約がない"
 
 
 def test_rebase_conflict_resolution_contract_stays_in_sync():
@@ -520,7 +530,7 @@ def test_rebase_conflict_resolution_contract_stays_in_sync():
     for keyword in ("追加のみ", "和集合", "削除", "停止", "git rebase --abort", "verify-full", "片側"):
         assert keyword in contract, f"rebase 衝突の標準解消手順に契約キーワードがない: {keyword}"
 
-    dig_goal = _read("plugins/devkit/skills/dig-goal/SKILL.md")
-    integration = dig_goal.split("### 統合(step 9、終了条件達成後)", 1)[1].split("\n### ", 1)[0]
+    dig = _read("plugins/devkit/skills/dig/SKILL.md")
+    integration = dig.split("### 統合(step 9、終了条件達成後)", 1)[1].split("\n### ", 1)[0]
     assert "標準解消手順" in integration, "dig の統合手順が標準解消手順を参照していない"
     assert "git rebase --abort" in integration, "dig の統合手順に未知の衝突時の abort fallback がない"

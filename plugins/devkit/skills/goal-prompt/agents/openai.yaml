@@ -1,0 +1,4 @@
+interface:
+  display_name: "Goal Prompt"
+  short_description: "会話・計画から Goal プロンプトを保存生成する"
+  default_prompt: "$goal-prompt を使って会話・仕様・計画から Goal プロンプトを .claude/goal-runs/ へ保存し、/goal 起動プロンプトを出力してください。"

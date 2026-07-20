@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dig"
+  short_description: "要求を深掘りし実装まで完遂する"
+  default_prompt: "$dig を使って要求を深掘りし、計画、独立レビュー、worktree 実装、検証済み結果の報告と統合まで完遂してください。"

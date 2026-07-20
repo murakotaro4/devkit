@@ -7,7 +7,7 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user
 
 # /memory-review - AI メモリ棚卸し・前提監査
 
-親エージェント = スコープ確認・read-only 監査・分類・監査レポート作成・承認済み軽微修正の適用・dig-goal への引き継ぎ。監査は read-only とし、書き込みは「レポート保存」と「承認済み軽微修正の適用」の 2 つに限定する。自動削除・commit・push は行わない。
+親エージェント = スコープ確認・read-only 監査・分類・監査レポート作成・承認済み軽微修正の適用・dig への引き継ぎ。監査は read-only とし、書き込みは「レポート保存」と「承認済み軽微修正の適用」の 2 つに限定する。自動削除・commit・push は行わない。
 
 ## 対象
 
@@ -75,7 +75,7 @@ $ARGUMENTS
 7. 正本と参照先を明確化し、曖昧な「前回どおり」「いつもの」だけで運用しない。
 8. 秘密情報、資格情報、個人情報はレポートへ転記せず、存在とリスクだけを指摘する。
 9. 自動化ルールは破壊的操作、外部送信、権限昇格、commit / push を特に警戒して確認する。
-10. 最終書換は差分提案と承認後に限る。大きい変更は memory-review 内で抱えず dig-goal へ引き継ぐ。
+10. 最終書換は差分提案と承認後に限る。大きい変更は memory-review 内で抱えず dig へ引き継ぐ。
 
 ## フロー
 
@@ -221,16 +221,16 @@ Claude auto-memory は、対象 repo の絶対パスから導出した slug で 
 
 - 全て提示のみで終了
 - 軽微修正のみ適用
-- 軽微適用 + 大きい変更を dig-goal へ引き継ぎ
+- 軽微適用 + 大きい変更を dig へ引き継ぎ
 
 承認された軽微修正だけを適用する。軽微修正は、文言修正、重複削除、参照先追記など単一ファイル内で完結する差分に限る。構成変更を伴う大きい修正、ファイル分割、移動、スキル化、実装変更は memory-review で実行しない。
 
-大きい変更は、refactor と同じ「dig-goal step 2 計画草案」形式に整形して dig-goal へ引き継ぐ。詳細な実行契約は `plugins/devkit/skills/dig-goal/SKILL.md` を参照する。
+大きい変更は、refactor と同じ「dig step 2 計画草案」形式に整形して dig へ引き継ぐ。詳細な実行契約は `plugins/devkit/skills/dig/SKILL.md` を参照する。
 
 引き継ぎ形式:
 
 ```markdown
-## dig-goal step 2 計画草案
+## dig step 2 計画草案
 
 ### 目的
 ...
@@ -253,12 +253,12 @@ Claude auto-memory は、対象 repo の絶対パスから導出した slug で 
 
 ハーネス別の終了動作:
 
-- Claude 親: Skill ツールが使える場合は dig-goal を起動し、上記の計画草案を渡す。利用不可なら、ユーザーに `/dig-goal` で計画草案を実行するよう案内する。
-- Codex 親: `$dig-goal` を起動し、計画草案を渡すよう案内する。
+- Claude 親: Skill ツールが使える場合は dig を起動し、上記の計画草案を渡す。利用不可なら、ユーザーに `/dig` で計画草案を実行するよう案内する。
+- Codex 親: `$dig` を起動し、計画草案を渡すよう案内する。
 
 ### 7. 完了報告
 
-適用した修正、保存したレポートパス、dig-goal へ渡した項目、残る needs human decision を報告する。commit / push はユーザー指示時のみ行う。
+適用した修正、保存したレポートパス、dig へ渡した項目、残る needs human decision を報告する。commit / push はユーザー指示時のみ行う。
 
 ## 注意
 

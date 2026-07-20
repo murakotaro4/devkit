@@ -59,9 +59,9 @@ done
 
 | コマンド | 用途 | 不足時の影響と案内 |
 |---------|------|--------------------|
-| claude | Claude Code 親ハーネス。dig-goal の起動プロンプト提示形態における `claude --bg` 候補 | Claude 系の起動プロンプトを実行するユーザー側環境が不足する |
-| codex | dig-goal の実装・レビュー backend。自律実行用ゴール本文の独立レビュー候補 | codex 系 backend とゴール本文の codex レビュー候補が使えない |
-| cursor-agent | dig-goal の高速レーン(任意) | dig-goal で cursor-agent の選択肢を提示しないだけ。導入は任意 |
+| claude | Claude Code 親ハーネス。goal-prompt が出力する `/goal` 起動プロンプトの実行環境 | goal-prompt の起動プロンプトを実行するユーザー側環境が不足する |
+| codex | dig の実装・計画レビュー・diff レビュー backend | codex 系 backend とレビュー候補が使えない |
+| cursor-agent | dig の高速レーン(任意) | dig で cursor-agent の選択肢を提示しないだけ。導入は任意 |
 | node | statusline 適用 | statusline 適用が実行不可 |
 | uv | ルール同期・thought-db 同期・updater 同期・Windows Terminal フォント適用スクリプトの Python runner | ルール同期・thought-db 同期・updater 同期・フォント適用が実行不可(必須) |
 

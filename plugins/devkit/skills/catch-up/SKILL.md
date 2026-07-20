@@ -88,7 +88,7 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 
 - `memory-review` は内部メモリ・ルールを監査して発見する。外部値の更新実務は catch-up が担う。
 - `improve-skill retro` はセッション内エラー起点のスキル修正。catch-up は外部世界の変化起点の値追従を担う。
-- `dig-goal` は汎用実装。catch-up はレジストリ登録済みの値の追従専用で、workflow contract 自体の変更や新 backend 追加は dig-goal へ渡す。
+- `dig` は汎用実装。catch-up はレジストリ登録済みの値の追従専用で、workflow contract 自体の変更や新 backend 追加は dig へ渡す。
 
 ## 注意
 

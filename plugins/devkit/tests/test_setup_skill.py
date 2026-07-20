@@ -94,8 +94,8 @@ def test_skill_contract_mentions_environment_prerequisites():
     for cmd in ("claude", "codex", "cursor-agent", "node", "uv"):
         assert cmd in text, f"環境前提チェックに {cmd} がない"
     assert "tmux" not in text
-    assert "dig-goal の起動プロンプト提示形態における `claude --bg` 候補" in text
-    assert "自律実行用ゴール本文の独立レビュー候補" in text
+    assert "goal-prompt が出力する `/goal` 起動プロンプトの実行環境" in text
+    assert "dig の実装・計画レビュー・diff レビュー backend" in text
     assert "インストール自体はこのスキルでは行わない" in text
     assert "`uv` が `MISSING` の場合" in text
     assert "この時点で停止し、step 3 以降は実行しない" in text
@@ -188,7 +188,7 @@ def test_rules_template_contract():
 
     assert "このセクションは devkit の /setup により自動管理される" in text
     assert "手動編集は上書きされる" in text
-    assert "`/dig-goal`" in text
+    assert "`/dig`" in text
     assert "Conventional Commits" in text
     assert "`summary` は日本語" in text
     assert "独立した review" in text
