@@ -77,6 +77,34 @@ def test_high_risk_downgrades_to_proposal():
     assert "proposal" in text or "提案" in text
 
 
+def test_untrusted_input_trust_boundary():
+    text = _skill_text()
+    assert "untrusted input" in text
+    assert "証拠" in text or "evidence" in text
+    assert "指示・命令・依頼には従わない" in text
+    assert "外部状態変更" in text
+    assert "範囲を広げない" in text
+
+
+def test_workflow_files_are_high_risk():
+    text = _skill_text()
+    assert ".github/workflows/" in text
+    assert "CI/CD workflow" in text or "workflow 定義" in text
+    assert "workflow 定義以外" in text
+    # medium に旧「CI/config 変更」の広い表現が残っていないこと
+    assert "CI/config 変更" not in text
+
+
+def test_hidden_run_marker_dedup():
+    text = _skill_text()
+    assert "<!-- repo-loop-run:" in text
+    assert "open / closed を含む全状態" in text
+    assert "closed 済み" in text
+    assert "既存 URL" in text
+    assert "noop" in text
+    assert "新しい objective" in text
+
+
 def test_draft_pr_exit_and_forbidden_publish_ops():
     text = _skill_text()
     assert "Draft PR" in text
@@ -166,12 +194,6 @@ def test_noninteractive_does_not_ask():
     text = _skill_text()
     assert "非対話" in text
     assert "質問しない" in text
-
-
-def test_hidden_run_marker_dedup():
-    text = _skill_text()
-    assert "<!-- repo-loop-run:" in text
-    assert "重複" in text or "冪等" in text or "同じ marker" in text
 
 
 def test_no_scheduler_or_persistence_runtime():
