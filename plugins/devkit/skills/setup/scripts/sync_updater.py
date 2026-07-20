@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import stat
+import tempfile
 from pathlib import Path
 
 
@@ -80,6 +81,24 @@ def _prune_file(path: Path) -> None:
         raise RuntimeError(f"failed to prune updater remnant: {path}")
 
 
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
+    fd, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.devkit-tmp.")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(content)
+        if not path.is_symlink() and path.is_file():
+            mode = stat.S_IMODE(path.stat().st_mode)
+        else:
+            mode = 0o644
+        os.chmod(temporary_name, mode)
+        os.replace(temporary_name, path)
+    finally:
+        try:
+            os.unlink(temporary_name)
+        except OSError:
+            pass
+
+
 def sync_updater(
     home: Path,
     source_dir: Path,
@@ -151,18 +170,18 @@ def sync_updater(
     codex_bin.mkdir(parents=True, exist_ok=True)
     local_bin.mkdir(parents=True, exist_ok=True)
     for destination, source_content in desired_files.items():
-        if destination.is_symlink():
-            destination.unlink()
-        if (destination.read_bytes() if destination.is_file() else None) != source_content:
-            destination.write_bytes(source_content)
+        if destination.is_symlink() or (
+            destination.read_bytes() if destination.is_file() else None
+        ) != source_content:
+            _atomic_write_bytes(destination, source_content)
 
     if platform == "posix" and _needs_executable(executable):
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
-    if shim_path.is_symlink():
-        shim_path.unlink()
-    if (shim_path.read_bytes() if shim_path.is_file() else None) != desired_shim:
-        shim_path.write_bytes(desired_shim)
+    if shim_path.is_symlink() or (
+        shim_path.read_bytes() if shim_path.is_file() else None
+    ) != desired_shim:
+        _atomic_write_bytes(shim_path, desired_shim)
     if platform == "posix":
         shim_path.chmod(shim_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 

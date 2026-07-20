@@ -93,7 +93,7 @@ update-ccx
 update-ccx --version
 ```
 
-`update-ccx` が唯一の updater コマンドです。実装正本は全 OS 共通の `update-ccx.sh` です。旧名称 `update-devkit` は廃止され、`/setup` または updater 自身の更新時に残骸を prune します。
+`update-ccx` が唯一の updater コマンドです。実装正本は全 OS 共通の `update-ccx.sh` です。旧名称 `update-devkit` は廃止され、`/setup` または updater 自身の更新時に残骸を prune します。`/setup` 経由の updater 配置も atomic replacement です。
 
 `update-ccx` が行うこと:
 

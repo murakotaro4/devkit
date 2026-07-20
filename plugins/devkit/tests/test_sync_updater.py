@@ -310,3 +310,83 @@ def test_check_reports_changes_without_writing(tmp_path):
     assert source_root.read_text(encoding="utf-8") == "keep-this-root\n"
     assert not (home / ".codex/bin/update-ccx.sh").exists()
     assert not (home / ".local").exists()
+
+
+def test_sync_updater_replaces_existing_files_with_new_inode(tmp_path):
+    home = tmp_path / "home"
+    source = _source_tree(tmp_path)
+    codex_bin = home / ".codex/bin"
+    local_bin = home / ".local/bin"
+    codex_bin.mkdir(parents=True)
+    local_bin.mkdir(parents=True)
+
+    destination = codex_bin / "update-ccx.sh"
+    shim_path = local_bin / "update-ccx"
+    destination.write_text("old-destination\n", encoding="utf-8")
+    shim_path.write_text("old-shim\n", encoding="utf-8")
+
+    # 後段の chmod+x と組み合わせても、atomic write が mode を引き継いだことが分かる値
+    preserved_mode = 0o640
+    if os.name != "nt":
+        destination.chmod(preserved_mode)
+        shim_path.chmod(preserved_mode)
+
+    dest_ino_before = destination.stat().st_ino
+    shim_ino_before = shim_path.stat().st_ino
+
+    sync_updater.sync_updater(home, source, "posix", False)
+
+    assert destination.read_bytes() == (source / "update-ccx.sh").read_bytes()
+    assert shim_path.read_bytes() == sync_updater.shell_shim(
+        home.resolve() / ".codex/bin/update-ccx.sh"
+    )
+    assert destination.stat().st_ino != dest_ino_before
+    assert shim_path.stat().st_ino != shim_ino_before
+    if os.name != "nt":
+        expected_mode = preserved_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        assert stat.S_IMODE(destination.stat().st_mode) == expected_mode
+        assert stat.S_IMODE(shim_path.stat().st_mode) == expected_mode
+
+
+def test_update_ccx_tail_exits_immediately_after_main(tmp_path):
+    update_ccx = ROOT / "plugins/devkit/scripts/update-ccx.sh"
+    lines = update_ccx.read_text(encoding="utf-8").splitlines()
+    tail_line = lines[-1].strip()
+    assert tail_line == 'main "$@"; exit $?'
+
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash is unavailable")
+
+    # padding で元ファイルを長くし、main 内で実行時生成のより長い garbage へ
+    # in-place 上書きする。exit 無しだと main 復帰後に garbage を再読込して失敗する。
+    padding = "\n".join(f"# padding line {index}" for index in range(3000))
+    script = tmp_path / "self_overwrite_tail.sh"
+    script.write_text(
+        "#!/bin/bash\n"
+        f"{padding}\n"
+        "main() {\n"
+        "  {\n"
+        "    echo '#!/bin/bash'\n"
+        "    local i\n"
+        "    for i in $(seq 1 10000); do\n"
+        "      echo \"GARBAGE_LINE_$i this is not valid bash syntax !!!\"\n"
+        "    done\n"
+        "  } >\"$0\"\n"
+        "  echo TAIL_EXIT_COMPLETED\n"
+        "}\n"
+        f"{tail_line}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = subprocess.run(
+        [bash, script.as_posix()],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "TAIL_EXIT_COMPLETED" in result.stdout
+    assert result.stderr == ""
