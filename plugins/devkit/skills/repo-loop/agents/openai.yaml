@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repo Loop"
+  short_description: "Proactively improve a repository"
+  default_prompt: "Use $repo-loop to inspect this repository and its trigger context, select exactly one safe and verifiable improvement, implement it in an isolated worktree when permitted, verify it, and finish with a draft PR, proposal, or no-op result."
