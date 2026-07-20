@@ -231,7 +231,7 @@ secret・token・private ThoughtDB 本文・長大な log は含めない。
 
 ## 重複実行防止
 
-V1 は中央 DB を持たず、GitHub 成果物の hidden marker で最小限の冪等性を持たせる。`run_key` は repository identity / `trigger.type` / `trigger.id`(なければ `trigger.name`・`trigger.summary`・base_sha)/ normalized objective を正規化して作る(hash の先頭 12 文字等の短い安定キーでよい)。`trigger.id` 欠落時も異なる event シグナルが別 `run_key` になる。実装前に open / closed を含む全状態の PR/Issue から `<!-- repo-loop-run:<run_key> -->` を検索し、同じ marker が存在する場合は新しい PR/Issue を作らず既存 artifact を報告して `noop` とする。closed 済み成果物が見つかった場合も新規 artifact を作らず既存 URL を報告して `noop` とする(再実行が本当に必要な場合はユーザーが明示的に新しい objective を与える)。GitHub 検索が利用不能な場合は警告を残して継続してよいが、同一 run 内で二重 publish してはならない。
+V1 は中央 DB を持たず、GitHub 成果物の hidden marker で最小限の冪等性を持たせる。`run_key` は repository identity / `trigger.type` / `trigger.id`(なければ `trigger.name`・`trigger.url`・`trigger.summary`・base_sha)/ normalized objective を正規化して作る(hash の先頭 12 文字等の短い安定キーでよい)。`trigger.id` 欠落時も異なる event シグナルが別 `run_key` になる。実装前に open / closed を含む全状態の PR/Issue から `<!-- repo-loop-run:<run_key> -->` を検索し、同じ marker が存在する場合は新しい PR/Issue を作らず既存 artifact を報告して `noop` とする。closed 済み成果物が見つかった場合も新規 artifact を作らず既存 URL を報告して `noop` とする(再実行が本当に必要な場合はユーザーが明示的に新しい objective を与える)。GitHub 検索が利用不能な場合は警告を残して継続してよいが、同一 run 内で二重 publish してはならない。
 
 ## 外部状態変更の許可範囲
 

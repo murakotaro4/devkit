@@ -141,6 +141,7 @@ def test_hidden_run_marker_dedup():
     assert "noop" in text
     assert "新しい objective" in text
     assert "trigger.name" in text
+    assert "trigger.url" in text
     assert "trigger.summary" in text
     assert "trigger.id` 欠落時も異なる event シグナルが別" in text
 
