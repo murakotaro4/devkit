@@ -103,7 +103,7 @@ flowchart TD
     A[INIT] --> B[LOAD_CONTEXT]
     B --> C[OBSERVE]
     C --> D[SELECT_ONE]
-    D -->|候補なし| N[RECORD noop]
+    D -->|候補なし| R[RECORD]
     D -->|候補あり| E[PLAN]
     E --> F[RISK_GATE]
     F -->|proposal_only または high risk| P[PUBLISH_PROPOSAL]
@@ -117,11 +117,10 @@ flowchart TD
     K -->|指摘ありかつ attempt < 2| I
     K -->|指摘ありかつ attempt = 2| Q
     K -->|findings なし| L[PUBLISH_DRAFT_PR]
-    P --> R[RECORD]
+    P --> R
     Q --> R
     L --> R
-    N --> S[DONE]
-    R --> S
+    R --> S[DONE]
 ```
 
 ## 各ノードの契約
@@ -140,7 +139,7 @@ trigger に直接関係する証拠を最優先(failing CI/check/log、open Issu
 
 ### SELECT_ONE
 
-最大 3 件の候補を比較し 1 件だけ選ぶ。候補ごとに evidence / expected impact / risk / verification method / estimated scope / trigger relevance を短く記録。選択順: (1) trigger を直接解消 (2) 再発防止まで機械的に検証できる (3) repo の目的・現在の優先事項に合う (4) より小さく review 可能な差分 (5) 失敗時に容易に戻せる。同等なら scope が小さい候補。安全かつ検証可能な候補がなければ `noop` または `proposal`。1 回の run で複数課題を実装してはならない。
+最大 3 件の候補を比較し 1 件だけ選ぶ。候補ごとに evidence / expected impact / risk / verification method / estimated scope / trigger relevance を短く記録。選択順: (1) trigger を直接解消 (2) 再発防止まで機械的に検証できる (3) repo の目的・現在の優先事項に合う (4) より小さく review 可能な差分 (5) 失敗時に容易に戻せる。同等なら scope が小さい候補。安全かつ検証可能な候補がなければ `noop` または `proposal`。候補なしの場合も RECORD を通り、result JSON の出力と(worktree 作成済みなら)後始末を行う。1 回の run で複数課題を実装してはならない。
 
 ### PLAN
 
@@ -154,7 +153,7 @@ objective / selected_task / evidence / write_scope / 各 path の変更内容 / 
 
 ### PREPARE_WORKTREE
 
-`<remote>/<default>`(INIT で解決した remote。既定名は origin)を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本とし、既存 branch と衝突する場合(および schedule / event 起点の自動実行)は `run_key` の先頭 8 文字などの一意サフィックスを付ける。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。worktree 作成後、selected_task の evidence を最新 base 上で再検証し、既に解消済みなら実装せず `noop` へ遷移する。
+`<remote>/<default>`(INIT で解決した remote。既定名は origin)を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本とし、既存 branch と衝突する場合(および schedule / event 起点の自動実行)は `run_key` の先頭 8 文字などの一意サフィックスを付ける。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。worktree 作成後、selected_task の evidence を最新 base 上で再検証し、既に解消済みなら実装せず RECORD 経由で `noop` へ遷移する。
 
 ### BASELINE
 
@@ -170,7 +169,7 @@ selected_task と write_scope だけを変更。「ついで修正」禁止。ro
 
 ### INDEPENDENT_REVIEW
 
-コード変更では利用可能な独立 backend で計画・diff・検証証拠をレビューする。レビュー前に selected_task の実装を作業 branch へ commit する(target repo の commit 規約に従う)。レビューは branch の commit 済み diff を対象にする。第一候補は worktree 内での `codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null`、利用不能なら独立サブエージェントへ diff と計画を渡す。観点: objective 充足 / scope 外変更 / regression・security・edge case / tests が failure を先に捉え修正後に成功するか / docs・config 整合 / rollback 可能性。指摘があれば write_scope 内で修正して再検証。独立レビュー手段がすべて利用不能な場合: 対象 repo のルール(AGENTS.md 等)が独立レビューを必須とする場合は Draft PR を公開せず `proposal` へ降格する。必須としない repo のみ、レビュー未実施の事実を Draft PR に明記し人間 review 必須のまま公開してよい(自動 merge はないため review 不能だけを理由に成果を破棄する必要はない)。
+ファイル変更を伴うすべての実装では(docs / config のみの変更を含む)利用可能な独立 backend で計画・diff・検証証拠をレビューする。レビュー前に selected_task の実装を作業 branch へ commit する(target repo の commit 規約に従う)。レビューは branch の commit 済み diff を対象にする。レビュー起動時、commit 済み diff に加えて、PLAN で確定した objective・selected_task・write_scope と VERIFY の検証結果(コマンドと exit status)をレビュー指示文として渡す(codex review の場合はコマンドの指示引数として要約を渡す)。第一候補は worktree 内での `codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null`、利用不能なら独立サブエージェントへ diff と計画を渡す。観点: objective 充足 / scope 外変更 / regression・security・edge case / tests が failure を先に捉え修正後に成功するか / docs・config 整合 / rollback 可能性。指摘があれば write_scope 内で修正して再検証。独立レビュー手段がすべて利用不能な場合: 対象 repo のルール(AGENTS.md 等)が独立レビューを必須とする場合は Draft PR を公開せず `proposal` へ降格する。必須としない repo のみ、レビュー未実施の事実を Draft PR に明記し人間 review 必須のまま公開してよい(自動 merge はないため review 不能だけを理由に成果を破棄する必要はない)。
 
 ### PUBLISH_DRAFT_PR
 

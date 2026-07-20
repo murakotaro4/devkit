@@ -54,6 +54,27 @@ def test_select_one_contract():
     assert "SELECT_ONE" in text
     assert "1 回の run で複数課題を実装してはならない" in text
     assert "最大 3 件" in text
+    assert "候補なしの場合も RECORD を通り" in text
+    assert "result JSON" in text
+
+
+def test_all_terminals_go_through_record():
+    text = _skill_text()
+    assert "D -->|候補なし| R[RECORD]" in text
+    assert "N[RECORD noop]" not in text
+    assert "N --> S[DONE]" not in text
+    assert "R --> S[DONE]" in text
+    assert "RECORD 経由で `noop`" in text
+
+
+def test_independent_review_covers_all_file_changes_with_context():
+    text = _skill_text()
+    assert "ファイル変更を伴うすべての実装では" in text
+    assert "docs / config のみの変更を含む" in text
+    assert "コード変更では" not in text
+    assert "レビュー指示文として渡す" in text
+    assert "objective・selected_task・write_scope" in text
+    assert "VERIFY の検証結果" in text
 
 
 def test_noop_is_normal_outcome():
