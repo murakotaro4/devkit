@@ -24,6 +24,7 @@ EXPECTED_SKILLS = {
     "refactor",
     "memory-review",
     "handoff",
+    "repo-loop",
 }
 REQUIRED_PATHS = {
     "plugins/devkit/premises.json",

@@ -5,7 +5,8 @@
 ## Repo Context
 
 - このリポジトリは DevKit のセットアップ/更新スクリプト、skills、templates を管理する
-- 配布 skill は `plugins/devkit/skills/dig-goal/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/`、`plugins/devkit/skills/commit-push/` の 9 本とする
+- 配布 skill は `plugins/devkit/skills/dig-goal/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/`、`plugins/devkit/skills/commit-push/`、`plugins/devkit/skills/repo-loop/` の 10 本とする
+- repo-loop は trigger(手動・定期・イベント)起点で改善課題を自分で選ぶ自律ループであり、非対話実行では質問せず、low/medium risk は事前承認なしで Draft PR まで(auto-merge・ready 化はしない)、high risk は提案 Issue へ降格する。dig-goal(ユーザー要求起点・計画承認・統合完遂)とは起点と出口で分離し、repo-loop から dig-goal を自動呼び出さない
 - statusline 配布物は `plugins/devkit/statusline/` に同梱し、適用は setup workflow から行う
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
@@ -50,7 +51,7 @@ worktree 統合の rebase で発生する既知の機械的衝突は、以下の
 - 同席実装: その場で完成させる。成果物は実装済み diff。ユーザーが同席し、判断をリアルタイムに供給する
 - 現セッション自律実行: 判断を前倒しして焼き込んだゴール本文を作り、独立レビュー後そのまま同一セッションで実行して完遂する。成果物は実行完了と `.claude/goal-runs/` の完了レポート
 - 起動プロンプト提示: 定期実行・別ターミナル・別 PC・後で実行・白紙コンテキスト実行などをユーザーが明示した場合だけ使う例外形態。完成した起動プロンプトと検収チェックリストを提示して終了する
-- 定期ループは dig-goal が `.claude/goal-runs/` に保存したゴールファイルを参照する `/loop` 起動プロンプトを提示する
+- 定期ループは dig-goal が `.claude/goal-runs/` に保存したゴールファイルを参照する `/loop` 起動プロンプトを提示する。固定済みゴールの反復巡回は dig-goal の `/loop` 形態、課題を毎回自選する定期改善ループは repo-loop(envelope の `trigger.type: schedule`)を使う
 
 ## Maintenance Rules
 
@@ -141,6 +142,7 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 - `plugins/devkit/skills/backlog/SKILL.md`: 残課題の横断棚卸し(read-only)・dig-goal 引き継ぎ workflow の正本
 - `plugins/devkit/skills/catch-up/SKILL.md`: 外部前提の裏取り・影響棚卸し・追従更新 workflow の正本
 - `plugins/devkit/skills/commit-push/SKILL.md`: 論理グループ分割 commit + upstream push workflow の正本(secret 2 層検査・literal pathspec・明示単一 refspec)
+- `plugins/devkit/skills/repo-loop/SKILL.md`: trigger 起点の自律改善ループ(調査・課題選定・実装・検証・Draft PR / 提案 Issue / no-op)workflow の正本
 - `plugins/devkit/premises.json`: モデル名・CLI フラグ・ハーネス機能・marketplace 名の外部前提レジストリ
 - `plugins/devkit/statusline/`: plugin 同梱 statusline 実装と適用スクリプト
 - `plugins/devkit/templates/codex/`: Codex 設定テンプレート

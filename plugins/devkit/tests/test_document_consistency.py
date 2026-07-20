@@ -19,8 +19,9 @@ DISTRIBUTED_SKILLS = (
     "backlog",
     "catch-up",
     "commit-push",
+    "repo-loop",
 )
-DELEGATING_SKILLS = ("dig-goal", "improve-skill", "memory-review", "catch-up")
+DELEGATING_SKILLS = ("dig-goal", "improve-skill", "memory-review", "catch-up", "repo-loop")
 PLUGIN_DESCRIPTION_SURFACES = (
     "/dig-goal",
     "skill 改善",
@@ -30,6 +31,7 @@ PLUGIN_DESCRIPTION_SURFACES = (
     "handoff",
     "/catch-up",
     "commit-push",
+    "repo-loop",
 )
 
 
@@ -378,7 +380,7 @@ def test_delegating_skills_have_progress_visibility_contract():
             f"{skill_name} の SKILL.md が AGENTS.md の進捗可視化契約を参照していない"
         )
 
-        if skill_name == "dig-goal":
+        if skill_name in ("dig-goal", "repo-loop"):
             frontmatter = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
             assert frontmatter
             assert "allowed-tools" not in frontmatter.group(1)
