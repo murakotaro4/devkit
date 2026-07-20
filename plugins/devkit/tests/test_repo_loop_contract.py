@@ -92,6 +92,31 @@ def test_worktree_required():
     assert "通常 checkout には書き込まない" in text
 
 
+def test_init_fetches_latest_origin_for_observation():
+    text = _skill_text()
+    assert "git fetch origin" in text
+    assert "origin/<default>" in text
+    assert "観測基準" in text
+    assert "fetch 不能なら警告" in text
+
+
+def test_prepare_worktree_revalidates_evidence_and_unique_branch():
+    text = _skill_text()
+    assert "repo-loop/<YYYYMMDD>-<slug>" in text
+    assert "run_key" in text
+    assert "一意サフィックス" in text
+    assert "最新 base 上で再検証" in text
+    assert "解消済みなら実装せず" in text
+    assert "noop" in text
+
+
+def test_risk_includes_none_before_risk_gate():
+    text = _skill_text()
+    assert '"risk": "low | medium | high | none"' in text
+    assert "RISK_GATE 到達前に終了した run では" in text
+    assert "none" in text
+
+
 def test_thoughtdb_readonly_and_nonfatal_missing():
     text = _skill_text()
     assert "read-only" in text

@@ -124,7 +124,7 @@ flowchart TD
 
 ### INIT
 
-git repo root 解決、remote / default branch / 現在 SHA / working tree 状態確認、trigger 正規化、`run_key` 生成。通常 checkout には書き込まない。
+git repo root 解決、remote / default branch / 現在 SHA / working tree 状態確認、trigger 正規化、`run_key` 生成。通常 checkout には書き込まない。可能なら `git fetch origin` を行い、最新 `origin/<default>` を観測基準にする(fetch 不能なら警告を記録して継続)。
 
 ### LOAD_CONTEXT
 
@@ -150,7 +150,7 @@ objective / selected_task / evidence / write_scope / 各 path の変更内容 / 
 
 ### PREPARE_WORKTREE
 
-`origin/<default>` を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。
+`origin/<default>` を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本とし、既存 branch と衝突する場合(および schedule / event 起点の自動実行)は `run_key` の先頭 8 文字などの一意サフィックスを付ける。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。worktree 作成後、selected_task の evidence を最新 base 上で再検証し、既に解消済みなら実装せず `noop` へ遷移する。
 
 ### BASELINE
 
@@ -178,7 +178,7 @@ GitHub と認証が利用可能なら Issue を作成。既存 Issue が trigger
 
 ### RECORD
 
-人間向け要約に加え、最終行付近へ機械可読 JSON を出力する:
+人間向け要約に加え、最終行付近へ機械可読 JSON を出力する。RISK_GATE 到達前に終了した run では `risk` は `none` とする。
 
 ```json
 {
@@ -189,7 +189,7 @@ GitHub と認証が利用可能なら Issue を作成。既存 Issue が trigger
   "base_sha": "...",
   "objective": "...",
   "selected_task": "...",
-  "risk": "low | medium | high",
+  "risk": "low | medium | high | none",
   "attempts": 0,
   "changed_paths": [],
   "checks": [
