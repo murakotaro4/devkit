@@ -464,6 +464,12 @@ def test_v9_shell_migration_preserves_unmanaged_same_name_skills(tmp_path):
 
 
 def test_v9_shell_migration_handles_dangling_symlink_provenance(tmp_path):
+    # dangling 検証には「devkit source 配下だが実在しないパス」が必要。
+    # v14 で撤去済みの dig-goal ディレクトリを使う(dig / goal-prompt は実在するため不可)。
+    # symlink 権限に依存しない前提チェックのため、skip ガードより前で常に検証する。
+    managed_target = ROOT / "plugins" / "devkit" / "skills" / "dig-goal"
+    assert not managed_target.exists()
+
     require_symlink_support()
 
     home = tmp_path / "home"
@@ -473,10 +479,6 @@ def test_v9_shell_migration_handles_dangling_symlink_provenance(tmp_path):
 
     managed_link = home / ".agents" / "skills" / "dig"
     managed_link.parent.mkdir(parents=True)
-    # dangling 検証には「devkit source 配下だが実在しないパス」が必要。
-    # v14 で撤去済みの dig-goal ディレクトリを使う(dig / goal-prompt は実在するため不可)。
-    managed_target = ROOT / "plugins" / "devkit" / "skills" / "dig-goal"
-    assert not managed_target.exists()
     try:
         managed_link_target = os.path.relpath(managed_target, start=managed_link.parent)
     except ValueError:
