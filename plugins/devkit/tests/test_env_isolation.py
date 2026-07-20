@@ -187,7 +187,7 @@ def test_run_update_devkit_smoke_sets_userprofile_matching_sandboxed_home(monkey
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(os.name != "nt", reason="HOME/USERPROFILE 分離は Windows 固有の懸念")
+@pytest.mark.skipif(os.name != "nt", reason="[platform] HOME/USERPROFILE 分離は Windows 固有の懸念")
 def test_sync_updater_path_home_resolves_only_within_isolated_userprofile(tmp_path):
     fake_user_home = tmp_path / "fake-user-home"
     sentinels = _seed_managed_sentinels(fake_user_home)
@@ -227,7 +227,7 @@ def test_sync_updater_path_home_resolves_only_within_isolated_userprofile(tmp_pa
     _assert_sentinels_unchanged(sentinels)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="cmd -> Git Bash チェーンは Windows 固有")
+@pytest.mark.skipif(os.name != "nt", reason="[platform] cmd -> Git Bash チェーンは Windows 固有")
 def test_update_ccx_cmd_to_bash_chain_forwards_isolated_home_and_preserves_sentinels(tmp_path):
     bash_candidates = [
         Path(os.environ.get("ProgramFiles", "")) / "Git/bin/bash.exe",
@@ -237,7 +237,7 @@ def test_update_ccx_cmd_to_bash_chain_forwards_isolated_home_and_preserves_senti
     if git:
         bash_candidates.append(Path(git).parent.parent / "bin/bash.exe")
     if not any(candidate.is_file() for candidate in bash_candidates):
-        pytest.skip("Git for Windows bash is not installed")
+        pytest.skip("[tool:bash] Git for Windows bash is not installed")
 
     fake_user_home = tmp_path / "fake-user-home"
     sentinels = _seed_managed_sentinels(fake_user_home)
@@ -314,11 +314,11 @@ def _truncated_update_ccx_sh(tmp_path: Path) -> Path:
     return lib_path
 
 
-@pytest.mark.skipif(os.name != "nt", reason="cygpath fallback は Windows 固有")
+@pytest.mark.skipif(os.name != "nt", reason="[platform] cygpath fallback は Windows 固有")
 def test_update_ccx_cygpath_failure_userprofile_fallback_preserves_sentinels(tmp_path):
     bash = shutil.which("bash")
     if not bash:
-        pytest.skip("bash が見つからない")
+        pytest.skip("[tool:bash] bash が見つからない")
 
     fake_user_home = tmp_path / "fake-user-home"
     sentinels = _seed_managed_sentinels(fake_user_home)

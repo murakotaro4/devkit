@@ -113,7 +113,7 @@ def test_ensure_devkit_repo_root_reports_symbolic_ref_error(tmp_path):
 def test_get_devkit_repo_root_reuses_detached_head_checkout_in_powershell(tmp_path):
     pwsh = shutil.which("pwsh")
     if not pwsh:
-        pytest.skip("pwsh is not installed")
+        pytest.skip("[tool:pwsh] pwsh is not installed")
 
     source = tmp_path / "source"
     checkout = tmp_path / "checkout"
@@ -162,7 +162,7 @@ def test_get_devkit_repo_root_reuses_detached_head_checkout_in_powershell(tmp_pa
 def test_get_devkit_repo_root_reports_symbolic_ref_error_in_powershell(tmp_path):
     pwsh = shutil.which("pwsh")
     if not pwsh:
-        pytest.skip("pwsh is not installed")
+        pytest.skip("[tool:pwsh] pwsh is not installed")
 
     source = tmp_path / "source"
     checkout = tmp_path / "checkout"

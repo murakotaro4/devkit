@@ -53,7 +53,7 @@ def _shell_function(source: str, name: str) -> str:
 def test_managed_file_self_replacement_keeps_running_original_inode(tmp_path):
     bash = shutil.which("bash")
     if bash is None:
-        pytest.skip("bash is unavailable")
+        pytest.skip("[tool:bash] bash is unavailable")
 
     running_script = tmp_path / "self-update.sh"
     replacement_script = tmp_path / "replacement.sh"
@@ -135,7 +135,7 @@ def _cmd_shim_from_devkit_lib(target_command: Path) -> bytes:
     return ("\r\n".join(lines) + "\r\n").encode()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX 実行ビットは Windows のファイルシステムでは表現できない")
+@pytest.mark.skipif(os.name == "nt", reason="[platform] POSIX 実行ビットは Windows のファイルシステムでは表現できない")
 def test_posix_sync_is_idempotent_and_uses_expected_targets(tmp_path):
     home = tmp_path / "home"
     source = _source_tree(tmp_path)
@@ -201,7 +201,7 @@ def test_sync_replaces_managed_symlinks_without_touching_their_targets(tmp_path)
         managed_script.symlink_to(external_script)
         managed_shim.symlink_to(external_shim)
     except OSError:
-        pytest.skip("symlink creation is unavailable in this environment")
+        pytest.skip("[symlink] symlink creation is unavailable in this environment")
 
     changed, actions = sync_updater.sync_updater(home, source, "posix", False)
 
@@ -356,7 +356,7 @@ def test_update_ccx_tail_exits_immediately_after_main(tmp_path):
 
     bash = shutil.which("bash")
     if bash is None:
-        pytest.skip("bash is unavailable")
+        pytest.skip("[tool:bash] bash is unavailable")
 
     # padding で元ファイルを長くし、main 内で実行時生成のより長い garbage へ
     # in-place 上書きする。exit 無しだと main 復帰後に garbage を再読込して失敗する。

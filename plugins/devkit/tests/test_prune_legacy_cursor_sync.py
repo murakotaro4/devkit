@@ -5,11 +5,12 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
+
+from conftest import require_symlink_support
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -17,18 +18,6 @@ PLUGIN_ROOT = ROOT / "plugins/devkit"
 SCRIPT = PLUGIN_ROOT / "skills/setup/scripts/prune_legacy_cursor_sync.py"
 STUB = PLUGIN_ROOT / "skills/setup/scripts/sync_cursor_skills.py"
 MANIFEST_NAME = ".devkit-sync-manifest.json"
-
-
-def _probe_symlink_support() -> bool:
-    try:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            probe_dir = Path(tmp_dir)
-            target = probe_dir / "target"
-            target.mkdir()
-            (probe_dir / "link").symlink_to(target, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        return False
-    return True
 
 
 def write_manifest(target: Path, files: dict[str, str]) -> Path:
@@ -140,8 +129,7 @@ def test_unlisted_user_assets_are_untouched(tmp_path):
 
 
 def test_symlink_entry_is_preserved_as_irregular(tmp_path):
-    if not _probe_symlink_support():
-        pytest.skip("symlink unavailable")
+    require_symlink_support()
     target = tmp_path / ".cursor"
     target.mkdir()
     external = tmp_path / "external.txt"
@@ -161,8 +149,7 @@ def test_symlink_entry_is_preserved_as_irregular(tmp_path):
 
 
 def test_intermediate_symlink_is_preserved_as_irregular(tmp_path):
-    if not _probe_symlink_support():
-        pytest.skip("symlink unavailable")
+    require_symlink_support()
     target = tmp_path / ".cursor"
     target.mkdir()
     external = tmp_path / "external"
@@ -181,8 +168,7 @@ def test_intermediate_symlink_is_preserved_as_irregular(tmp_path):
 
 
 def test_manifest_symlink_is_rejected_without_touching_external_file(tmp_path):
-    if not _probe_symlink_support():
-        pytest.skip("symlink unavailable")
+    require_symlink_support()
     target = tmp_path / ".cursor"
     target.mkdir()
     external = tmp_path / "manifest.json"
@@ -211,8 +197,7 @@ def test_manifest_directory_is_rejected_without_removal(tmp_path):
 
 
 def test_target_root_symlink_is_noop(tmp_path):
-    if not _probe_symlink_support():
-        pytest.skip("symlink unavailable")
+    require_symlink_support()
     external = tmp_path / "external"
     external.mkdir()
     manifest = external / MANIFEST_NAME
