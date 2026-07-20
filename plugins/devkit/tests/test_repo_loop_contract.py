@@ -124,6 +124,9 @@ def test_hidden_run_marker_dedup():
     assert "既存 URL" in text
     assert "noop" in text
     assert "新しい objective" in text
+    assert "trigger.name" in text
+    assert "trigger.summary" in text
+    assert "trigger.id` 欠落時も異なる event シグナルが別" in text
 
 
 def test_draft_pr_exit_and_forbidden_publish_ops():
@@ -196,6 +199,9 @@ def test_worktree_cleanup_at_run_end():
     assert "この run が作成した一時 worktree" in text
     assert "branch は削除しない" in text
     assert "他セッションの worktree" in text
+    assert "git branch -d" in text
+    assert "-D" in text
+    assert "未 push のクリーンな作業 branch" in text
 
 
 def test_thoughtdb_readonly_and_nonfatal_missing():

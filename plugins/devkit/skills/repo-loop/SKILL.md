@@ -183,7 +183,7 @@ GitHub と認証が利用可能なら Issue を作成。既存 Issue が trigger
 
 人間向け要約に加え、最終行付近へ機械可読 JSON を出力する。RISK_GATE 到達前に終了した run では `risk` は `none` とする。
 
-run の終端(outcome 確定後)に、この run が作成した一時 worktree を `git worktree remove`(`--force` は使わない)で削除する。Draft PR / failure record に必要な branch は削除しない(push 済み branch は remote に保持される)。未追跡ファイル等で remove が拒否された場合は `--force` せずパスを結果に報告して残す。この run が作成した worktree 以外(ユーザーの checkout・他セッションの worktree)には触れない。
+run の終端(outcome 確定後)に、この run が作成した一時 worktree を `git worktree remove`(`--force` は使わない)で削除する。Draft PR / failure record に必要な branch は削除しない(push 済み branch は remote に保持される)。未追跡ファイル等で remove が拒否された場合は `--force` せずパスを結果に報告して残す。この run が作成した worktree 以外(ユーザーの checkout・他セッションの worktree)には触れない。worktree 削除後、Draft PR・failure record に使われていない未 push のクリーンな作業 branch(この run が作成したもの)は `git branch -d` で削除する(`-D` は使わない。削除できない場合は残して結果に報告する)。
 
 ```json
 {
@@ -210,7 +210,7 @@ secret・token・private ThoughtDB 本文・長大な log は含めない。
 
 ## 重複実行防止
 
-V1 は中央 DB を持たず、GitHub 成果物の hidden marker で最小限の冪等性を持たせる。`run_key` は repository identity / `trigger.type` / `trigger.id`(なければ base_sha)/ normalized objective を正規化して作る(hash の先頭 12 文字等の短い安定キーでよい)。実装前に open / closed を含む全状態の PR/Issue から `<!-- repo-loop-run:<run_key> -->` を検索し、同じ marker が存在する場合は新しい PR/Issue を作らず既存 artifact を報告して `noop` とする。closed 済み成果物が見つかった場合も新規 artifact を作らず既存 URL を報告して `noop` とする(再実行が本当に必要な場合はユーザーが明示的に新しい objective を与える)。GitHub 検索が利用不能な場合は警告を残して継続してよいが、同一 run 内で二重 publish してはならない。
+V1 は中央 DB を持たず、GitHub 成果物の hidden marker で最小限の冪等性を持たせる。`run_key` は repository identity / `trigger.type` / `trigger.id`(なければ `trigger.name`・`trigger.summary`・base_sha)/ normalized objective を正規化して作る(hash の先頭 12 文字等の短い安定キーでよい)。`trigger.id` 欠落時も異なる event シグナルが別 `run_key` になる。実装前に open / closed を含む全状態の PR/Issue から `<!-- repo-loop-run:<run_key> -->` を検索し、同じ marker が存在する場合は新しい PR/Issue を作らず既存 artifact を報告して `noop` とする。closed 済み成果物が見つかった場合も新規 artifact を作らず既存 URL を報告して `noop` とする(再実行が本当に必要な場合はユーザーが明示的に新しい objective を与える)。GitHub 検索が利用不能な場合は警告を残して継続してよいが、同一 run 内で二重 publish してはならない。
 
 ## 外部状態変更の許可範囲
 
