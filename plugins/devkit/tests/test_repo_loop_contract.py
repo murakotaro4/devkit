@@ -190,6 +190,9 @@ def test_prepare_worktree_revalidates_evidence_and_unique_branch():
     assert "解消済みなら実装せず" in text
     assert "noop" in text
     assert "<remote>/<default>" in text
+    assert "非 default branch" in text
+    assert "default branch 基点で解決できる課題" in text
+    assert "untrusted な event 由来の ref を worktree 基点にしない" in text
 
 
 def test_commit_before_independent_review():

@@ -174,7 +174,7 @@ objective / selected_task / evidence / write_scope / 各 path の変更内容 / 
 
 ### PREPARE_WORKTREE
 
-`<remote>/<default>`(INIT で解決した remote。既定名は origin)を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本とし、既存 branch と衝突する場合(および schedule / event 起点の自動実行)は `run_key` の先頭 8 文字などの一意サフィックスを付ける。`run_key` サフィックスを付けた名前がさらに既存 branch と衝突する場合(中断された同一 trigger の再実行等)は、連番を加えて一意化する。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。worktree 作成後、selected_task の evidence を最新 base 上で再検証し、既に解消済みなら実装せず RECORD 経由で `noop` へ遷移する。
+`<remote>/<default>`(INIT で解決した remote。既定名は origin)を fetch し最新 base から専用 worktree を作成。branch 名は `repo-loop/<YYYYMMDD>-<slug>` を基本とし、既存 branch と衝突する場合(および schedule / event 起点の自動実行)は `run_key` の先頭 8 文字などの一意サフィックスを付ける。`run_key` サフィックスを付けた名前がさらに既存 branch と衝突する場合(中断された同一 trigger の再実行等)は、連番を加えて一意化する。ユーザーの現在 checkout や他セッションの worktree を変更・削除・rebase しない。fetch または base 解決に失敗したら古い base へ黙って fallback せず `blocked`。外部 hook 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` 等が別 repo 操作へ漏れないようにする。worktree 作成後、selected_task の evidence を最新 base 上で再検証し、既に解消済みなら実装せず RECORD 経由で `noop` へ遷移する。trigger が非 default branch 上の変更(PR branch の CI failure 等)を指す場合、V1 では worktree の基点は常に `<remote>/<default>` とし、default branch 基点で解決できる課題(default 側の根本修正・再現テストの追加等)だけを実装対象にする。対象 branch 上でしか解決できない課題は実装せず、分析結果を添えて `proposal` へ降格する(untrusted な event 由来の ref を worktree 基点にしない)。
 
 ### BASELINE
 
