@@ -182,7 +182,7 @@ def test_windows_shell_migration_removes_legacy_task_before_v6_marker_path():
         "section_managed_copy()", 1
     )[0]
     migration = shell.split("section_prune_legacy_assets()", 1)[1].split(
-        "resolve_cursor_prune_python()", 1
+        "resolve_devkit_python()", 1
     )[0]
 
     for expected in (
@@ -199,9 +199,9 @@ def test_windows_shell_migration_removes_legacy_task_before_v6_marker_path():
     )
 
 
-def test_cursor_prune_python_resolver_probes_supported_commands_in_order():
+def test_devkit_python_resolver_probes_supported_commands_in_order():
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
-    resolver = shell.split("resolve_cursor_prune_python()", 1)[1].split(
+    resolver = shell.split("resolve_devkit_python()", 1)[1].split(
         "section_prune_cursor_sync()", 1
     )[0]
     section = shell.split("section_prune_cursor_sync()", 1)[1].split("main()", 1)[0]
@@ -214,10 +214,71 @@ def test_cursor_prune_python_resolver_probes_supported_commands_in_order():
     positions = [resolver.index(probe) for probe in probes]
     assert positions == sorted(positions)
     assert resolver.count("sys.version_info >= (3, 10)") == 3
-    assert 'python_kind="$(resolve_cursor_prune_python)"' in section
+    assert 'if [[ -z "$DEVKIT_PYTHON_KIND" ]]; then' in section
+    assert 'local -a python_command=("$DEVKIT_PYTHON_KIND")' in section
     assert 'python_command=(py -3)' in section
     assert '"${python_command[@]}"' in section
     assert "command -v " + "python3" not in section
+    assert "resolve_devkit_python" not in section
+
+
+def test_json_state_readers_use_resolved_devkit_python_kind_not_command_v():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+
+    marketplace_state = shell.split("claude_marketplace_state()", 1)[1].split(
+        "claude_plugin_devkit_state()", 1
+    )[0]
+    plugin_state = shell.split("claude_plugin_devkit_state()", 1)[1].split(
+        "section_codex_plugin()", 1
+    )[0]
+
+    for body in (marketplace_state, plugin_state):
+        assert "command -v " + "python3" not in body
+        assert 'DEVKIT_PYTHON_KIND' in body
+        assert '"${python_command[@]}" -c' in body
+        assert "' 2>/dev/null)\"; then" in body
+
+    # codex_plugin_devkit_state() is unreferenced dead code and must be removed entirely.
+    assert "codex_plugin_devkit_state" not in shell
+
+    main_body = shell.split("main()", 1)[1]
+    cli_only_blocks = main_body.split('if [[ "$CLI_ONLY" != true ]]; then')
+    assert len(cli_only_blocks) == 3
+    second_cli_only_block = cli_only_blocks[2]
+    assert 'DEVKIT_PYTHON_KIND="$(resolve_devkit_python || true)"' in second_cli_only_block
+    assert second_cli_only_block.index(
+        'DEVKIT_PYTHON_KIND="$(resolve_devkit_python || true)"'
+    ) < second_cli_only_block.index("section_prune_legacy_assets")
+
+
+def test_devkit_python_resolver_ignores_windows_store_stub_via_execution_probe():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    resolver_body = shell.split("resolve_devkit_python()", 1)[1].split(
+        "section_prune_cursor_sync()", 1
+    )[0]
+
+    script = (
+        "resolve_devkit_python()" + resolver_body
+        + "\n"
+        + "python3() {\n"
+        + '    echo "Python was not found; run without arguments to install from the Microsoft Store, or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases." >&2\n'
+        + "    return 49\n"
+        + "}\n"
+        + "python() { return 0; }\n"
+        + "resolve_devkit_python\n"
+    )
+
+    result = subprocess.run(
+        [bash_path(), "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert result.stdout.strip() == "python"
+    assert result.stderr == ""
 
 
 def test_v9_migration_contract_is_present_in_both_libraries(tmp_path):

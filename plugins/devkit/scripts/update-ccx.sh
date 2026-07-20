@@ -17,6 +17,7 @@ declare -a WARNINGS=()
 CLI_ONLY=false
 DEVKIT_ONLY=false
 RUN_MODE="run"
+DEVKIT_PYTHON_KIND=""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -860,9 +861,13 @@ claude_marketplace_state() {
         return 1
     fi
 
-    if command -v python3 >/dev/null 2>&1; then
+    if [[ -n "$DEVKIT_PYTHON_KIND" ]]; then
+        local -a python_command=("$DEVKIT_PYTHON_KIND")
+        if [[ "$DEVKIT_PYTHON_KIND" == "py" ]]; then
+            python_command=(py -3)
+        fi
         local parsed_state
-        if parsed_state="$(printf '%s\n' "$output" | python3 -c '
+        if parsed_state="$(printf '%s\n' "$output" | "${python_command[@]}" -c '
 import json
 import sys
 
@@ -881,7 +886,7 @@ elif any(item.get("source") == "github" and item.get("repo") == "murakotaro4/dev
     print("ok")
 else:
     print("replace")
-')"; then
+' 2>/dev/null)"; then
             printf '%s\n' "$parsed_state"
             return 0
         else
@@ -918,9 +923,13 @@ claude_plugin_devkit_state() {
         return 1
     fi
 
-    if command -v python3 >/dev/null 2>&1; then
+    if [[ -n "$DEVKIT_PYTHON_KIND" ]]; then
+        local -a python_command=("$DEVKIT_PYTHON_KIND")
+        if [[ "$DEVKIT_PYTHON_KIND" == "py" ]]; then
+            python_command=(py -3)
+        fi
         local parsed_state
-        if parsed_state="$(printf '%s\n' "$output" | python3 -c '
+        if parsed_state="$(printf '%s\n' "$output" | "${python_command[@]}" -c '
 import json
 import sys
 
@@ -937,7 +946,7 @@ print("installed" if any(
     and item.get("scope") == "user"
     for item in data
 ) else "missing")
-')"; then
+' 2>/dev/null)"; then
             printf '%s\n' "$parsed_state"
             return 0
         else
@@ -963,83 +972,6 @@ print("installed" if any(
         echo "installed"
     else
         echo "missing"
-    fi
-}
-
-codex_plugin_devkit_state() {
-    local output
-    if ! output="$(codex plugin list --json 2>/dev/null)"; then
-        echo "missing"
-        return 0
-    fi
-
-    if command -v python3 >/dev/null 2>&1; then
-        local parsed_state
-        if parsed_state="$(printf '%s\n' "$output" | python3 -c '
-import json
-import sys
-
-def disabled(value):
-    return value is False or value == 0 or (isinstance(value, str) and value.lower() == "false")
-
-def match_name(value):
-    for key in ("name", "id", "plugin", "slug"):
-        text = str(value.get(key, ""))
-        if text == "devkit" or text.startswith("devkit@"):
-            return True
-    return False
-
-def walk(value, available=False):
-    if isinstance(value, dict):
-        if match_name(value) and not available:
-            return "disabled" if disabled(value.get("enabled")) else "enabled"
-        states = [walk(item, available or key == "available") for key, item in value.items()]
-    elif isinstance(value, list):
-        states = [walk(item, available) for item in value]
-    elif isinstance(value, str):
-        if not available and (value == "devkit" or value.startswith("devkit@")):
-            return "enabled"
-        return "missing"
-    else:
-        return "missing"
-
-    if "enabled" in states:
-        return "enabled"
-    if "disabled" in states:
-        return "disabled"
-    return "missing"
-
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    sys.exit(1)
-print(walk(data))
-')"; then
-            printf '%s\n' "$parsed_state"
-            return 0
-        fi
-    fi
-
-    local scan devkit_entry
-    scan="$(printf '%s\n' "$output" | sed -E 's/"available"[[:space:]]*:[[:space:]]*\[[^]]*\]//g')"
-    if grep -Eq '"installed"[[:space:]]*:' <<<"$output"; then
-        scan="$(printf '%s\n' "$output" | sed -E 's/.*"installed"[[:space:]]*:[[:space:]]*\[//; s/\][[:space:]]*,[[:space:]]*"available".*//')"
-    fi
-    devkit_entry="$(
-        printf '%s\n' "$scan" |
-            tr '\n' ' ' |
-            sed -E 's/}[[:space:]]*,[[:space:]]*[{]/}\
-{/g' |
-            grep -E '"(name|id|plugin|slug)"[[:space:]]*:[[:space:]]*"devkit"|devkit@murakotaro4' |
-            head -n 1
-    )"
-
-    if [[ -z "$devkit_entry" ]]; then
-        echo "missing"
-    elif grep -Eq '"enabled"[[:space:]]*:[[:space:]]*(false|0|"false")' <<<"$devkit_entry"; then
-        echo "disabled"
-    else
-        echo "enabled"
     fi
 }
 
@@ -1184,7 +1116,7 @@ section_prune_legacy_assets() {
     fi
 }
 
-resolve_cursor_prune_python() {
+resolve_devkit_python() {
     if python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' &>/dev/null; then
         printf 'python3\n'
         return 0
@@ -1212,15 +1144,14 @@ section_prune_cursor_sync() {
         echo "SKIP legacy Cursor sync manifest is not available"
         return 0
     fi
-    local python_kind=""
-    if ! python_kind="$(resolve_cursor_prune_python)"; then
+    if [[ -z "$DEVKIT_PYTHON_KIND" ]]; then
         echo "WARN Python 3.10 or newer is not available; skipping legacy Cursor sync prune"
         WARNINGS+=("Cursor legacy sync: Python 3.10 or newer not available; prune skipped")
         return 0
     fi
 
-    local -a python_command=("$python_kind")
-    if [[ "$python_kind" == "py" ]]; then
+    local -a python_command=("$DEVKIT_PYTHON_KIND")
+    if [[ "$DEVKIT_PYTHON_KIND" == "py" ]]; then
         python_command=(py -3)
     fi
 
@@ -1266,6 +1197,7 @@ main() {
     fi
 
     if [[ "$CLI_ONLY" != true ]]; then
+        DEVKIT_PYTHON_KIND="$(resolve_devkit_python || true)"
         section_prune_legacy_assets
         section_prune_cursor_sync
         section_codex_plugin

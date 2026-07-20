@@ -505,7 +505,7 @@
         },
         {
           "path": "plugins/devkit/scripts/update-ccx.sh",
-          "count": 20
+          "count": 19
         },
         {
           "path": "plugins/devkit/tests/test_check_skill_surface.py",
