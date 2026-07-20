@@ -20,6 +20,8 @@ THOUGHT_TEMPLATE_PATH = REPO_ROOT / "plugins/devkit/templates/rules/thought-db-u
 TERMINAL_FONT_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/setup_terminal_font.py"
 UPDATER_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_updater.py"
 CURSOR_PRUNE_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py"
+CLAUDE_ENV_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_claude_env.py"
+CURSOR_SHIM_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -102,7 +104,8 @@ def test_skill_contract_mentions_environment_prerequisites():
     assert "`brew install uv`" in text
     assert "`winget install --id astral-sh.uv`" in text
     assert "`node` が `MISSING` の場合" in text
-    assert "step 6 の statusline 適用だけをスキップ" in text
+    assert "step 8 の statusline 適用だけをスキップ" in text
+    assert "step 3-7 と step 9-10 は続行" in text
     assert "`brew install node`" in text
     assert "`claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみ" in text
     assert "MISSING があった場合は、影響と導入コマンドを報告に含める" in text
@@ -111,7 +114,7 @@ def test_skill_contract_mentions_environment_prerequisites():
 def test_skill_contract_mentions_windows_terminal_font_approval_gate():
     text = SKILL_PATH.read_text(encoding="utf-8")
 
-    assert "### 7. ターミナルフォント適用(Windows のみ)" in text
+    assert "### 9. ターミナルフォント適用(Windows のみ)" in text
     assert "setup_terminal_font.py" in text
     assert "UDEV Gothic NF" in text
     assert "ダウンロード失敗" in text
@@ -119,7 +122,7 @@ def test_skill_contract_mentions_windows_terminal_font_approval_gate():
     assert "`download`" in text
     assert "--check --format json" in text
     assert "選択肢付き質問で承認" in text
-    assert "statusline 適用とターミナルフォント適用のみ" in text
+    assert "step 8 の statusline 適用と step 9 のターミナルフォント適用のみ" in text
     assert TERMINAL_FONT_SCRIPT_PATH.is_file()
 
 
@@ -127,14 +130,22 @@ def test_updater_sync_step_order_and_reporting_contract():
     text = SKILL_PATH.read_text(encoding="utf-8")
     thought_heading = "### 4. thought-db 接続同期(ユーザー環境)"
     updater_heading = "### 5. updater 同期(ユーザー環境)"
-    statusline_heading = "### 6. statusline 適用"
+    compaction_heading = "### 6. Claude Code compaction 設定同期(ユーザー環境)"
+    shim_heading = "### 7. cursor-agent Git Bash シム同期(Windows のみ)"
+    statusline_heading = "### 8. statusline 適用"
+    font_heading = "### 9. ターミナルフォント適用(Windows のみ)"
+    report_heading = "### 10. 検証とレポート"
 
     assert (
         text.index(thought_heading)
         < text.index(updater_heading)
+        < text.index(compaction_heading)
+        < text.index(shim_heading)
         < text.index(statusline_heading)
+        < text.index(font_heading)
+        < text.index(report_heading)
     )
-    updater_section = text.split(updater_heading, 1)[1].split(statusline_heading, 1)[0]
+    updater_section = text.split(updater_heading, 1)[1].split(compaction_heading, 1)[0]
     assert "sync_updater.py" in updater_section
     assert "prune_legacy_cursor_sync.py" in updater_section
     assert "Claude 親 / Codex 親のどちらでも実行" in updater_section
@@ -147,8 +158,8 @@ def test_updater_sync_step_order_and_reporting_contract():
 def test_cursor_prune_contract_is_part_of_updater_step():
     text = SKILL_PATH.read_text(encoding="utf-8")
     updater_heading = "### 5. updater 同期(ユーザー環境)"
-    statusline_heading = "### 6. statusline 適用"
-    cursor_section = text.split(updater_heading, 1)[1].split(statusline_heading, 1)[0]
+    compaction_heading = "### 6. Claude Code compaction 設定同期(ユーザー環境)"
+    cursor_section = text.split(updater_heading, 1)[1].split(compaction_heading, 1)[0]
 
     assert "prune_legacy_cursor_sync.py" in cursor_section
     assert 'uv run --no-project --python ">=3.10" python' in cursor_section
@@ -159,6 +170,41 @@ def test_cursor_prune_contract_is_part_of_updater_step():
     for field in ("`changed`", "`skipped`", "`actions`"):
         assert field in cursor_section
     assert CURSOR_PRUNE_SCRIPT_PATH.is_file()
+
+
+def test_compaction_env_sync_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    heading = "### 6. Claude Code compaction 設定同期(ユーザー環境)"
+    next_heading = "### 7. cursor-agent Git Bash シム同期(Windows のみ)"
+    section = text.split(heading, 1)[1].split(next_heading, 1)[0]
+
+    assert "sync_claude_env.py" in section
+    assert "承認ゲートは置かず" in section
+    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW=1000000" in section
+    assert "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=50" in section
+    assert "実ウィンドウが 1M 以下" in section
+    assert "新規セッション" in section
+    assert "project / local / managed" in section
+    for field in ("`changed`", "`skipped`", "`actions`"):
+        assert field in section
+    assert CLAUDE_ENV_SCRIPT_PATH.is_file()
+
+
+def test_cursor_agent_shim_sync_contract():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    heading = "### 7. cursor-agent Git Bash シム同期(Windows のみ)"
+    next_heading = "### 8. statusline 適用"
+    section = text.split(heading, 1)[1].split(next_heading, 1)[0]
+
+    assert "sync_cursor_agent_shims.py" in section
+    assert "承認ゲートは置かず" in section
+    assert "非 Windows は理由付きで skip" in section
+    assert "`%LOCALAPPDATA%` が未設定" in section
+    assert "cursor-agent 未導入" in section
+    assert "`agent.cmd` だけが不在" in section
+    for field in ("`changed`", "`skipped`", "`actions`"):
+        assert field in section
+    assert CURSOR_SHIM_SCRIPT_PATH.is_file()
 
 
 def test_openai_agent_metadata_exists():

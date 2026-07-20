@@ -334,16 +334,25 @@ def test_skill_markdown_fences_are_balanced():
         assert open_fence is None, f"{relpath}:{open_fence[1]} のコードフェンスが閉じていない"
 
 
-# ── 8. AGENTS.md の codex exec stdin 閉鎖契約 ─────────────────────
+# ── 8. AGENTS.md / dig の非対話 CLI stdin 閉鎖契約 ───────────────
 
 
-def test_agents_codex_stdin_guard():
-    text = _read("AGENTS.md")
-    offenders = [
-        line for line in text.splitlines()
-        if "codex -a never exec" in line and "< /dev/null" not in line
-    ]
-    assert not offenders, f"stdin 閉鎖(< /dev/null)がない codex コマンド行: {offenders}"
+def test_agents_and_dig_noninteractive_stdin_guard():
+    documents = {
+        "AGENTS.md": _read("AGENTS.md"),
+        "plugins/devkit/skills/dig/SKILL.md": _read("plugins/devkit/skills/dig/SKILL.md"),
+    }
+    offenders: list[str] = []
+    for relpath, text in documents.items():
+        for line in text.splitlines():
+            runnable = (
+                "codex -a never exec" in line
+                or "$(cursor-agent create-chat" in line
+                or 'cursor-agent -p --resume "' in line
+            )
+            if runnable and "< /dev/null" not in line:
+                offenders.append(f"{relpath}:{line.strip()}")
+    assert not offenders, f"stdin 閉鎖(< /dev/null)がない非対話コマンド行: {offenders}"
 
 
 # ── 9. Release Rules の正本は AGENTS.md、README は参照 ─────────────
