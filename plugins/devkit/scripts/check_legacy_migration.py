@@ -12,16 +12,9 @@ from tempfile import TemporaryDirectory
 
 ROOT = Path.cwd()
 LEGACY_PATTERNS = [
-    r"/dig(?!-goal)\b",
-    r"/devkit:dig(?!-goal)\b",
-    r"\$dig(?!-goal)\b",
-    r"plugins/devkit/skills/dig/",
-    r"/goal-prompt\b",
-    r"devkit:goal-prompt\b",
-    r"\$goal-prompt\b",
-    r"skills/goal-prompt",
-    r"devkit-dig-wt",
-    r"devkit-dig-job",
+    r"(?<![\w-])dig-goal\b",
+    r"devkit-dig-goal-wt\b",
+    r"devkit-dig-goal-job\b",
     r"/prompts:devkit-dig\b",
     r"/devkit:codex(?!-)\b",
     r"/devkit:agent-orch-(core|openai|anthropic|google)\b",
@@ -93,7 +86,15 @@ def collect_files(directory: Path) -> list[Path]:
         if path.is_dir():
             continue
         rel = path.relative_to(directory).as_posix()
-        if any(part in {".git", "node_modules", ".claude", ".codex", ".venv", "__pycache__"} for part in path.parts):
+        # 除外対象は scan 対象ツリー内の相対パス構成要素だけで判定する。directory
+        # (= ROOT) 自身の絶対パスが ".claude/worktrees/<slug>" のように除外語を
+        # 祖先に含む場合、path.parts (絶対パス) で判定すると全ファイルが除外され、
+        # scan が常に 0 findings を返す誤検出ゼロの見せかけ(実際は未スキャン)に
+        # なるため、必ず rel 側の parts で判定する。
+        if any(
+            part in {".git", "node_modules", ".claude", ".codex", ".venv", "__pycache__"}
+            for part in Path(rel).parts
+        ):
             continue
         out.append(path)
     return out
@@ -138,7 +139,7 @@ def scan_text_file(abs_path: Path, rel_path: str) -> list[dict[str, object]]:
                     "path": rel_path,
                     "line": index,
                     "token": match.group(0),
-                    "replacement": "Use the new /dig-goal skill (deep-dive + execution orchestration)",
+                    "replacement": "Use the new /dig (deep-dive to implementation) and /goal-prompt (goal prompt generation) skills",
                 }
             )
 

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Dig Goal"
-  short_description: "要求を深掘りし実行を統括する"
-  default_prompt: "$dig-goal を使って要求を深掘りし、計画、実行形態と backend の確定、独立レビュー、同席実装または自律実行、検証済み結果の報告まで完遂してください。"

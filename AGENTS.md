@@ -5,38 +5,38 @@
 ## Repo Context
 
 - このリポジトリは DevKit のセットアップ/更新スクリプト、skills、templates を管理する
-- 配布 skill は `plugins/devkit/skills/dig-goal/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/`、`plugins/devkit/skills/commit-push/`、`plugins/devkit/skills/repo-loop/` の 10 本とする
-- repo-loop は trigger(手動・定期・イベント)起点で改善課題を自分で選ぶ自律ループであり、非対話実行では質問せず、low/medium risk は事前承認なしで Draft PR まで(auto-merge・ready 化はしない)、high risk は提案 Issue へ降格する。dig-goal(ユーザー要求起点・計画承認・統合完遂)とは起点と出口で分離し、repo-loop から dig-goal を自動呼び出さない
+- 配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/`、`plugins/devkit/skills/commit-push/`、`plugins/devkit/skills/repo-loop/` の 11 本とする
+- repo-loop は trigger(手動・定期・イベント)起点で改善課題を自分で選ぶ自律ループであり、非対話実行では質問せず、low/medium risk は事前承認なしで Draft PR まで(auto-merge・ready 化はしない)、high risk は提案 Issue へ降格する。dig(ユーザー要求起点・計画承認・統合完遂)とは起点と出口で分離し、repo-loop から dig を自動呼び出さない
 - statusline 配布物は `plugins/devkit/statusline/` に同梱し、適用は setup workflow から行う
 - Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
 - ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
-- 既定の現セッション自律実行では dig-goal の親が実行移行時にゴール本文を gitignore 済みの `.claude/goal-runs/` へ保存する(圧縮復帰点)。例外形態では実行エージェントが自己保存し、ファイルが必要な形態では親が同領域へ保存する。いずれも commit も premises.json への出現登録もしない(検収の成果物は `.claude/goal-runs/` の完了レポート)
+- goal-prompt は Goal プロンプト本文を gitignore 済みの `.claude/goal-runs/` へ保存する(上書きせず連番)。commit も premises.json への出現登録もしない。dig がユーザー明示で goal-prompt へ引き継ぐ場合はレビュー済み計画を `.claude/plans/` へ保存する
 
 ## Workflow
 
-開発フローの基本形は次のとおり。実行オーケストレーションのスキル実体は `plugins/devkit/skills/dig-goal/SKILL.md`。
+開発フローの基本形は次のとおり。実行オーケストレーションのスキル実体は `plugins/devkit/skills/dig/SKILL.md`。
 
-1. 深掘り: 要求が曖昧なら、未知を棚卸しして影響が大きい未知だけ質問し、ユーザーの要求(目的・成功条件・非対象)を聞き出す。未知棚卸し表(質問する / 仮定で進める / 確定済み)で終了判定を可視化し、小さい未知は仮定を明示して進める(質問ポリシーの正本は dig-goal スキルの SKILL.md)
+1. 深掘り: 要求が曖昧なら、未知を棚卸しして影響が大きい未知だけ質問し、ユーザーの要求(目的・成功条件・非対象)を聞き出す。未知棚卸し表(質問する / 仮定で進める / 確定済み)で終了判定を可視化し、小さい未知は仮定を明示して進める(質問ポリシーの正本は dig スキルの SKILL.md)
 2. 計画: コードベースを調査し、decision-complete な計画を作る
 3. 承認: 計画レビュー・実装・diff レビューの backend を選択し、計画レビュー(skip 可)を経た計画をユーザーに提示して、承認を得てから実装に進む。Claude 親は plan mode / ExitPlanMode を既定とする
-4. 実装: worktree 上の作業ブランチで計画に沿って差分を作り、親が節目ごとにパス限定で commit する。計画から逸脱する場合は理由・リスク・要確認点を記録する(実装を外部 backend に委譲する場合は dig-goal スキルの契約に従う)
+4. 実装: worktree 上の作業ブランチで計画に沿って差分を作り、親が節目ごとにパス限定で commit する。計画から逸脱する場合は理由・リスク・要確認点を記録する(実装を外部 backend に委譲する場合は dig スキルの契約に従う)
 5. 自レビュー: diff 全文を計画と突き合わせ、テスト・リンタを実行する
 6. 修正ループ: 指摘が解消するまで修正を繰り返す
-7. 報告と統合: 変更サマリーを報告し、統合(既定は PR の提出 + CI green 確認 + merge。PR 不可 repo では直接統合の merge / push)まで dig-goal が完遂する。承認は計画承認に一本化し、計画に明記した統合方法以外は実行しない
+7. 報告と統合: 変更サマリーを報告し、統合(既定は PR の提出 + CI green 確認 + merge。PR 不可 repo では直接統合の merge / push)まで dig が完遂する。承認は計画承認に一本化し、計画に明記した統合方法以外は実行しない
 
 ## 並行開発と worktree
 
 - 並行して進める開発は `git worktree` で分離する。main の作業ツリー上で複数機能を同時に進めない(1 ブランチ = 1 worktree)
-- 複数機能・複数ブランチの並行開発は worktree を分離する。単一機能内の並列実装委譲は dig-goal 契約に従い、同一 worktree で write_scope を互いに素にし、節目 commit はパス限定で行う
-- dig-goal の実装系は常に worktree を使う(正本は `plugins/devkit/skills/dig-goal/SKILL.md`)
+- 複数機能・複数ブランチの並行開発は worktree を分離する。単一機能内の並列実装委譲は dig 契約に従い、同一 worktree で write_scope を互いに素にし、節目 commit はパス限定で行う
+- dig の実装系は常に worktree を使う(正本は `plugins/devkit/skills/dig/SKILL.md`)
 - `plugins/devkit/**` に触る作業の開始時と version bump 直前に `git fetch origin` で origin/main との差を確認し、遅れていれば先に取り込む(v7.5.0 の version 衝突・rebase コンフリクトの再発予防)
 - 他セッション由来の worktree・ブランチ・open PR は常に存在しうる進行中の正常な作業として扱う。削除・checkout・rebase・「残骸がある」等の報告の対象にしない。後始末は自セッションが作成した worktree・ブランチ・PR に限り、他 worktree の調査・掃除はユーザーが明示依頼した場合のみ行う
 - origin/main は他 worktree の PR が順に merge されて進む前提で運用する。統合前の fetch + rebase・version 再計算・push reject からのやり直し・rebase 標準解消手順は、この前提での通常運転であり異常として扱わない(標準解消手順の対象外の衝突のみ従来どおり停止・報告)
 
 ### 統合時 rebase 衝突の標準解消手順
 
-worktree 統合の rebase で発生する既知の機械的衝突は、以下の手順で解消して rebase を続行してよい（dig-goal の統合契約から参照される）。機械解消の対象はここに列挙したクラスに限定する。
+worktree 統合の rebase で発生する既知の機械的衝突は、以下の手順で解消して rebase を続行してよい（dig の統合契約から参照される）。機械解消の対象はここに列挙したクラスに限定する。
 
 - `plugins/devkit/.claude-plugin/plugin.json` の `version` の衝突: origin 側の値を一時採用して rebase を続行し、rebase 完了後に Release Rules に従い最新 origin 値から bump 種別を一度だけ再適用する。rebase 中に version 変更だけの commit が空になった場合は `git rebase --skip` する（version 以外の変更を含む commit は skip しない）
 - `plugin.json` の `description` の衝突: base と比べて片側だけが変更している場合はその側を採用する。両側が変更している場合は機械解消せず停止・報告する（version と一括りに origin 側を採用しない）
@@ -44,14 +44,14 @@ worktree 統合の rebase で発生する既知の機械的衝突は、以下の
 - 標準解消で rebase を完了した後は verify-full を再実行し、失敗時は push せず停止・報告する
 - 上記以外の衝突は従来どおり `git rebase --abort` して停止・報告する
 
-## dig-goal の実行形態
+## dig と goal-prompt の使い分け
 
-使い分けの軸はタスク規模ではなく自律度とする。
+dig はユーザーの主開発ワークフローで、深掘りから実装・検証・統合まで完遂する。**既定は実装完遂**で、開始時に実行形態を質問しない。ユーザーが明示した場合だけ、次のいずれかへ分岐する。
 
-- 同席実装: その場で完成させる。成果物は実装済み diff。ユーザーが同席し、判断をリアルタイムに供給する
-- 現セッション自律実行: 判断を前倒しして焼き込んだゴール本文を作り、独立レビュー後そのまま同一セッションで実行して完遂する。成果物は実行完了と `.claude/goal-runs/` の完了レポート
-- 起動プロンプト提示: 定期実行・別ターミナル・別 PC・後で実行・白紙コンテキスト実行などをユーザーが明示した場合だけ使う例外形態。完成した起動プロンプトと検収チェックリストを提示して終了する
-- 定期ループは dig-goal が `.claude/goal-runs/` に保存したゴールファイルを参照する `/loop` 起動プロンプトを提示する。固定済みゴールの反復巡回は dig-goal の `/loop` 形態、課題を毎回自選する定期改善ループは repo-loop(envelope の `trigger.type: schedule`)を使う
+- read-only 終了: 計画だけ・調査だけ・相談だけをユーザーが明示した場合、実装せず提示のみで終了する
+- goal-prompt への引き継ぎ: ユーザーが別ターン・後続セッション・不在実行への引き継ぎを明示した場合、レビュー済み計画を `.claude/plans/YYYY-MM-DD-<slug>.md` へ保存し goal-prompt へ渡す
+
+goal-prompt は会話・仕様・計画から Goal プロンプトを `.claude/goal-runs/` へ保存生成し(上書きせず連番)、`/goal` 起動プロンプトを出力する軽量スキルとする。コード変更・commit / push・PR 作成・Goal 独立レビューは行わず、`/goal` の実行はユーザーが行う。上限停止は goal-prompt が自動算出する。固定済み Goal ファイルの反復巡回はユーザーが `/loop` で登録する運用とし、課題を毎回自選する定期改善は repo-loop(envelope の `trigger.type: schedule`)を使う
 
 ## Maintenance Rules
 
@@ -133,13 +133,14 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 
 - `README.md`: リポジトリ全体の導入・運用説明
 - `plugins/devkit/scripts/`: setup / update 系スクリプト
-- `plugins/devkit/skills/dig-goal/SKILL.md`: 深掘り・計画・実行オーケストレーション・自律実行 workflow の正本
+- `plugins/devkit/skills/dig/SKILL.md`: 深掘り・計画・worktree 実装・統合完遂 workflow の正本
+- `plugins/devkit/skills/goal-prompt/SKILL.md`: Goal プロンプト保存生成・起動プロンプト出力 workflow の正本
 - `plugins/devkit/skills/improve-skill/SKILL.md`: skill 改善 workflow の正本
 - `plugins/devkit/skills/setup/SKILL.md`: 対象リポジトリへの DevKit ルール同期・環境前提チェック(claude / codex / cursor-agent / node / uv)・thought-db 接続同期・updater 同期・旧 updater 名の残骸 prune・statusline 適用・Windows Terminal フォント適用 workflow の正本
 - `plugins/devkit/skills/refactor/SKILL.md`: 負債棚卸し・優先順位付け・計画作成 workflow の正本
 - `plugins/devkit/skills/memory-review/SKILL.md`: AI メモリ棚卸し・前提監査 workflow の正本
 - `plugins/devkit/skills/handoff/SKILL.md`: セッション引継ぎドキュメント書き出し workflow の正本
-- `plugins/devkit/skills/backlog/SKILL.md`: 残課題の横断棚卸し(read-only)・dig-goal 引き継ぎ workflow の正本
+- `plugins/devkit/skills/backlog/SKILL.md`: 残課題の横断棚卸し(read-only)・dig 引き継ぎ workflow の正本
 - `plugins/devkit/skills/catch-up/SKILL.md`: 外部前提の裏取り・影響棚卸し・追従更新 workflow の正本
 - `plugins/devkit/skills/commit-push/SKILL.md`: 論理グループ分割 commit + upstream push workflow の正本(secret 2 層検査・literal pathspec・明示単一 refspec)
 - `plugins/devkit/skills/repo-loop/SKILL.md`: trigger 起点の自律改善ループ(調査・課題選定・実装・検証・Draft PR / 提案 Issue / no-op)workflow の正本

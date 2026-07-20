@@ -63,7 +63,7 @@ def test_read_only_contract_and_five_step_flow():
         "### 2. 情報源スキャン",
         "### 3. 統合と鮮度判定",
         "### 4. ダッシュボード提示",
-        "### 5. dig-goal への引き継ぎで終了",
+        "### 5. dig への引き継ぎで終了",
     ):
         assert step in text
     assert "チャットへ提示" in text
@@ -89,7 +89,7 @@ def test_sources_freshness_and_gh_fallback_are_present():
     assert "gh 不在のため未確認" in text
 
 
-def test_boundaries_and_dig_goal_handoff_are_present():
+def test_boundaries_and_dig_handoff_are_present():
     text = _skill_text()
     assert "## 境界" in text
     assert "refactor = コードの負債" in text
@@ -98,9 +98,9 @@ def test_boundaries_and_dig_goal_handoff_are_present():
     assert "backlog = 既存の handoff を含む情報源を読む側" in text
     assert "TaskList = セッション内" in text
     assert "コード内 TODO / FIXME は refactor の領分" in text
-    assert "## dig-goal step 2 計画草案" in text
+    assert "## dig step 2 計画草案" in text
     assert "### backlog 由来の根拠" in text
-    assert "$dig-goal" in text
+    assert "$dig" in text
 
 
 def test_harness_and_task_list_contract():
