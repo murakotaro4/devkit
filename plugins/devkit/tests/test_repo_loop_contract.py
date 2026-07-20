@@ -65,6 +65,8 @@ def test_all_terminals_go_through_record():
     assert "N --> S[DONE]" not in text
     assert "R --> S[DONE]" in text
     assert "RECORD 経由で `noop`" in text
+    assert "必ず RECORD を通ってから DONE へ遷移する" in text
+    assert "outcome によらず result JSON" in text
 
 
 def test_independent_review_covers_all_file_changes_with_context():
@@ -172,6 +174,7 @@ def test_prepare_worktree_revalidates_evidence_and_unique_branch():
     assert "repo-loop/<YYYYMMDD>-<slug>" in text
     assert "run_key" in text
     assert "一意サフィックス" in text
+    assert "連番を加えて一意化する" in text
     assert "最新 base 上で再検証" in text
     assert "解消済みなら実装せず" in text
     assert "noop" in text
