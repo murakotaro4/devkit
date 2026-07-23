@@ -70,6 +70,15 @@ def test_read_only_contract_and_five_step_flow():
     assert "ファイルへは保存しない" in text
 
 
+def test_dashboard_starts_with_summary_and_marks_backends_not_applicable():
+    text = _skill_text()
+    dashboard = text[text.index("### 4. ダッシュボード提示") : text.index("### 5. dig への引き継ぎで終了")]
+    assert "結論 + 推奨次アクション(3 件以内)" in dashboard
+    assert "先頭提示" in dashboard
+    assert "計画レビュー / 実装 / diff レビューをすべて「適用なし」" in dashboard
+    assert "独立レビュー状態: `適用なし`" in dashboard
+
+
 def test_sources_freshness_and_gh_fallback_are_present():
     text = _skill_text()
     for source in (

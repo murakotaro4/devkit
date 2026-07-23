@@ -121,6 +121,28 @@ def test_non_implementation_plan_schema():
         assert phrase in planning
 
 
+def test_planning_has_layered_approval_summary_schema():
+    planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
+    for phrase in (
+        "## 承認用サマリー",
+        "判断してほしい点",
+        "既定からの逸脱",
+        "後戻りしにくい操作",
+        "backend 表",
+        "検証",
+        "独立レビュー状態",
+        "実施済み(指摘 N 件反映)",
+        "適用なし",
+    ):
+        assert phrase in planning
+
+
+def test_approval_puts_summary_first():
+    approval = _section(_skill_text(), "### 5. 計画承認")
+    assert "承認用サマリー」を前面に提示" in approval
+    assert "plan mode 終了承認でも計画冒頭に承認用サマリーを置く" in approval
+
+
 def test_backend_change_reopens_inventory():
     backend = _section(_skill_text(), "### 3. backend 選択(選択肢付き質問)")
     assert (

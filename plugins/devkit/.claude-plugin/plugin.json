@@ -1,5 +1,5 @@
 {
   "name": "devkit",
   "description": "DevKit の /dig 深掘りから実装・PR 統合まで完遂する主ワークフロー、/goal-prompt の Goal プロンプト保存生成と起動プロンプト出力、skill 改善、リポジトリ setup、refactor 計画化、memory-review メモリ監査、handoff 引継ぎ書き出し、backlog 残課題棚卸し、commit-push 分割コミットと push、repo-loop 自律改善ループ、/catch-up 外部前提追従を提供し、Node statusline を同梱します。",
-  "version": "14.1.0"
+  "version": "14.2.0"
 }

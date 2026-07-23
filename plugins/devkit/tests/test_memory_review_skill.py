@@ -120,6 +120,15 @@ def test_audit_flow_contains_required_taxonomies_and_output_format():
     assert actual_sections == expected_sections
 
 
+def test_conclusion_doubles_as_approval_summary():
+    text = _skill_text()
+    report = text[text.index("### 5. 監査レポート出力") : text.index("### 6. 修正の承認と適用")]
+    assert "## 1. 結論(3件以内)」を第 1 層の承認用サマリーとして兼用" in report
+    assert "判断してほしい点" in report
+    assert "backend 表" in report
+    assert "適用なし" in report
+
+
 def test_dig_handoff_contract():
     text = _skill_text()
     assert "plugins/devkit/skills/dig/SKILL.md" in text
