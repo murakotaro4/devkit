@@ -106,6 +106,15 @@ def test_inventory_and_prioritization_flow_headings():
     assert "レポートのみ:" not in text
 
 
+def test_prioritization_starts_with_decision_summary():
+    text = _skill_text()
+    step3 = text[text.index("### 3. 優先順位付け") : text.index("### 4. リファクタリング計画")]
+    assert "推奨候補・判断点サマリー" in step3
+    assert "先頭提示" in step3
+    assert "計画レビュー / 実装 / diff レビューをすべて「適用なし」" in step3
+    assert "独立レビュー状態: `適用なし`" in step3
+
+
 def test_harness_detection_section():
     text = _skill_text()
     assert "## ハーネス判定" in text

@@ -48,6 +48,15 @@ def test_approval_and_independent_review_contract():
     assert "commit / push はユーザーが明示した場合だけ" in content
 
 
+def test_update_plan_uses_layered_summary_before_approval():
+    content = text()
+    step4 = content[content.index("### 4. 更新計画と承認") : content.index("### 5. 適用")]
+    assert "第 1 層「承認用サマリー」と後段の第 2 層「詳細」" in step4
+    assert "承認時点では未実施" in step4
+    assert "適用後 step 7 で実施" in step4
+    assert "独立レビュー状態" in step4
+
+
 def test_harness_task_progress_and_boundaries():
     content = text()
     for heading in ("## ハーネス判定", "## タスクリスト連動", "## 進捗可視化"):

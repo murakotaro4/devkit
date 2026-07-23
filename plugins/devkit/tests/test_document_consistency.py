@@ -23,6 +23,7 @@ DISTRIBUTED_SKILLS = (
     "repo-loop",
 )
 DELEGATING_SKILLS = ("dig", "improve-skill", "memory-review", "catch-up", "repo-loop")
+LAYERED_OUTPUT_SKILLS = ("dig", "refactor", "backlog", "catch-up", "memory-review")
 PLUGIN_DESCRIPTION_SURFACES = (
     "/dig",
     "/goal-prompt",
@@ -404,6 +405,20 @@ def test_delegating_skills_have_progress_visibility_contract():
             assert tool_name in allowed_tools, (
                 f"{skill_name} の SKILL.md の allowed-tools に {tool_name} がない"
             )
+
+
+def test_layered_output_contract_is_canonical_and_referenced():
+    agents = _read("AGENTS.md")
+    assert "### 計画・レポートの 2 層提示" in agents, (
+        "AGENTS.md に計画・レポートの 2 層提示契約がない"
+    )
+
+    for skill_name in LAYERED_OUTPUT_SKILLS:
+        text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
+        assert "承認用サマリー" in text, f"{skill_name} に承認用サマリー契約がない"
+        assert "計画・レポートの 2 層提示" in text, (
+            f"{skill_name} が AGENTS.md の 2 層提示契約を参照していない"
+        )
 
 
 def test_codex_model_pinned_to_current_generation():
