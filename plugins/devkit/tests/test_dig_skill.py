@@ -128,13 +128,33 @@ def test_planning_has_layered_approval_summary_schema():
         "判断してほしい点",
         "既定からの逸脱",
         "後戻りしにくい操作",
-        "backend 表",
+        "工程表",
         "検証",
         "独立レビュー状態",
         "実施済み(指摘 N 件反映)",
         "適用なし",
     ):
         assert phrase in planning
+
+
+def test_planning_defines_process_table():
+    planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
+    assert "「工程 / 状態 / backend」の 3 列表" in planning
+    for row in ("計画レビュー", "実装", "diff レビュー", "検証"):
+        assert row in planning
+    assert "承認の現在地を示す行を必ず含め" in planning
+
+
+def test_planning_absorbs_plan_role_into_investigation():
+    planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
+    assert "調査は並列サブエージェントへ委譲してよい" in planning
+    assert "設計の妥当性・前提の検証" in planning
+    assert "`Plan` のような独立した設計役は置かない" in planning
+
+
+def test_plan_includes_write_scope_tree_notation():
+    planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
+    assert "3 ファイル以上ならツリー表記で書く" in planning
 
 
 def test_approval_puts_summary_first():

@@ -421,6 +421,14 @@ def test_layered_output_contract_is_canonical_and_referenced():
         )
 
 
+def test_layer1_size_target_and_completeness_priority():
+    agents = _read("AGENTS.md")
+    assert "字数と完全性が衝突した場合は完全性を優先する" in agents
+    assert "見出し行を除く本文文字数" in agents
+    assert "工程表形式" in agents
+    assert "docs/reviews/2026-07-25-cognitive-load-metrics.md" in agents
+
+
 def test_codex_model_pinned_to_current_generation():
     # モデルは gpt-5.6-sol に固定する。世代追従は catch-up + premises.json が担う。
     documents = ["AGENTS.md"] + [
