@@ -145,6 +145,13 @@ def test_planning_defines_process_table():
     assert "承認の現在地を示す行を必ず含め" in planning
 
 
+def test_planning_self_contains_size_target():
+    planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
+    assert "約 1,000 字" in planning
+    assert "見出し行を除く本文文字数" in planning
+    assert "字数と完全性が衝突した場合は完全性を優先する" in planning
+
+
 def test_planning_absorbs_plan_role_into_investigation():
     planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
     assert "調査は並列サブエージェントへ委譲してよい" in planning
