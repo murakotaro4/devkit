@@ -132,7 +132,7 @@ Claude 親は step 1 開始時に plan mode 外であれば `EnterPlanMode` を�
 |------|------|---------|
 | 調査 | ✓ 並列 3 | Claude サブエージェント |
 | 計画 | ✓ | 親 |
-| 計画レビュー | ✓ 実施済み(指摘 2 件反映) | codex gpt-5.6-sol / medium |
+| 計画レビュー | 実施済み(指摘 2 件反映) | codex gpt-5.6-sol / medium |
 | **承認** | **← 今ここ** | ユーザー |
 | 実装 | — | codex gpt-5.6-sol / medium |
 | diff レビュー | — | codex gpt-5.6-sol / medium |

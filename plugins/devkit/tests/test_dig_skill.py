@@ -145,6 +145,16 @@ def test_planning_defines_process_table():
     assert "承認の現在地を示す行を必ず含め" in planning
 
 
+def test_process_table_example_uses_review_state_schema():
+    planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
+    review_rows = [
+        line for line in planning.splitlines() if line.startswith("| 計画レビュー |")
+    ]
+    assert len(review_rows) == 1
+    state = review_rows[0].split("|")[2].strip()
+    assert state.startswith(("実施済み(", "skip(", "適用なし"))
+
+
 def test_planning_self_contains_size_target():
     planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
     assert "約 1,000 字" in planning
