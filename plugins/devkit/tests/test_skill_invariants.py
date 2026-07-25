@@ -252,7 +252,11 @@ def check_codex_execution_shape(docs: Docs) -> list[str]:
         for value in models:
             if value != "gpt-5.6-sol":
                 problems.append(f"{path}: codex model が不正: {value}")
-        efforts = re.findall(r'model_reasoning_effort="([^"]+)"', command)
+        # effort は `-c` 経由でしか渡らない。`-c` の無い記述は設定として
+        # 効かないので、値が正しく見えても契約を満たさない。
+        efforts = re.findall(r'-c\s+model_reasoning_effort="([^"]+)"', command)
+        if not efforts and re.search(r'model_reasoning_effort="', command):
+            problems.append(f"{path}: model_reasoning_effort に -c がない: {command}")
         if not efforts:
             problems.append(f"{path}: codex に model_reasoning_effort の指定がない: {command}")
         for value in efforts:
@@ -369,17 +373,33 @@ def check_shell_variables_assigned(docs: Docs) -> list[str]:
     """command block が使う shell 変数は同じ block 内で代入する。"""
     problems: list[str] = []
     for path, block in _variable_blocks(docs):
+        # コメント行は実行されないので、使用も代入も数えない。
+        scannable = "\n".join(
+            line for line in block.splitlines() if not line.lstrip().startswith("#")
+        )
         # shell 変数は case-sensitive で小文字も正当。大文字だけを見ていると
         # 変数名を小文字へ rename するだけで未代入の検査が外れる。
-        used = set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", block))
+        used = set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", scannable))
+        # 永続代入だけを数える。`FOO=x cmd` の前置代入は cmd 限りで、
+        # 後続行の `$FOO` は空へ展開する。代入文(値の直後がコマンド終端)に限る。
+        # 判定は「前置代入を除外する」向きで書く。値は `$(...)` を含みうるため
+        # 値の終端を正しく取るのは難しいが、前置代入は値が単純トークンで、
+        # その直後にコマンド語が続く、という形に限られる。
+        statement = re.compile(
+            r"(?:^|(?<=[;&(])|(?<=&&\s)|(?<=\|\|\s))\s*([A-Za-z_][A-Za-z0-9_]*)="
+            # 前置代入はコマンドと同じ行にある。`\s` だと改行を跨いで
+            # 次行の代入をコマンド語と誤認する。水平空白に限る。
+            # 無引用の値パターンから引用符を除く。含めると、引用された値の
+            # 先頭部分だけを無引用値として拾い、続く語をコマンドと誤認する。
+            r"(?!(?:\"[^\"]*\"|'[^']*'|[^\s;&|()$\"']*)[ \t]+[A-Za-z_./])",
+            re.MULTILINE,
+        )
         # 代入は「最初の使用より前」でなければ意味がない。block 内のどこかに
         # 代入があればよい、とすると使用後に代入する例が通ってしまう。
         assigned = set()
-        for match in re.finditer(
-            r"(?:^|[\s;&(])([A-Za-z_][A-Za-z0-9_]*)=", block, re.MULTILINE
-        ):
+        for match in statement.finditer(scannable):
             name = match.group(1)
-            first_use = re.search(rf"\$\{{?{name}\}}?", block)
+            first_use = re.search(rf"\$\{{?{name}\}}?", scannable)
             if first_use is None or match.start() < first_use.start():
                 assigned.add(name)
         missing = used - assigned - ENV_PROVIDED
@@ -497,11 +517,23 @@ def _deleted_refs(command: str) -> set[str]:
     `--delete <remote> <a> <b>` と `:<ref>` の両形式に対応する。
     """
     refs = {_strip_ref_prefix(ref) for ref in re.findall(r"\s:(\S+)", command)}
-    delete = re.search(r"\s(?:--delete|-d)\s+(.*)$", command)
-    if delete:
-        # `--delete` の直後は remote 名。以降のフラグでない token が branch。
-        tokens = [token for token in delete.group(1).split() if not token.startswith("-")]
-        refs.update(_strip_ref_prefix(token) for token in tokens[1:])
+    if not re.search(r"\s(?:--delete|-d)\b", command):
+        return refs
+    # remote は `--delete` の前後どちらにも書ける
+    # (`push origin --delete a` / `push --delete origin a`)。
+    # フラグを除いた位置引数のうち、先頭が remote、残りが branch。
+    tokens = command.split()
+    positional: list[str] = []
+    expecting_value = False
+    for token in tokens[tokens.index("push") + 1 :] if "push" in tokens else []:
+        if token.startswith("-"):
+            expecting_value = "=" not in token and token in _VALUE_FLAGS
+            continue
+        if expecting_value:
+            expecting_value = False
+            continue
+        positional.append(token)
+    refs.update(_strip_ref_prefix(token) for token in positional[1:])
     return refs
 
 
