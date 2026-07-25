@@ -411,8 +411,12 @@ def check_no_broad_git_add(docs: Docs) -> list[str]:
         for line in _join_continuations(block):
             # `&&` だけでなく `;` `||` `|` の後ろも見る。区切りを変えるだけで
             # 禁止しているはずの broad staging が素通りしてしまう。
+            # `git -C "<worktree>" add .` のように global option を挟む形も拾う。
             if re.search(
-                r"(?:^|&&|\|\||[|;]|\()\s*git\s+add\s+(?:\.|-A)(?:\s|$)", line
+                r"(?:^|&&|\|\||[|;]|\()\s*git\s+"
+                r"(?:(?:-[A-Za-z]|--[\w-]+)(?:=\S+|\s+(?:\"[^\"]*\"|'[^']*'|\S+))?\s+)*"
+                r"add\s+(?:\.|-A)(?:\s|$)",
+                line,
             ):
                 problems.append(f"{path}: broad git add: {line}")
     return problems
@@ -426,6 +430,17 @@ def mutate_no_broad_git_add(docs: Docs) -> Docs:
     path = "plugins/devkit/skills/dig/SKILL.md"
     old = "```bash\ncodex -a never exec --sandbox read-only"
     new = "```bash\ngit add .\ncodex -a never exec --sandbox read-only"
+    return _replace_once(docs, path, old, new)
+
+
+def mutate_no_broad_git_add_with_global_option(docs: Docs) -> Docs:
+    """`git -C ... add -A` のように global option を挟んだ形。"""
+    path = "plugins/devkit/skills/dig/SKILL.md"
+    old = "```bash\ncodex -a never exec --sandbox read-only"
+    new = (
+        '```bash\ngit -C "<worktree>" add -A\n'
+        "codex -a never exec --sandbox read-only"
+    )
     return _replace_once(docs, path, old, new)
 
 
@@ -863,6 +878,7 @@ CHECKS: dict[str, Check] = {
     "no_broad_git_add": Check(
         run=check_no_broad_git_add,
         mutate=mutate_no_broad_git_add,
+        extra_mutations=(mutate_no_broad_git_add_with_global_option,),
         targets=targets_no_broad_git_add,
         category="A5",
         why="broad add は承認外の変更を staging する",
