@@ -27,6 +27,14 @@ class Check:
     targets: TargetCounter
     category: str
     why: str
+    # 1 つの check が複数の退行を防ぐ場合、退行ごとに mutation を足す。
+    # 値の誤りだけを見て欠落を見逃す、といった片肺の検査を防ぐため。
+    extra_mutations: tuple[Mutation, ...] = ()
+
+    @property
+    def all_mutations(self) -> tuple[Mutation, ...]:
+        assert self.mutate is not None
+        return (self.mutate, *self.extra_mutations)
 
 
 def _copy(docs: Docs) -> Docs:
@@ -128,16 +136,24 @@ def _codex_commands(docs: Docs) -> list[tuple[str, str]]:
 
 
 def check_codex_execution_shape(docs: Docs) -> list[str]:
-    """codex command の approval、model、effort の指定値を検査する。"""
+    """codex command の approval、model、effort を検査する。
+
+    値の誤りだけでなく**欠落**も拒否する。値だけを見ると、フラグごと消えた
+    ときに正規表現が何も拾わず「問題なし」になり、固定契約が空洞化する。
+    """
     problems: list[str] = []
     for path, command in _codex_commands(docs):
         if not re.search(r"(?:^|\s)-a\s+never(?:\s|$)", command):
             problems.append(f"{path}: codex に -a never がない: {command}")
         model = re.search(r"(?:^|\s)-m\s+(\S+)", command)
-        if model and model.group(1) != "gpt-5.6-sol":
+        if model is None:
+            problems.append(f"{path}: codex に -m の指定がない: {command}")
+        elif model.group(1) != "gpt-5.6-sol":
             problems.append(f"{path}: codex model が不正: {model.group(1)}")
         effort = re.search(r'model_reasoning_effort="([^"]+)"', command)
-        if effort and effort.group(1) != "medium":
+        if effort is None:
+            problems.append(f"{path}: codex に model_reasoning_effort の指定がない: {command}")
+        elif effort.group(1) != "medium":
             problems.append(f"{path}: codex effort が不正: {effort.group(1)}")
     return problems
 
@@ -149,6 +165,18 @@ def targets_codex_execution_shape(docs: Docs) -> int:
 def mutate_codex_execution_shape(docs: Docs) -> Docs:
     path = "AGENTS.md"
     return _replace_once(docs, path, "codex -a never exec", "codex exec")
+
+
+def mutate_codex_execution_shape_drops_model(docs: Docs) -> Docs:
+    """`-m` ごと落ちた場合（値の誤りではなく欠落）。"""
+    return _replace_once(docs, "AGENTS.md", "exec -m gpt-5.6-sol -c", "exec -c")
+
+
+def mutate_codex_execution_shape_drops_effort(docs: Docs) -> Docs:
+    """effort 指定ごと落ちた場合。"""
+    return _replace_once(
+        docs, "AGENTS.md", ' -c model_reasoning_effort="medium"', ""
+    )
 
 
 def _scoped_review_commands(docs: Docs) -> list[tuple[str, str]]:
@@ -281,10 +309,15 @@ def mutate_no_broad_git_add(docs: Docs) -> Docs:
 
 
 def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
+    """削除 refspec（source が空の `:refs/heads/...`）を持つ push だけを拾う。
+
+    `HEAD:refs/heads/topic` のような通常の明示 push を削除と誤認して
+    lease を要求すると、正しいコマンドを書けなくなる。
+    """
     return [
         (path, command)
         for path, command in _command_lines(docs)
-        if re.search(r"\bgit\s+push\b.*:refs/heads/", command)
+        if re.search(r"\bgit\s+push\b.*\s:refs/heads/", command)
     ]
 
 
@@ -595,9 +628,13 @@ CHECKS: dict[str, Check] = {
     "codex_execution_shape": Check(
         run=check_codex_execution_shape,
         mutate=mutate_codex_execution_shape,
+        extra_mutations=(
+            mutate_codex_execution_shape_drops_model,
+            mutate_codex_execution_shape_drops_effort,
+        ),
         targets=targets_codex_execution_shape,
         category="A2",
-        why="approval、model、effort の逸脱で実行契約が変わる",
+        why="approval、model、effort の逸脱または欠落で実行契約が変わる",
     ),
     "review_scope_without_prompt": Check(
         run=check_review_scope_without_prompt,
@@ -719,11 +756,12 @@ def test_every_invariant_fails_on_its_mutation():
     unchanged: list[str] = []
     for name, check in CHECKS.items():
         assert check.mutate is not None
-        mutated = check.mutate(REAL_DOCS)
-        if mutated == REAL_DOCS:
-            unchanged.append(name)
-        if not check.run(mutated):
-            escaped.append(name)
+        for index, mutate in enumerate(check.all_mutations):
+            mutated = mutate(REAL_DOCS)
+            if mutated == REAL_DOCS:
+                unchanged.append(f"{name}[{index}]")
+            if not check.run(mutated):
+                escaped.append(f"{name}[{index}]")
     assert not unchanged, f"mutation が docs を変更していない: {unchanged}"
     assert not escaped, f"mutation を検出できない check: {escaped}"
 
