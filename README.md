@@ -200,7 +200,6 @@ prek run --all-files --hook-stage pre-push
 - `plugins/devkit/skills/setup/scripts/sync_claude_env.py`: Claude Code の compaction env を `~/.claude/settings.json` へ安全に同期
 - `plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py`: Windows の cursor-agent Git Bash シムを冪等同期
 - `plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py`: v10.1.0 の Cursor 独自同期資産を manifest 基準で安全に prune
-- `plugins/devkit/skills/setup/scripts/sync_cursor_skills.py`: v10.1.0 updater 初回更新用の一時互換 stub(prune へ委譲)
 - `plugins/devkit/skills/refactor/SKILL.md`: `refactor` skill
 - `plugins/devkit/skills/memory-review/SKILL.md`: `memory-review` skill
 - `plugins/devkit/skills/handoff/SKILL.md`: `handoff` skill

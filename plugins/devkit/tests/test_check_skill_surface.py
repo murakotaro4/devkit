@@ -64,6 +64,18 @@ def test_removed_surface_contract_covers_v6_retirements():
     assert ".devkit" in check_skill_surface.REMOVED_PATHS
 
 
+def test_v101_cursor_sync_stub_is_retired_and_cannot_return():
+    """v10.1.0 互換 stub は撤去済みで、REMOVED_PATHS が復活を禁じる。
+
+    v11.0.0 で「1 リリース限り」として残したが 4 メジャー生存した。
+    REQUIRED_PATHS に残したままだと存在が必須になり、撤去しても
+    誰かが復活させたときに検出できないため、両方を同時に検査する。
+    """
+    stub = "plugins/devkit/skills/setup/scripts/sync_cursor_skills.py"
+    assert stub in check_skill_surface.REMOVED_PATHS
+    assert stub not in check_skill_surface.REQUIRED_PATHS
+
+
 def test_root_marketplace_source_points_to_existing_plugin_dir():
     market = check_skill_surface.read_json(".claude-plugin/marketplace.json")
     source = market["plugins"][0]["source"]
