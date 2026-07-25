@@ -324,6 +324,12 @@ def test_checkpoint_commit_precedes_independent_review():
     # レビューは worktree 内で実行する。通常 checkout で走らせると commit 済み
     # branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する。
     # 2026-07-25 の圧縮で「worktree 内で」の指定が消えていた([P1])。
+    # step 3 の skip 選択と矛盾しないこと。無条件にレビューを要求すると
+    # 提示した選択肢が無効になる(記事の「競合する指示」アンチパターン)。
+    # 2026-07-25 の圧縮で条件が消えていた([P2])。
+    assert "step 3 で選択した diff レビュー backend" in review
+    assert "`skip` を選択した場合だけ省略する" in review
+    assert "実装 worker と同一 agent は使わない" in review
     assert 'codex -a never exec -C "<worktree>"' in review
     assert "通常 checkout で走らせると" in review
     # 順序保証: 節目 commit の規定が review 節より前にあること

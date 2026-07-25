@@ -179,7 +179,7 @@ Codex 親で cursor-agent を使う場合だけ末尾に `> "$JOB_DIR/cursor-age
 
 **レビュー前に実装を作業 branch へ commit しておく。** `review --base` は commit 済み差分だけを対象とするため、未 commit のままだと空 diff を「指摘なし」と誤報し、必須の独立レビューが空振りする。
 
-親が基点からの diff 全文を計画と照合し、逸脱の理由・リスク・要確認点を判断する。プロジェクトのテスト・lint を実行し、実装 worker と別の reviewer にブランチ全体をレビューさせる。
+親が基点からの diff 全文を計画と照合し、逸脱の理由・リスク・要確認点を判断する。プロジェクトのテスト・lint を実行する。step 3 で選択した diff レビュー backend にブランチ全体をレビューさせ、実装 worker と同一 agent は使わない。`skip` を選択した場合だけ省略する(repo が独立レビュー必須なら step 3 で skip は提示されない)。
 
 codex review の例（origin なしは `--base <default>`）。**`-C "<worktree>"` で worktree を指定する**。通常 checkout で走らせると commit 済み branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する:
 

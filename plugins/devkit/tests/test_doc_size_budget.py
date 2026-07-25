@@ -1,6 +1,6 @@
 """配布ドキュメントのサイズ上限（圧縮の巻き戻り防止 ratchet）。
 
-2026-07-25 に Claude 5 世代のコンテキスト設計へ追従して 105,616 -> 56,622 字へ圧縮した。
+2026-07-25 に Claude 5 世代のコンテキスト設計へ追従して 105,616 -> 56,717 字へ圧縮した。
 一次記録は docs/reviews/2026-07-25-context-engineering-claude5.md。
 
 この検査だけは本文の文言をミラーせず、サイズという不変条件だけを強制する。
@@ -21,7 +21,7 @@ BUDGETS = {
     "plugins/devkit/skills/backlog/SKILL.md": 2870,
     "plugins/devkit/skills/catch-up/SKILL.md": 3250,
     "plugins/devkit/skills/commit-push/SKILL.md": 3400,
-    "plugins/devkit/skills/dig/SKILL.md": 12240,
+    "plugins/devkit/skills/dig/SKILL.md": 12350,
     "plugins/devkit/skills/goal-prompt/SKILL.md": 2080,
     "plugins/devkit/skills/handoff/SKILL.md": 2440,
     "plugins/devkit/skills/improve-skill/SKILL.md": 4260,
@@ -31,7 +31,7 @@ BUDGETS = {
     "plugins/devkit/skills/setup/SKILL.md": 6510,
 }
 
-TOTAL_BUDGET = 62_210
+TOTAL_BUDGET = 62_320
 
 
 def _chars(relpath: str) -> int:
