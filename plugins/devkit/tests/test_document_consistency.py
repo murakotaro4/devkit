@@ -386,11 +386,22 @@ def test_bash_blocks_assign_every_shell_variable_they_use():
     `$SKILL_DIR` / `$TARGET_REPO` の代入を落としていた(codex の diff レビューが
     [P2] として検出)。環境が与える変数だけ例外とする。
     """
-    env_provided = {"TMPDIR", "HOME", "PATH", "PWD", "SHELL", "USER"}
+    # ARGUMENTS はハーネスが置換するスキルテンプレートのプレースホルダ。
+    env_provided = {"TMPDIR", "HOME", "PATH", "PWD", "SHELL", "USER", "ARGUMENTS"}
     offenders: list[str] = []
     for path in sorted((REPO_ROOT / "plugins" / "devkit" / "skills").glob("*/SKILL.md")):
         text = path.read_text(encoding="utf-8")
-        for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL):
+        # fenced block だけでなく、実行形として完結したインラインコマンドも見る。
+        # 2026-07-25 の圧縮で setup の statusline コマンドがインライン化して
+        # 検査を素通りしていた([P2])。コマンドの一部を引用しただけの断片
+        # (`"$(cat "$JOB_DIR/thread-id.txt")"` など) は対象にしない。
+        runnable = re.compile(r"^(node|python|uv|codex|cursor-agent|git|npx|pwsh|bash|sh)\b")
+        blocks = re.findall(r"```bash\n(.*?)```", text, re.DOTALL) + [
+            span
+            for span in re.findall(r"`([^`\n]+)`", text)
+            if "$" in span and runnable.match(span)
+        ]
+        for block in blocks:
             used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)\}?", block))
             assigned = set(
                 re.findall(r"(?:^|[\s;&(])([A-Z][A-Z0-9_]*)=", block, re.MULTILINE)

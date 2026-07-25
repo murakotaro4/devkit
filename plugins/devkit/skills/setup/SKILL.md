@@ -83,7 +83,14 @@ Windows updater の PowerShell 責務は Claude Code native installer、Codex co
 
 ### 8. statusline 適用
 
-Claude 親かつ `node` がある場合だけ、`node "$SKILL_DIR/../../statusline/install.js" --check` で差分を提示し、選択肢付き質問で承認後に適用する。DevKit 管理済み / 未導入は通常適用、他設定との競合は上書きを追加確認して `--force` を使う。Codex 親・判定不能・node 不在は理由付き skip。
+Claude 親かつ `node` がある場合だけ適用する。check と apply は別のシェル呼び出しになり変数が持ち越されないため、毎回 `SKILL_DIR` を代入する。
+
+```bash
+SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
+node "$SKILL_DIR/../../statusline/install.js" --check
+```
+
+差分を提示し、選択肢付き質問で承認後に適用する。DevKit 管理済み / 未導入は `--check` を外した同形、他設定との競合は上書きを追加確認して末尾に `--force` を付けた同形を使う（いずれも `SKILL_DIR` の代入を含める）。Codex 親・判定不能・node 不在は理由付き skip。
 
 ### 9. ターミナルフォント適用(Windows のみ)
 

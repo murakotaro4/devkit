@@ -121,13 +121,13 @@ flowchart TD
 
 ファイル変更を伴うすべての実装（docs / config を含む）は、レビュー前に作業 branch へ commit し、独立 backend へ objective・selected_task・write_scope・VERIFY の command / status と commit 済み diff を渡す。
 
-第一候補:
+第一候補（**必ず専用 worktree 内で実行する**。通常 checkout で実行すると、commit 済み branch ではなくそちらを対象にして空 diff や無関係な diff をレビューする）:
 
 ```bash
-codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null
+codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null
 ```
 
-`review` は scope フラグと positional PROMPT を併用できないため、objective・selected_task・write_scope・検証結果を渡す場合は `review` を使わず、その要約を prompt に含めた通常の `codex -a never exec --sandbox read-only` で追加レビューする。利用不能なら独立サブエージェントを使う。findings は write_scope 内で修正・再検証する。独立レビュー手段がすべて不能で、対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格する。必須でない repo だけ、未実施を明記した Draft PR を許可する。
+`review` は scope フラグと positional PROMPT を併用できないため、objective・selected_task・write_scope・検証結果を渡す場合は `review` を使わず、その要約を prompt に含めた通常の `codex -a never exec -C "<worktree>" --sandbox read-only` で追加レビューする（こちらも worktree 内で実行する）。利用不能なら独立サブエージェントを使う。findings は write_scope 内で修正・再検証する。独立レビュー手段がすべて不能で、対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格する。必須でない repo だけ、未実施を明記した Draft PR を許可する。
 
 ### publish
 

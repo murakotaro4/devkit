@@ -118,11 +118,16 @@ def test_independent_review_and_downgrade_contract():
     # `codex exec review` は scope フラグと positional PROMPT を併用できない
     # (2026-07-25 に実測。併用形を書くと実行時に必ず失敗する)。
     command = (
-        'codex -a never exec -m gpt-5.6-sol '
+        'codex -a never exec -C "<worktree>" -m gpt-5.6-sol '
         '-c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null'
     )
     assert command in text
     assert "scope フラグと positional PROMPT を併用できない" in text
+    # レビューは専用 worktree 内で実行する。通常 checkout で走らせると
+    # commit 済み branch ではなくそちらを対象にし、空 diff や無関係な diff を
+    # レビューして Draft PR を出しうる。2026-07-25 の圧縮で消えていた([P1])。
+    assert "**必ず専用 worktree 内で実行する**" in text
+    assert text.count('-C "<worktree>"') >= 2
     assert "レビュー前に作業 branch へ commit" in text
     assert "ファイル変更を伴うすべての実装（docs / config を含む）" in text
     assert "対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格" in text
