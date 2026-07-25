@@ -54,6 +54,11 @@ def test_trigger_envelope_and_noninteractive_contract():
     assert {"manual", "schedule", "event"} <= set(
         re.findall(r"^\| `(\w+)` \|", text, re.MULTILINE)
     )
+    # 非対話 trigger では質問しない。この契約が消えると、自律実行が
+    # 誰も見ていない場所で確認待ちのまま止まる。汎用 check の対象外なので
+    # ここで肯定形の禁止と、非対話判定の対象を保持する。
+    assert "非対話実行では質問しない" in text
+    assert "`schedule` / `event`" in text
 
 
 def test_harness_detection_is_centralized():

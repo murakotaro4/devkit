@@ -562,27 +562,61 @@ def mutate_remote_delete_lease_targets_other_ref(docs: Docs) -> Docs:
     return _replace_once(docs, path, old, new)
 
 
+# worktree 内で実行される工程の節。ここに現れる委譲コマンドは worktree 固定が要る。
+# 計画レビュー(step 4)は worktree 作成より前なので含めない。
+WORKTREE_SECTIONS = {
+    "plugins/devkit/skills/dig/SKILL.md": (
+        "### 6. worktree 作成と実装委譲",
+        "### 7. 自レビューと独立 diff レビュー",
+        "### 8. 修正ループ",
+    ),
+    "plugins/devkit/skills/repo-loop/SKILL.md": (
+        "### worktree・実装・検証",
+        "### 独立レビュー",
+    ),
+}
+
+
+def _section_body(text: str, heading: str) -> str:
+    start = text.find(heading)
+    if start < 0:
+        return ""
+    level = len(heading) - len(heading.lstrip("#"))
+    match = re.search(
+        rf"^#{{1,{level}}} (?!#)", text[start + len(heading) :], re.MULTILINE
+    )
+    return text[start:] if match is None else text[start : start + len(heading) + match.start()]
+
+
 def _worktree_commands(docs: Docs) -> list[tuple[str, str]]:
+    """worktree 内で走る工程の委譲コマンド。
+
+    membership を `--sandbox workspace-write` のようなフラグで決めると、
+    そのフラグごと落ちたコマンドが検査対象から消えて退行が素通りする。
+    節の構造(どの工程に書かれているか)で決め、フラグとは独立させる。
+    """
     commands: list[tuple[str, str]] = []
+    for path, headings in WORKTREE_SECTIONS.items():
+        text = docs.get(path, "")
+        for heading in headings:
+            body = _section_body(text, heading)
+            if not body:
+                continue
+            for _, command in _command_lines({path: body}):
+                if not re.search(
+                    SEPARATOR + ENV_PREFIX + r"(?:codex|cursor-agent)\s", command
+                ):
+                    continue
+                # create-chat は chatId を発行するだけでファイルを触らない。
+                # workspace 指定は後続の -p 呼び出し側の契約。
+                if re.search(r"\bcursor-agent\s+create-chat\b", _delegated_segment(command)):
+                    continue
+                commands.append((path, command))
+    # scope 付き review はどこに書かれていても worktree 内で走る。
     for path, command in _command_lines(docs):
-        if path == "plugins/devkit/skills/dig/SKILL.md":
-            relevant = (
-                _is_scoped_review(command)
-                or "--sandbox workspace-write" in command
-                or re.search(r"\bcursor-agent\s+-p\b", command)
-            )
-        elif path == "plugins/devkit/skills/repo-loop/SKILL.md":
-            relevant = (
-                _is_scoped_review(command)
-                or (
-                    re.search(r"\bcodex\b", command)
-                    and "--sandbox read-only" in command
-                )
-            )
-        else:
-            relevant = False
-        if relevant:
-            commands.append((path, command))
+        if path in WORKTREE_SECTIONS and _is_scoped_review(command):
+            if (path, command) not in commands:
+                commands.append((path, command))
     return commands
 
 
@@ -798,10 +832,15 @@ def check_commit_before_independent_review(docs: Docs) -> list[str]:
             problems.append(f"{path}: 節目 commit が独立 review より後")
             continue
         body = docs[path][commit.end() : review.start()]
-        if not re.search(r"(?<!しない。)commit する", body):
+        # 肯定形の指示を含む**文**を取り、その文が否定されていないことまで見る。
+        # 「実装 backend は commit しない」は正当な条件節なので、文単位で判定する。
+        affirmative = re.search(r"[^。\n]*commit する[^。\n]*", body)
+        if affirmative is None:
             problems.append(f"{path}: review 前に commit を指示する記述がない")
-        if re.search(r"(?:親|節目)[^。\n]{0,20}commit しない", body):
-            problems.append(f"{path}: 節目 commit の指示が否定されている")
+        elif re.search(r"(?:必要はない|しなくてよい|は不要)", affirmative.group(0)):
+            problems.append(
+                f"{path}: 節目 commit の指示が否定されている: {affirmative.group(0)}"
+            )
     return problems
 
 
@@ -911,12 +950,18 @@ def check_ci_green_before_merge(docs: Docs) -> list[str]:
         # 正当な条件節だから。代わりに**肯定形の merge 指示**の存在を要求する。
         # これが消えれば、工程そのものが失われたことを検出できる。
         affirmative_merge = re.search(
-            r"merge (?:まで完遂|を実行|する)|`gh pr merge|ff-only merge", section
+            r"[^。\n]*(?:merge (?:まで完遂|を実行|する)|`gh pr merge|ff-only merge)[^。\n]*",
+            section,
         )
         if negated:
             problems.append(f"{path}: CI green の要求が否定されている: {negated.group(0)}")
         elif affirmative_merge is None:
             problems.append(f"{path}: merge を実行する肯定形の指示がない")
+        elif re.search(r"(?:必要はない|しなくてよい|は不要)", affirmative_merge.group(0)):
+            # 否定は肯定文の中だけで判定する。「CI 赤なら merge しない」は正当。
+            problems.append(
+                f"{path}: merge 指示が否定されている: {affirmative_merge.group(0)}"
+            )
         elif not ci:
             problems.append(f"{path}: CI green 確認がない")
         elif not merge:
