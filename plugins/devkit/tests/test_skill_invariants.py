@@ -413,10 +413,7 @@ def check_no_broad_git_add(docs: Docs) -> list[str]:
             # 禁止しているはずの broad staging が素通りしてしまう。
             # `git -C "<worktree>" add .` のように global option を挟む形も拾う。
             if re.search(
-                r"(?:^|&&|\|\||[|;]|\()\s*git\s+"
-                r"(?:(?:-[A-Za-z]|--[\w-]+)(?:=\S+|\s+(?:\"[^\"]*\"|'[^']*'|\S+))?\s+)*"
-                r"add\s+(?:\.|-A)(?:\s|$)",
-                line,
+                _git_subcommand_pattern("add") + r"\s+(?:\.|-A)(?:\s|$)", line
             ):
                 problems.append(f"{path}: broad git add: {line}")
     return problems
@@ -444,6 +441,19 @@ def mutate_no_broad_git_add_with_global_option(docs: Docs) -> Docs:
     return _replace_once(docs, path, old, new)
 
 
+def _git_subcommand_pattern(subcommand: str) -> str:
+    """`git [global options] <subcommand>` に一致する正規表現。
+
+    `git -C "<worktree>" push ...` のように global option を挟むだけで
+    検査から外れないよう、option 列を跨いで subcommand を見る。
+    """
+    return (
+        r"(?:^|&&|\|\||[|;]|\()\s*git\s+"
+        r"(?:(?:-[A-Za-z]|--[\w-]+)(?:=\S+|\s+(?:\"[^\"]*\"|'[^']*'|\S+))?\s+)*"
+        rf"{subcommand}\b"
+    )
+
+
 def _is_scoped_review(command: str) -> bool:
     """scope 付き review command。`--base` と `--uncommitted` の両方を見る。
 
@@ -464,7 +474,7 @@ def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
     return [
         (path, command)
         for path, command in _command_lines(docs)
-        if re.search(r"\bgit\s+push\b.*\s:refs/heads/", command)
+        if re.search(_git_subcommand_pattern("push") + r".*\s:refs/heads/", command)
     ]
 
 
@@ -568,7 +578,10 @@ def check_worktree_commands_pin_directory(docs: Docs) -> list[str]:
             problems.append(f"{path}: worktree directory 指定なし: {command}")
             continue
         target = next(group for group in match.groups() if group is not None)
-        if "worktree" not in target and not target.startswith("$"):
+        # 変数参照を無条件に許すと `-C "$HOME"` や `-C "$MAIN_CHECKOUT"` が通り、
+        # 通常 checkout をレビューする失敗モードがそのまま素通りする。
+        # placeholder でも変数でも、名前が worktree を指していることを要求する。
+        if "worktree" not in target.lower() and "wt_dir" not in target.lower():
             problems.append(
                 f"{path}: 指定先が worktree でない ({target}): {command}"
             )

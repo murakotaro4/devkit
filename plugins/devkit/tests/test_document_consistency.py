@@ -645,10 +645,20 @@ def test_layered_output_contract_is_canonical_and_referenced():
     )
 
     for doc_name, section in sections.items():
-        category_lines = {
-            int(number): body
+        parsed = [
+            (int(number), body)
             for number, body in re.findall(r"^([1-7])\. (.+)$", section, re.MULTILINE)
-        }
+        ]
+        # dict へ畳む前に列を検査する。番号が重複していると後勝ちで上書きされ、
+        # 8 項目ある壊れた列でも set が 1..7 に一致して通ってしまう。
+        numbers = [number for number, _ in parsed]
+        assert len(numbers) == 7, (
+            f"{doc_name} の第 1 層カテゴリが 7 項目でない: {numbers}"
+        )
+        assert len(set(numbers)) == len(numbers), (
+            f"{doc_name} の第 1 層カテゴリ番号が重複している: {numbers}"
+        )
+        category_lines = dict(parsed)
         assert set(category_lines) == set(range(1, 8)), (
             f"{doc_name} の第 1 層カテゴリ番号が不完全: {set(category_lines)}"
         )
