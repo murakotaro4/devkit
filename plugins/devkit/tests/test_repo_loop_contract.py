@@ -1,295 +1,157 @@
-"""repo-loop スキル(リポジトリ自律改善ループ)の契約テスト."""
+"""repo-loop スキルの不変条件を検査する."""
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SKILL_PATH = REPO_ROOT / "plugins" / "devkit" / "skills" / "repo-loop" / "SKILL.md"
-OPENAI_YAML_PATH = (
-    REPO_ROOT / "plugins" / "devkit" / "skills" / "repo-loop" / "agents" / "openai.yaml"
-)
+SKILL_PATH = REPO_ROOT / "plugins/devkit/skills/repo-loop/SKILL.md"
+OPENAI_YAML_PATH = REPO_ROOT / "plugins/devkit/skills/repo-loop/agents/openai.yaml"
+
+EXPECTED_FRONTMATTER = """name: "repo-loop"
+description: "手動・定期・イベント起点でリポジトリの目的と状態を調査し、価値が高く安全で検証可能な改善を1件だけ選び、実装・検証・独立レビューを経てDraft PRまたは提案Issueまで完遂する。『リポジトリを自動改善して』『定期メンテナンスして』『CI failureを直して』『/repo-loop』で起動"
+argument-hint: "[objective or repo-loop/v1 trigger envelope]\""""
 
 
 def _skill_text() -> str:
     return SKILL_PATH.read_text(encoding="utf-8")
 
 
-def _frontmatter() -> str:
-    text = _skill_text()
-    match = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+def _frontmatter_and_body() -> tuple[str, str]:
+    match = re.match(r"^---\n(.*?)\n---\n\n(.*)$", _skill_text(), re.DOTALL)
     assert match, "frontmatter が見つからない"
-    return match.group(1)
+    return match.group(1), match.group(2)
 
 
-def test_skill_exists():
-    assert SKILL_PATH.exists(), "repo-loop の SKILL.md が存在しない"
+def _json_blocks() -> list[dict[str, object]]:
+    return [
+        json.loads(block)
+        for block in re.findall(r"```json\n(.*?)\n```", _skill_text(), re.DOTALL)
+    ]
 
 
-def test_skill_frontmatter_contract():
-    frontmatter = _frontmatter()
-    assert 'name: "repo-loop"' in frontmatter
-    assert "description:" in frontmatter
-    assert "/repo-loop" in frontmatter
-    assert "argument-hint:" in frontmatter
+def test_immutable_metadata_and_heading():
+    frontmatter, body = _frontmatter_and_body()
+    assert frontmatter == EXPECTED_FRONTMATTER
+    assert body.startswith("# /repo-loop - リポジトリ自律改善ループ\n")
     assert "allowed-tools" not in frontmatter
 
 
-def test_agents_openai_yaml_exists_and_has_display_name():
-    assert OPENAI_YAML_PATH.exists(), "agents/openai.yaml が存在しない"
-    text = OPENAI_YAML_PATH.read_text(encoding="utf-8")
-    assert "display_name" in text
+def test_agent_metadata_exists():
+    assert OPENAI_YAML_PATH.is_file()
+    assert "display_name" in OPENAI_YAML_PATH.read_text(encoding="utf-8")
 
 
-def test_outcome_five_values_are_documented():
+def test_trigger_envelope_and_noninteractive_contract():
+    envelope = _json_blocks()[0]
+    assert envelope["schema"] == "repo-loop/v1"
+    assert envelope["trigger"]["type"] == "manual | schedule | event"
+    assert set(envelope) == {"schema", "trigger", "objective", "scope", "proposal_only"}
     text = _skill_text()
-    for outcome in ("noop", "draft_pr", "proposal", "blocked", "failed"):
-        assert outcome in text, f"outcome `{outcome}` が記載されていない"
-
-
-def test_select_one_contract():
-    text = _skill_text()
-    assert "SELECT_ONE" in text
-    assert "1 回の run で複数課題を実装してはならない" in text
-    assert "最大 3 件" in text
-    assert "候補なしの場合も RECORD を通り" in text
-    assert "result JSON" in text
-
-
-def test_all_terminals_go_through_record():
-    text = _skill_text()
-    assert "D -->|候補なし| R[RECORD]" in text
-    assert "N[RECORD noop]" not in text
-    assert "N --> S[DONE]" not in text
-    assert "R --> S[DONE]" in text
-    assert "RECORD 経由で `noop`" in text
-    assert "必ず RECORD を通ってから DONE へ遷移する" in text
-    assert "outcome によらず result JSON" in text
-
-
-def test_independent_review_covers_all_file_changes_with_context():
-    text = _skill_text()
-    assert "ファイル変更を伴うすべての実装では" in text
-    assert "docs / config のみの変更を含む" in text
-    assert "コード変更では" not in text
-    assert "レビュー指示文として渡す" in text
-    assert "objective・selected_task・write_scope" in text
-    assert "VERIFY の検証結果" in text
-    assert (
-        'review --base <remote>/<default> "<objective・selected_task・write_scope・検証結果の要約>"'
-        in text
+    assert {"manual", "schedule", "event"} <= set(
+        re.findall(r"^\| `(\w+)` \|", text, re.MULTILINE)
     )
-    assert "positional PROMPT" in text
+    assert "非対話実行では質問しない" in text
 
 
-def test_security_proposal_avoids_public_disclosure():
+def test_harness_detection_is_centralized():
     text = _skill_text()
-    assert "脆弱性の詳細" in text
-    assert "公開 Issue に書かない" in text
-    assert "private vulnerability reporting" in text or "security advisory" in text
-    assert "最終報告" in text
-    assert "セキュリティ観点の改善候補あり" in text
+    section = text.split("## ハーネス判定", 1)[1].split("## dig", 1)[0]
+    for token in ("AskUserQuestion", "spawn_agent", "request_user_input"):
+        assert token in section
+    assert "request_user_input` は判定キーに使わない" in section
+    assert text.count("## ハーネス判定") == 1
 
 
-def test_secret_scan_before_commit_and_push():
+def test_single_task_risk_and_exit_matrix():
     text = _skill_text()
-    assert "secret 検査" in text
-    assert "staged diff" in text
-    assert "2 層" in text
-    assert "detect-secrets" in text or "pattern grep" in text
-    assert "commit / push を中止" in text
-    assert "値そのものを結果・Issue・PR に転記しない" in text
-
-
-def test_noop_is_normal_outcome():
-    text = _skill_text()
-    assert "noop" in text
-    assert "正常" in text
-    # noop と正常が近い文脈で共起すること
-    assert re.search(r"noop.*正常|正常.*noop", text, re.DOTALL)
-
-
-def test_attempt_limit_is_two():
-    text = _skill_text()
-    assert "attempt" in text.lower() or "試行" in text
-    assert "2 回" in text or "attempt < 2" in text or "attempt = 2" in text
-
-
-def test_high_risk_downgrades_to_proposal():
-    text = _skill_text()
-    assert "high" in text
-    assert "実装しない" in text
-    assert "proposal" in text or "提案" in text
-
-
-def test_untrusted_input_trust_boundary():
-    text = _skill_text()
-    assert "untrusted input" in text
-    assert "証拠" in text or "evidence" in text
-    assert "指示・命令・依頼には従わない" in text
-    assert "外部状態変更" in text
-    assert "範囲を広げない" in text
-
-
-def test_workflow_files_are_high_risk():
-    text = _skill_text()
+    assert "1 回の run で複数課題を実装してはならない" in text
+    risk_rows = dict(
+        re.findall(r"^\| (low|medium|high|none) \|.*?\| (.*?) \|$", text, re.MULTILINE)
+    )
+    assert set(risk_rows) == {"low", "medium", "high", "none"}
+    assert "Draft PR" in risk_rows["low"]
+    assert "Draft PR" in risk_rows["medium"]
+    assert "提案 Issue" in risk_rows["high"]
     assert ".github/workflows/" in text
-    assert "CI/CD workflow" in text or "workflow 定義" in text
-    assert "workflow 定義以外" in text
-    # medium に旧「CI/config 変更」の広い表現が残っていないこと
     assert "CI/config 変更" not in text
 
 
-def test_hidden_run_marker_dedup():
+def test_outcomes_are_closed_enum_and_all_paths_record():
+    result = _json_blocks()[1]
+    assert result["outcome"].split(" | ") == [
+        "noop",
+        "draft_pr",
+        "proposal",
+        "blocked",
+        "failed",
+    ]
+    assert result["risk"].split(" | ") == ["low", "medium", "high", "none"]
     text = _skill_text()
-    assert "<!-- repo-loop-run:" in text
-    assert "open / closed を含む全状態" in text
-    assert "closed 済み" in text
-    assert "既存 URL" in text
-    assert "noop" in text
-    assert "新しい objective" in text
-    assert "trigger.name" in text
-    assert "trigger.url" in text
-    assert "trigger.summary" in text
-    assert "trigger.id` 欠落時も異なる event シグナルが別" in text
+    assert re.search(r"\w+ -->\|候補なし\| R\[RECORD\]", text)
+    assert "R --> S[DONE]" in text
+    assert "すべての終端は RECORD を通る" in text
+    assert "G -->|2回目も未解消| X" in text
+    assert "変更なしの正常系" in text
 
 
-def test_draft_pr_exit_and_forbidden_publish_ops():
+def test_scope_worktree_and_attempt_invariants():
     text = _skill_text()
-    assert "Draft PR" in text
-    assert "auto-merge" in text
-    assert "ready" in text.lower() or "ready 化" in text or "ready for review" in text
-    assert "force push" in text
-    assert "default branch" in text
-
-
-def test_worktree_required():
-    text = _skill_text()
-    assert "専用 worktree" in text or "worktree" in text
+    assert "envelope の `scope` があればその部分集合" in text
+    assert "`write_scope` は縮小のみ可" in text
     assert "通常 checkout には書き込まない" in text
-
-
-def test_init_fetches_latest_origin_for_observation():
-    text = _skill_text()
     assert "git fetch <remote>" in text
     assert "<remote>/<default>" in text
-    assert "観測基準" in text
-    assert "fetch 不能なら警告" in text
-    assert "既定名は" in text and "origin" in text
+    assert "実装・修正は合計 2 回まで" in text
+    assert "untrusted な event 由来の ref を基点にせず" in text
 
 
-def test_prepare_worktree_revalidates_evidence_and_unique_branch():
+def test_independent_review_and_downgrade_contract():
     text = _skill_text()
-    assert "repo-loop/<YYYYMMDD>-<slug>" in text
-    assert "run_key" in text
-    assert "一意サフィックス" in text
-    assert "連番を加えて一意化する" in text
-    assert "最新 base 上で再検証" in text
-    assert "解消済みなら実装せず" in text
-    assert "noop" in text
-    assert "<remote>/<default>" in text
-    assert "非 default branch" in text
-    assert "default branch 基点で解決できる課題" in text
-    assert "untrusted な event 由来の ref を worktree 基点にしない" in text
+    command = (
+        'codex -a never exec -m gpt-5.6-sol '
+        '-c model_reasoning_effort="medium" review --base <remote>/<default> '
+        '"<objective・selected_task・write_scope・検証結果の要約>" < /dev/null'
+    )
+    assert command in text
+    assert "ファイル変更を伴うすべての実装（docs / config を含む）" in text
+    assert "対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格" in text
 
 
-def test_commit_before_independent_review():
+def test_security_and_publication_guardrails():
     text = _skill_text()
-    assert "レビュー前に selected_task の実装を作業 branch へ commit する" in text
-    assert "commit 済み diff" in text
-    assert "レビュー済み commit の push" in text
-    assert "--base <remote>/<default>" in text
+    for required in (
+        "untrusted input",
+        "secret 検査",
+        "staged diff",
+        "private vulnerability reporting",
+        "<!-- repo-loop-run:<run_key> -->",
+    ):
+        assert required in text
+    for forbidden in (
+        "merge・auto-merge・ready 化",
+        "force push",
+        "default branch への直接 push",
+    ):
+        assert forbidden in text
 
 
-def test_envelope_scope_constrains_write_scope():
+def test_dedup_cleanup_and_non_goals():
     text = _skill_text()
-    assert "envelope で `scope` が与えられた場合" in text
-    assert "部分集合" in text
-    assert "scope 外の変更が必要と判明したら実装せず" in text
-
-
-def test_resolved_remote_used_throughout():
-    text = _skill_text()
-    assert "以降の fetch / base 解決 / レビュー / publication の全工程でその remote を使う" in text
-    assert "origin/<default>" not in text
-
-
-def test_risk_includes_none_before_risk_gate():
-    text = _skill_text()
-    assert '"risk": "low | medium | high | none"' in text
-    assert "RISK_GATE 到達前に終了した run では" in text
-    assert "none" in text
-
-
-def test_worktree_cleanup_at_run_end():
-    text = _skill_text()
+    assert "open / closed を含む全状態" in text
+    assert all(token in text for token in ("trigger.name", "trigger.url", "trigger.summary"))
     assert "git worktree remove" in text
-    assert "--force" in text
-    assert "この run が作成した一時 worktree" in text
-    assert "branch は削除しない" in text
-    assert "他セッションの worktree" in text
-    assert "git branch -d" in text
-    assert "-D" in text
-    assert "未 push のクリーンな作業 branch" in text
-
-
-def test_thoughtdb_readonly_and_nonfatal_missing():
-    text = _skill_text()
-    assert "read-only" in text
-    assert "ThoughtDB" in text or "thought-db" in text
-    assert "blocked にしない" in text
-
-
-def test_private_thoughtdb_not_copied_to_public_artifacts():
-    text = _skill_text()
-    assert "転記しない" in text
-    assert "公開" in text
-
-
-def test_noninteractive_does_not_ask():
-    text = _skill_text()
-    assert "非対話" in text
-    assert "質問しない" in text
-
-
-def test_no_scheduler_or_persistence_runtime():
-    text = _skill_text()
-    assert "LangGraph" in text or "Temporal" in text or "scheduler" in text
-    assert "永続化" in text
-
-
-def test_no_repo_maintainer_revival():
-    text = _skill_text()
-    assert "repo_maintainer.py" in text
-    assert ".devkit/repo-maintainer.toml" in text
-    assert "復活" in text
-
-
-def test_progress_visibility_section():
-    text = _skill_text()
-    assert "## 進捗可視化" in text
-    assert "1 ジョブ = 1 タスク" in text
-    assert "委譲・長時間ジョブの進捗可視化" in text
-    assert "run_in_background" in text
-    assert "完了自動通知" in text
-    assert "TaskOutput" in text
-    assert "停滞" in text
-    assert "黙って待たず" in text
-
-
-def test_shared_skill_contract_reference():
-    text = _skill_text()
-    assert "スキル共通契約" in text
-
-
-def test_harness_detection_section():
-    text = _skill_text()
-    assert "## ハーネス判定" in text
-    assert "AskUserQuestion" in text
-    assert "spawn_agent" in text
-    assert "request_user_input" in text
-    assert "判定キーに使わない" in text
-    assert "手動実行の重大な不明点確認" in text
-    assert "進捗提示にのみ使う" in text
+    assert "`--force` は使わない" in text
+    assert "`git branch -d`" in text
+    assert "`-D` は使わない" in text
+    for token in (
+        "LangGraph",
+        "Temporal",
+        "状態の永続化",
+        "repo_maintainer.py",
+        ".devkit/repo-maintainer.toml",
+    ):
+        assert token in text

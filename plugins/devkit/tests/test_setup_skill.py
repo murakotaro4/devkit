@@ -59,152 +59,120 @@ def _run_sync_json(repo: Path, template: Path, *extra_args: str) -> dict[str, ob
 
 def test_skill_frontmatter():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    match = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+    match = re.match(r"^---\n(.*?)\n---\n\n(.*)$", text, re.DOTALL)
     assert match, "frontmatter が見つからない"
     frontmatter = match.group(1)
-
-    assert 'name: "setup"' in frontmatter
-    assert "description:" in frontmatter
-    assert "セットアップして" in frontmatter
-    assert "ルール同期して" in frontmatter
-    assert "/setup" in frontmatter
-    assert 'argument-hint: "[target]"' in frontmatter
-    assert "allowed-tools:" in frontmatter
-    assert '"Write"' in frontmatter
-    assert '"Edit"' in frontmatter
-    assert '"request_user_input"' in frontmatter
-
-
-def test_skill_contract_mentions_markers_idempotency_and_harness():
-    text = SKILL_PATH.read_text(encoding="utf-8")
-
-    assert "devkit:rules:start" in text
-    assert "devkit:rules:end" in text
-    assert "冪等" in text
-    assert "no-op" in text
-    assert "## ハーネス判定" in text
-    assert "Claude 親" in text
-    assert "Codex 親" in text
-    assert "Claude Code plugin のスキルを読み込む" in text
-
-
-def test_skill_contract_mentions_environment_prerequisites():
-    text = SKILL_PATH.read_text(encoding="utf-8")
-
-    assert "### 2. 環境前提チェック" in text
-    assert "command -v" in text
-    for cmd in ("claude", "codex", "cursor-agent", "node", "uv"):
-        assert cmd in text, f"環境前提チェックに {cmd} がない"
-    assert "tmux" not in text
-    assert "goal-prompt が出力する `/goal` 起動プロンプトの実行環境" in text
-    assert "dig の実装・計画レビュー・diff レビュー backend" in text
-    assert "インストール自体はこのスキルでは行わない" in text
-    assert "`uv` が `MISSING` の場合" in text
-    assert "この時点で停止し、step 3 以降は実行しない" in text
-    assert "`brew install uv`" in text
-    assert "`winget install --id astral-sh.uv`" in text
-    assert "`node` が `MISSING` の場合" in text
-    assert "step 8 の statusline 適用だけをスキップ" in text
-    assert "step 3-7 と step 9-10 は続行" in text
-    assert "`brew install node`" in text
-    assert "`claude` / `codex` / `cursor-agent` が `MISSING` の場合: 情報提供のみ" in text
-    assert "MISSING があった場合は、影響と導入コマンドを報告に含める" in text
-
-
-def test_skill_contract_mentions_windows_terminal_font_approval_gate():
-    text = SKILL_PATH.read_text(encoding="utf-8")
-
-    assert "### 9. ターミナルフォント適用(Windows のみ)" in text
-    assert "setup_terminal_font.py" in text
-    assert "UDEV Gothic NF" in text
-    assert "ダウンロード失敗" in text
-    assert "SHA-256 不一致" in text
-    assert "`download`" in text
-    assert "--check --format json" in text
-    assert "選択肢付き質問で承認" in text
-    assert "step 8 の statusline 適用と step 9 のターミナルフォント適用のみ" in text
-    assert TERMINAL_FONT_SCRIPT_PATH.is_file()
-
-
-def test_updater_sync_step_order_and_reporting_contract():
-    text = SKILL_PATH.read_text(encoding="utf-8")
-    thought_heading = "### 4. thought-db 接続同期(ユーザー環境)"
-    updater_heading = "### 5. updater 同期(ユーザー環境)"
-    compaction_heading = "### 6. Claude Code compaction 設定同期(ユーザー環境)"
-    shim_heading = "### 7. cursor-agent Git Bash シム同期(Windows のみ)"
-    statusline_heading = "### 8. statusline 適用"
-    font_heading = "### 9. ターミナルフォント適用(Windows のみ)"
-    report_heading = "### 10. 検証とレポート"
-
-    assert (
-        text.index(thought_heading)
-        < text.index(updater_heading)
-        < text.index(compaction_heading)
-        < text.index(shim_heading)
-        < text.index(statusline_heading)
-        < text.index(font_heading)
-        < text.index(report_heading)
+    assert frontmatter == (
+        'name: "setup"\n'
+        'description: "対象リポジトリへ DevKit 標準ルールを、ユーザー環境へ updater・compaction env・cursor-agent シムを同期し旧 updater 名と Cursor 同期資産の残骸を prune する。「セットアップして」「ルール同期して」「/setup」で起動"\n'
+        'argument-hint: "[target]"\n'
+        'allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit", '
+        '"AskUserQuestion", "request_user_input", "TaskCreate", "TaskUpdate"]'
     )
-    updater_section = text.split(updater_heading, 1)[1].split(compaction_heading, 1)[0]
-    assert "sync_updater.py" in updater_section
-    assert "prune_legacy_cursor_sync.py" in updater_section
-    assert "Claude 親 / Codex 親のどちらでも実行" in updater_section
-    assert "承認ゲートは置かず" in updater_section
-    for field in ("`changed`", "`skipped`", "`actions`"):
-        assert field in updater_section
-    assert UPDATER_SCRIPT_PATH.is_file()
+    assert match.group(2).startswith("# /setup\n")
 
 
-def test_cursor_prune_contract_is_part_of_updater_step():
+def test_harness_matrix_and_approval_boundary():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    updater_heading = "### 5. updater 同期(ユーザー環境)"
-    compaction_heading = "### 6. Claude Code compaction 設定同期(ユーザー環境)"
-    cursor_section = text.split(updater_heading, 1)[1].split(compaction_heading, 1)[0]
-
-    assert "prune_legacy_cursor_sync.py" in cursor_section
-    assert 'uv run --no-project --python ">=3.10" python' in cursor_section
-    assert "旧 Cursor 同期資産の残骸 prune" in cursor_section
-    assert "`~/.cursor/` または manifest が存在しない場合はディレクトリを作らず skip" in cursor_section
-    assert "`skip_prune_modified`" in cursor_section
-    assert "`skip_irregular`" in cursor_section
-    for field in ("`changed`", "`skipped`", "`actions`"):
-        assert field in cursor_section
-    assert CURSOR_PRUNE_SCRIPT_PATH.is_file()
+    harness = text.split("## ハーネス判定", 1)[1].split("## 実行前提", 1)[0]
+    for token in ("AskUserQuestion", "spawn_agent", "request_user_input"):
+        assert token in harness
+    assert "request_user_input` は判定キーに使わない" in harness
+    assert "通常の同期・prune に差分承認ゲートは置かない" in text
+    assert "承認が必要なのは statusline と Windows Terminal font だけ" in text
 
 
-def test_compaction_env_sync_contract():
+def test_environment_prerequisite_matrix():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    heading = "### 6. Claude Code compaction 設定同期(ユーザー環境)"
-    next_heading = "### 7. cursor-agent Git Bash シム同期(Windows のみ)"
-    section = text.split(heading, 1)[1].split(next_heading, 1)[0]
-
-    assert "sync_claude_env.py" in section
-    assert "承認ゲートは置かず" in section
-    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW=1000000" in section
-    assert "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=50" in section
-    assert "実ウィンドウが 1M 以下" in section
-    assert "新規セッション" in section
-    assert "project / local / managed" in section
-    for field in ("`changed`", "`skipped`", "`actions`"):
-        assert field in section
-    assert CLAUDE_ENV_SCRIPT_PATH.is_file()
+    section = text.split("### 2. 環境前提チェック", 1)[1].split("## 同期", 1)[0]
+    for cmd in ("claude", "codex", "cursor-agent", "node", "uv"):
+        assert f"`{cmd}`" in section
+    assert "tmux" not in section
+    assert "`uv` | 必須同期と Windows font を実行できないため、同期前に停止" in section
+    assert "`node` | statusline だけ skip。他の同期と font は継続" in section
+    assert "`brew install uv`" in section
+    assert "`winget install --id astral-sh.uv`" in section
+    assert "インストール自体は行わない" in section
 
 
-def test_cursor_agent_shim_sync_contract():
+def test_sync_target_matrix_is_complete():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    heading = "### 7. cursor-agent Git Bash シム同期(Windows のみ)"
-    next_heading = "### 8. statusline 適用"
-    section = text.split(heading, 1)[1].split(next_heading, 1)[0]
+    sync = text.split("## 同期", 1)[1].split("## 承認が必要な適用", 1)[0]
+    expected = {
+        "repo rules": "sync_rules.py",
+        "thought-db": "sync_thought_db.py",
+        "updater": "sync_updater.py",
+        "旧 Cursor 資産": "prune_legacy_cursor_sync.py",
+        "compaction env": "sync_claude_env.py",
+        "cursor-agent シム": "sync_cursor_agent_shims.py",
+    }
+    table = re.search(
+        r"^\| 対象 \| `<script>` / `<args>` \| 冪等性・保全 \| 失敗時 \|\n"
+        r"^\|[-|]+\|\n"
+        r"((?:^\|.*\|\n)+)",
+        sync,
+        re.MULTILINE,
+    )
+    assert table, "同期対象表が見つからない"
+    rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in table.group(1).splitlines()]
+    assert len(rows) == len(expected)
+    assert {row[0] for row in rows} == set(expected)
+    for target, script in expected.items():
+        row = next(row for row in rows if row[0] == target)
+        assert len(row) == 4
+        assert script in row[1]
+        assert row[2]
+        assert row[3]
+    assert sync.count('uv run --no-project --python ">=3.10" python') == 1
+    assert all(field in sync for field in ("`changed`", "`skipped`", "`actions`"))
+    assert all(
+        path.is_file()
+        for path in (
+            SCRIPT_PATH,
+            THOUGHT_SCRIPT_PATH,
+            UPDATER_SCRIPT_PATH,
+            CURSOR_PRUNE_SCRIPT_PATH,
+            CLAUDE_ENV_SCRIPT_PATH,
+            CURSOR_SHIM_SCRIPT_PATH,
+        )
+    )
 
-    assert "sync_cursor_agent_shims.py" in section
-    assert "承認ゲートは置かず" in section
-    assert "非 Windows は理由付きで skip" in section
-    assert "`%LOCALAPPDATA%` が未設定" in section
-    assert "cursor-agent 未導入" in section
-    assert "`agent.cmd` だけが不在" in section
-    for field in ("`changed`", "`skipped`", "`actions`"):
-        assert field in section
-    assert CURSOR_SHIM_SCRIPT_PATH.is_file()
+
+def test_marker_compaction_and_cursor_safety_invariants():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    for marker in (
+        "devkit:rules:start",
+        "devkit:rules:end",
+        "devkit:thought-db:start",
+        "devkit:thought-db:end",
+    ):
+        assert marker in text
+    assert "@./AGENTS.md" in text
+    assert "`skip_prune_modified` / `skip_irregular` は保持" in text
+    assert "manifest がなければ directory を作らず skip" in text
+    assert ".cursor/skills" in text
+
+
+def test_compaction_env_values_are_literal_and_scoped():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW=1000000" in text
+    assert "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=50" in text
+    assert "project / local / managed scope" in text
+    assert "新規セッション" in text
+
+
+def test_windows_font_approval_and_failure_boundary():
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    section = text.split("### 9. ターミナルフォント適用(Windows のみ)", 1)[1].split(
+        "### 10. 検証とレポート", 1
+    )[0]
+    assert "UDEV Gothic NF" in text
+    assert "setup_terminal_font.py" in section
+    assert "--check --format json" in section
+    assert "選択肢付き質問で承認後" in section
+    assert "ダウンロード失敗" in section
+    assert "SHA-256 不一致" in section
+    assert TERMINAL_FONT_SCRIPT_PATH.is_file()
 
 
 def test_openai_agent_metadata_exists():

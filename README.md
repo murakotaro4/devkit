@@ -29,7 +29,7 @@ v6 の置き換え先は marketplace 配布の `dig` と `improve-skill` です�
 - `handoff`: セッション終了時に `.claude/handoff/` へ gitignore 対象の引継ぎドキュメントを書き出す skill
 - `backlog`: repo に散らばる残課題の痕跡(`.claude/handoff/` / `.claude/plans/` / `.claude/goal-runs/` / git / gh の open PR)を read-only で横断棚卸しし、ダッシュボードとして提示して実装は `/dig` へ引き継ぐ skill
 - `catch-up`: 外部世界のモデル世代・CLI フラグ・ハーネス機能・marketplace の変化を裏取りし、`premises.json` 起点で影響箇所を棚卸しして承認済み範囲を追従更新する skill
-- `commit-push`: 未コミット変更を論理グループ(最大 5)に分割し、分割案のユーザー承認・secret 2 層検査・literal pathspec の add・グループ単位 5 段階検証を経て日本語 Conventional Commits で commit し、upstream へ明示単一 refspec で push する skill
+- `commit-push`: 未コミット変更を論理グループ(最大 5)に分割し、分割案のユーザー承認・secret 2 層検査・literal pathspec の add・グループ単位の安全検証を経て日本語 Conventional Commits で commit し、upstream へ明示単一 refspec で push する skill
 - `repo-loop`: 手動・定期・イベント起点でリポジトリを調査し、安全で検証可能な改善を 1 件だけ選んで実装・検証・独立レビューを経て Draft PR / 提案 Issue / no-op で完結する自律ループ skill
 
 `dig` は普段の開発ワークフローの主スキルで、**既定は実装完遂**です。深掘りから worktree 上の実装、統合(既定は PR の提出 + CI green 確認 + merge。PR 不可 repo では直接統合の merge / push)まで、ユーザーが明示しない限り一気通貫で進めます。`goal-prompt` は、終了条件が明確なタスクを別ターン・後続セッション・不在実行へ渡したい場合の補助線で、Goal プロンプトの保存生成と `/goal` 起動プロンプトの出力だけを行います。固定済み Goal の反復巡回はユーザーが `/loop` で登録し、trigger 起点で課題を毎回自選する定期改善は `repo-loop` を使います。

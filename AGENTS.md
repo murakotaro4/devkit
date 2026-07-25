@@ -8,50 +8,48 @@
 - 配布 skill は `plugins/devkit/skills/dig/`、`plugins/devkit/skills/goal-prompt/`、`plugins/devkit/skills/improve-skill/`、`plugins/devkit/skills/setup/`、`plugins/devkit/skills/refactor/`、`plugins/devkit/skills/memory-review/`、`plugins/devkit/skills/handoff/`、`plugins/devkit/skills/backlog/`、`plugins/devkit/skills/catch-up/`、`plugins/devkit/skills/commit-push/`、`plugins/devkit/skills/repo-loop/` の 11 本とする
 - repo-loop は trigger(手動・定期・イベント)起点で改善課題を自分で選ぶ自律ループであり、非対話実行では質問せず、low/medium risk は事前承認なしで Draft PR まで(auto-merge・ready 化はしない)、high risk は提案 Issue へ降格する。dig(ユーザー要求起点・計画承認・統合完遂)とは起点と出口で分離し、repo-loop から dig を自動呼び出さない
 - statusline 配布物は `plugins/devkit/statusline/` に同梱し、適用は setup workflow から行う
-- Codex 側の配布は plugin marketplace を正本にし、独自の skill 同期経路は復活させない
+- Codex 側の配布は `murakotaro4/devkit` marketplace を正本にし、独自の skill 同期経路は復活させない
 - 振る舞いを変える変更では、コードだけでなく対応するドキュメントも同じ変更で揃える
 - ルートの正規ファイル名は `AGENTS.md` と `CLAUDE.md` を使う
-- goal-prompt は Goal プロンプト本文を gitignore 済みの `.claude/goal-runs/` へ保存する(上書きせず連番)。commit も premises.json への出現登録もしない。dig がユーザー明示で goal-prompt へ引き継ぐ場合はレビュー済み計画を `.claude/plans/` へ保存する
+- goal-prompt は本文を gitignore 済みの `.claude/goal-runs/` へ連番保存し、commit も premises.json 登録もしない。dig から明示的に引き継ぐレビュー済み計画だけ `.claude/plans/` へ保存する
 
 ## Workflow
 
-開発フローの基本形は次のとおり。実行オーケストレーションのスキル実体は `plugins/devkit/skills/dig/SKILL.md`。
+実行オーケストレーションの正本は `plugins/devkit/skills/dig/SKILL.md`。ここでは骨格だけを定める。
 
-1. 深掘り: 要求が曖昧なら、未知を棚卸しして影響が大きい未知だけ質問し、ユーザーの要求(目的・成功条件・非対象)を聞き出す。未知棚卸し表(質問する / 仮定で進める / 確定済み)で終了判定を可視化し、小さい未知は仮定を明示して進める(質問ポリシーの正本は dig スキルの SKILL.md)
-2. 計画: コードベースを調査し、decision-complete な計画を作る
-3. 承認: 計画レビュー・実装・diff レビューの backend を選択し、計画レビュー(skip 可)を経た計画をユーザーに提示して、承認を得てから実装に進む。Claude 親は plan mode / ExitPlanMode を既定とする
-4. 実装: worktree 上の作業ブランチで計画に沿って差分を作り、親が節目ごとにパス限定で commit する。計画から逸脱する場合は理由・リスク・要確認点を記録する(実装を外部 backend に委譲する場合は dig スキルの契約に従う)
-5. 自レビュー: diff 全文を計画と突き合わせ、テスト・リンタを実行する
-6. 修正ループ: 指摘が解消するまで修正を繰り返す
-7. 報告と統合: 変更サマリーを報告し、統合(既定は PR の提出 + CI green 確認 + merge。PR 不可 repo では直接統合の merge / push)まで dig が完遂する。承認は計画承認に一本化し、計画に明記した統合方法以外は実行しない
+1. 深掘り: 目的・成功条件・非対象と、影響の大きい未知を確定する
+2. 計画: 調査結果から decision-complete な計画を作る
+3. 承認: 独立した計画レビューを反映し、ユーザー承認を得る
+4. 実装: 承認済み write_scope と統合方法に従う
+5. 自レビュー: 計画との diff、テスト、リンタを確認する
+6. 修正ループ: findings がなくなるまで直す
+7. 報告と統合: 既定は PR 提出、CI green、merge まで完遂する
 
 ## 並行開発と worktree
 
-- 並行して進める開発は `git worktree` で分離する。main の作業ツリー上で複数機能を同時に進めない(1 ブランチ = 1 worktree)
-- 複数機能・複数ブランチの並行開発は worktree を分離する。単一機能内の並列実装委譲は dig 契約に従い、同一 worktree で write_scope を互いに素にし、節目 commit はパス限定で行う
-- dig の実装系は常に worktree を使う(正本は `plugins/devkit/skills/dig/SKILL.md`)
-- `plugins/devkit/**` に触る作業の開始時と version bump 直前に `git fetch origin` で origin/main との差を確認し、遅れていれば先に取り込む(v7.5.0 の version 衝突・rebase コンフリクトの再発予防)
+- dig の実装は 1 ブランチ = 1 worktree とし、複数機能を main 作業ツリーで並行しない。同一 worktree の並列委譲は write_scope を互いに素にする
+- `plugins/devkit/**` に触る作業の開始時と version bump 直前に `git fetch origin` し、origin/main に遅れていれば取り込む
 - 他セッション由来の worktree・ブランチ・open PR は常に存在しうる進行中の正常な作業として扱う。削除・checkout・rebase・「残骸がある」等の報告の対象にしない。後始末は自セッションが作成した worktree・ブランチ・PR に限り、他 worktree の調査・掃除はユーザーが明示依頼した場合のみ行う
-- origin/main は他 worktree の PR が順に merge されて進む前提で運用する。統合前の fetch + rebase・version 再計算・push reject からのやり直し・rebase 標準解消手順は、この前提での通常運転であり異常として扱わない(標準解消手順の対象外の衝突のみ従来どおり停止・報告)
+- origin/main の進行を通常運転とし、統合前に fetch + rebase と version 再計算を行う
 
 ### 統合時 rebase 衝突の標準解消手順
 
-worktree 統合の rebase で発生する既知の機械的衝突は、以下の手順で解消して rebase を続行してよい（dig の統合契約から参照される）。機械解消の対象はここに列挙したクラスに限定する。
+機械解消してよいのは次のクラスだけ。
 
-- `plugins/devkit/.claude-plugin/plugin.json` の `version` の衝突: origin 側の値を一時採用して rebase を続行し、rebase 完了後に Release Rules に従い最新 origin 値から bump 種別を一度だけ再適用する。rebase 中に version 変更だけの commit が空になった場合は `git rebase --skip` する（version 以外の変更を含む commit は skip しない）
-- `plugin.json` の `description` の衝突: base と比べて片側だけが変更している場合はその側を採用する。両側が変更している場合は機械解消せず停止・報告する（version と一括りに origin 側を採用しない）
-- スキル一覧の識別子集合（`check_skill_surface.py` の EXPECTED_SKILLS、`test_document_consistency.py` の DISTRIBUTED_SKILLS）の衝突: base / origin / branch の三者比較で両側とも追加のみと確認できた場合に限り和集合で解消する。削除・rename・同一項目の両側変更を含む場合は停止・報告する。AGENTS.md / README.md / plugin description など文章中のスキル列挙・個数は和集合の対象にせず、確定した識別子集合に合わせて再構成する
-- 標準解消で rebase を完了した後は verify-full を再実行し、失敗時は push せず停止・報告する
-- 上記以外の衝突は従来どおり `git rebase --abort` して停止・報告する
+- `plugin.json` の `version`: origin 値で rebase し、完了後に最新 origin 値へ bump を 1 回適用する。version だけの空 commit は skip できる
+- `plugin.json` の `description`: base 比で片側だけの変更ならその側を採用する
+- スキル識別子集合: base / origin / branch の両側が追加のみなら和集合にする。文章中の列挙は確定集合から再構成する
+
+それ以外（両側の description 変更、識別子の削除・rename・同一項目変更を含む）は `git rebase --abort` して停止・報告する。機械解消後は verify-full を再実行し、失敗時は push しない。
 
 ## dig と goal-prompt の使い分け
 
-dig はユーザーの主開発ワークフローで、深掘りから実装・検証・統合まで完遂する。**既定は実装完遂**で、開始時に実行形態を質問しない。ユーザーが明示した場合だけ、次のいずれかへ分岐する。
+dig の既定は実装完遂で、開始時に実行形態を質問しない。ユーザーが明示した場合だけ分岐する。
 
-- read-only 終了: 計画だけ・調査だけ・相談だけをユーザーが明示した場合、実装せず提示のみで終了する
-- goal-prompt への引き継ぎ: ユーザーが別ターン・後続セッション・不在実行への引き継ぎを明示した場合、レビュー済み計画を `.claude/plans/YYYY-MM-DD-<slug>.md` へ保存し goal-prompt へ渡す
+- 計画・調査・相談だけ: read-only で終了
+- 別ターン・不在実行: レビュー済み計画を `.claude/plans/YYYY-MM-DD-<slug>.md` に保存し goal-prompt へ渡す
 
-goal-prompt は会話・仕様・計画から Goal プロンプトを `.claude/goal-runs/` へ保存生成し(上書きせず連番)、`/goal` 起動プロンプトを出力する軽量スキルとする。コード変更・commit / push・PR 作成・Goal 独立レビューは行わず、`/goal` の実行はユーザーが行う。上限停止は goal-prompt が自動算出する。固定済み Goal ファイルの反復巡回はユーザーが `/loop` で登録する運用とし、課題を毎回自選する定期改善は repo-loop(envelope の `trigger.type: schedule`)を使う
+goal-prompt は Goal プロンプトの保存と `/goal` 起動文の出力だけを行い、コード変更・commit・push・PR・独立レビュー・実行はしない。反復巡回は `/loop`、課題を自選する定期改善は repo-loop の `trigger.type: schedule` を使う。
 
 ## Maintenance Rules
 
@@ -59,7 +57,7 @@ goal-prompt は会話・仕様・計画から Goal プロンプトを `.claude/g
 - スクリプトの仕様変更時は `README.md` と `plugins/devkit/scripts/README.md` を同期する
 - スキル契約を変える場合は対応する `SKILL.md` と必要な templates / scripts を同期する
 - 外部世界由来の値（モデル名・CLI フラグ・marketplace 名等）を docs へ追加・変更するときは `plugins/devkit/premises.json` に登録・更新する（`check_external_premises.py` が同期を強制する）
-- スキル契約や user-visible workflow を刷新するときは、ユーザーが明示しない限り fallback や後方互換の維持を要件にしない。新しい正本の挙動を明確化し、旧経路を半端に残さない
+- user-visible workflow を刷新するときは、明示要件でない fallback や後方互換を残さない
 - この repo では、ファイル変更を伴うタスクごとに必ず独立したサブエージェント review を 1 回以上実施する
 - review で指摘が出た場合は修正後に再 review を回し、追加 findings がなくなるまで繰り返す
 - 品質ルールは prose より決定論的ツールを優先し、lint / format / validation / test で強制する。バグや逸脱が出たら、同じ失敗を次回自動検出できる check を追加する
@@ -77,42 +75,31 @@ goal-prompt は会話・仕様・計画から Goal プロンプトを `.claude/g
 
 ## スキル共通契約
 
-配布スキル（`plugins/devkit/skills/*/SKILL.md`）が共有する契約の正本。各 SKILL.md は要点と本節への参照だけを持ち、独自の定義でこの契約を上書きしない。配布先には repo ルートの AGENTS.md が同梱されないため、各 SKILL.md は実行に必要な要点を自己完結で保持する（本節への参照はメンテナンス時の正本を示すためのもの）。
+配布スキル（`plugins/devkit/skills/*/SKILL.md`）の共有契約の正本。配布先には AGENTS.md が同梱されないため、各 SKILL.md は実行に必要な要点を自己完結で保持し、本節を独自定義で上書きしない。
 
 ### ハーネス判定
 
-- `AskUserQuestion` が使える → Claude 親
-- `AskUserQuestion` がなく `spawn_agent` が使える → Codex 親
-- どちらでもない → 判定不能として扱う
-- `request_user_input` は plan mode 依存で不安定なため判定キーに使わない。Codex 親 plan mode での質問手段としてのみ使う
+`request_user_input` は判定キーに使わない。
 
-### 質問手段
-
-- Claude 親: AskUserQuestion
-- Codex 親 plan mode: `request_user_input`
-- Codex 親通常 mode / 判定不能: 選択肢を箇条書きで提示して自由文回答を求める
-
-### 承認手段
-
-- Claude 親: plan mode + `ExitPlanMode` を既定とし、step 1 開始時に plan mode 外であれば `EnterPlanMode` で入る。`EnterPlanMode` を利用できない場合だけ、計画全文を提示して明示承認を得る
-- Codex 親 plan mode: `request_user_input` で承認を得る
-- Codex 親通常 mode / 判定不能: 計画全文を提示して自由文で明示承認を得る
+| 種別 | 判定 | 質問 | 承認 |
+|---|---|---|---|
+| Claude 親 | `AskUserQuestion` が使える | `AskUserQuestion` | `EnterPlanMode` で入り `ExitPlanMode`。利用不能時だけ計画全文への明示承認 |
+| Codex 親 | 上記がなく `spawn_agent` が使える | plan mode は `request_user_input`、通常 mode は選択肢 + 自由文 | 同じ手段で計画全文への明示承認 |
+| 判定不能 | どちらもない | 選択肢 + 自由文 | 計画全文への自由文明示承認 |
 
 ### 計画・レポートの 2 層提示
 
-承認・判断を求める長文出力を出す dig / refactor / backlog / catch-up / memory-review は、第 1 層の承認用サマリーをユーザーの承認・選択が発生する時点より前の出力冒頭に置き、第 2 層の詳細を同一文書の後段に置く。
-
-第 1 層(承認用サマリー)は長さではなく次の 7 カテゴリで定義し、承認判断をこの層だけで完結できるようにする。
+dig / refactor / backlog / catch-up / memory-review の長文は、承認用サマリーを冒頭、詳細を後段に置く。第 1 層だけで判断できるよう、次の 7 カテゴリを含める。
 
 1. 何を / なぜ: 1〜2 文
-2. 判断してほしい点: 各項目に推奨を付け、最大 3 件程度。なければ「なし」
-3. 既定からの逸脱・採用した仮定: なければ「既定どおり」
-4. 後戻りしにくい操作・外部影響: merge / push / 削除 / 公開など該当するものだけ
-5. backend 表: 計画レビュー / 実装 / diff レビューを毎回必須とし、適用不能なスキル・役割は「適用なし」と明記する。backend 表は例外報告主義の対象外とする
-6. 検証: 何が green なら成功かを 1 行
-7. 独立レビュー状態: `実施済み(指摘 N 件反映)` / `skip(理由)` / `適用なし` の 3 値のいずれかと実施 backend を記す。承認時点までに実施したレビューだけを表し、未来のレビュー結果は保証しない。適用後レビューの結果は完了報告側で報告する
+2. 判断してほしい点: 推奨付き、最大 3 件。なければ「なし」
+3. 既定からの逸脱・仮定: なければ「既定どおり」
+4. 後戻りしにくい操作・外部影響: 該当分だけ
+5. backend 表: 計画レビュー / 実装 / diff レビュー。適用不能は「適用なし」
+6. 検証: 成功条件を 1 行
+7. 独立レビュー状態: backend と `実施済み(指摘 N 件反映)` / `skip(理由)` / `適用なし`
 
-第 1 層の分量は次の基準で管理する。根拠は承認潜時の実測(承認までの中央値およそ 100 秒、当時の計画は中央値およそ 7,000 字)で、逐次読解できるのは 1,000 字程度にとどまる。測定の詳細は `docs/reviews/2026-07-25-cognitive-load-metrics.md` を正本とする。
+字数基準の正本は `docs/reviews/2026-07-25-cognitive-load-metrics.md`。
 
 - 目標は散文部(カテゴリ 1〜4)で約 1,000 字。字数は見出し行を除く本文文字数で数える
 - 約 1,000 字は hard limit ではなく目標とする。7 カテゴリと承認判断に必要な結論は、超過してでも第 1 層に残す
@@ -122,40 +109,23 @@ goal-prompt は会話・仕様・計画から Goal プロンプトを `.claude/g
 
 dig に限り、カテゴリ 5〜7(backend 表 / 検証 / 独立レビュー状態)を「工程 / 状態 / backend」の 3 列表へ統合してよい(工程表形式)。統合しても各カテゴリの情報は省略しない。他スキルは現行の散文形式を維持し、横展開は dig での運用結果を見て別途判断する。
 
-例外報告主義とし、worktree・PR・CI green・merge など既定どおりの項目は「既定どおり」に畳み、逸脱と仮定だけを列挙する。第 2 層(詳細)には write_scope、ファイル別変更内容、検証コマンド、統合手順などを置く。必須項目を長さではなくカテゴリで定義し、短い要約から負荷の高い判断が漏れることを防ぐ。
+既定事項は「既定どおり」に畳み、第 2 層へ write_scope、変更内容、検証、統合手順を置く。各 SKILL.md は 7 カテゴリとレビュー状態の 3 値を自己完結で保持する。
 
-配布先には AGENTS.md が同梱されないため、対象の各 SKILL.md は、この 7 カテゴリと独立レビュー状態の 3 値を含む完全な出力スキーマを自己完結で保持する。本節への参照は正本を示すために残す。
+### タスクと進捗
 
-### タスクリスト連動
-
-- Claude 親: TaskCreate / TaskUpdate が利用可能なら、workflow の step を登録し開始時 `in_progress`・完了時 `completed` に更新する。利用不可なら省略してよい
-- Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示を行う
-
-### 委譲・長時間ジョブの進捗可視化
-
-- 委譲ジョブ・長時間ジョブは 1 ジョブ = 1 タスクとしてタスクリストへ登録し、開始・完了で状態を更新する(親 step のタスクに blockedBy で紐付ける)
-- Claude 親: 外部 CLI への委譲(codex exec / cursor-agent 等)は Bash の `run_in_background` で起動する。ジョブは UI に実行中タスクとして表示され、完了時に親へ自動通知が届く。完了待ちは通知駆動とし、定期ハートビートの逐次表示は行わない
-- Claude 親の停滞検知: 待機中は数分おき(目安 2〜5 分)に TaskOutput またはジョブのログファイルで出力増分を確認し、増分ゼロが続く場合のみ停滞の継続時間と推定原因(内部レビュー待ち / 長考 / ハング)をユーザーへ報告する
-- Claude サブエージェント委譲(Agent)も 1 委譲 = 1 タスクとしてタスクリストへ登録し、開始時 `in_progress`・完了時 `completed` へ更新する。Agent は元々バックグラウンド実行 + 完了自動通知のため追加の起動処置は不要。停滞検知の考え方は同じ
-- Codex 親: run_in_background / TaskOutput は使えない。`wait_agent` で黙って待たず、定期的に進捗をユーザーへ提示する
+- workflow と委譲・長時間ジョブはタスク化し、開始・完了を更新する。利用可能な組み込みタスク機能を使い、なければ進捗報告で代替する
+- Claude 親の外部 CLI は background 起動し、通知とログ増分で回収する。Codex 親は待機中も定期的に進捗を示す
 - 実体の進捗確認は `git status` / `git diff` で行う(resume を進捗確認に使わない)
-- codex exec / cursor-agent をバックグラウンド起動する場合は stdin を `< /dev/null` で閉じる
+- 停滞は出力増分がない継続時間と推定原因を報告する
 
-### codex exec 実行形
+### Codex 契約
 
 ```bash
 codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>" < /dev/null
 ```
 
-- Codex のモデルは `gpt-5.6-sol` を `-m` で明示する。世代追従は catch-up スキルと `premises.json` で管理する（ユーザーが別モデルを明示指定した場合はそれに従う）
-- 非対話実行では必ず末尾に `< /dev/null` を付ける（stdin 待ちで無期限ハングするため）
-- `-a never` などの top-level オプションは `exec` より前に置く
-
-### Codex モデル / effort
-
-- モデルは `gpt-5.6-sol`、effort は `medium` に固定する。計画レビュー・実装・diff レビューのすべてで同じ値を使い、effort の選択質問は行わない
-- Max は対応 surface の最深推論、Ultra は並列オーケストレーションを表す。この repo では説明にだけ用い、backend 選択肢、CLI の effort、config 値にはしない
-- Codex 親が `spawn_agent` を使う場合、子 agent ごとの effort 選択は追加しない
+- 計画レビュー・実装・diff レビューは同じモデル / effort とし、選択質問をしない。子 agent ごとの effort も選択しない
+- 非対話の codex / cursor-agent は stdin を `< /dev/null` で閉じる。世代追従は catch-up と `premises.json` で管理する
 
 ## Key Paths
 
@@ -179,41 +149,19 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 
 ## Commit Rules
 
-- コミットメッセージは Conventional Commits を使う
-- 基本形は `<type>(<scope>): <summary>` とし、`scope` は必要な場合だけ付ける
-- `type` は `feat` `fix` `docs` `refactor` `test` `chore` `ci` `build` `perf` `revert` を優先して使う
-- `summary` は必ず日本語で簡潔に書く
-- 本文を書く場合も日本語で統一し、変更理由・影響範囲・補足を必要最小限で書く
-- 破壊的変更は `type!:` または `type(scope)!:` を使い、必要なら本文に `BREAKING CHANGE:` で日本語説明を付ける
-- 英語だけの要約や、Conventional Commits に沿わない自由形式のコミットメッセージは使わない
-- Commit 規約はエージェント運用ルールであり、commit-msg hook では強制しない（決定論的強制の対象外と明示的に判断済み）
-
-例:
-
-- `feat(update-ccx): Windows で npm 欠落時の自己修復を追加`
-- `docs(agents): コミット規約を AGENTS.md に追記`
+- `<type>(<scope>): <summary>` の Conventional Commits を使い、summary と必要な本文は簡潔な日本語にする
+- type は `feat` `fix` `docs` `refactor` `test` `chore` `ci` `build` `perf` `revert` を優先する
+- 破壊的変更は `!` と、必要なら `BREAKING CHANGE:` で示す
+- commit-msg hook では強制しない
 
 ## Release Rules
 
-この節が version 運用ルールの正本。`README.md` の Release Rule は要点と本節への参照のみを持つ。
+この節が version 運用ルールの正本。
 
-- この repo は Claude Code Marketplace plugin を含む
-- Codex 側も `murakotaro4/devkit` marketplace 登録を配布正本にする
 - `plugins/devkit/**` または `.claude-plugin/**` を変更した場合、push 前に `plugins/devkit/.claude-plugin/plugin.json` の version を上げる
-- pre-push gate は version が `origin/main` の version 以下なら push を block する（厳密に上回る必要がある。誤って下げた場合も block される）
-- version の目安:
-  - `patch`: docs / bugfix only
-  - `minor`: workflow contract / user-visible behavior 変更
-  - `major`: breaking change
+- pre-push gate は version が `origin/main` 以下なら push を block する
+- bump は `patch` = docs / bugfix、`minor` = workflow contract / user-visible behavior、`major` = breaking change を目安にする
 
 ## Codex Exec 相談ルール
 
-リポジトリ全体のルール: 行き詰まった場合は `codex exec` で外部モデルに相談する。全エージェント作業に適用する。
-
-```bash
-codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<相談内容>" < /dev/null
-```
-
-- 実行形は「スキル共通契約 > codex exec 実行形」に従う（モデルは `gpt-5.6-sol`、effort は `medium` に固定）
-- 技術的判断に迷った場合、設計の妥当性を確認したい場合に使用する
-- 結果は参考意見として扱い、最終判断は親エージェントが行う
+行き詰まりや設計判断の検証には「Codex 契約」の実行形で外部モデルへ相談できる。結果は参考意見とし、最終判断は親エージェントが行う。

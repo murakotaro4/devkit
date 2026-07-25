@@ -58,34 +58,32 @@ def test_skill_frontmatter_contract():
 
 def test_harness_and_task_list_contract():
     text = _skill_text()
-    assert "## ハーネス判定" in text
-    assert "## タスクリスト連動" in text
-    assert "スキル共通契約" in text
-    assert "Claude 親" in text
-    assert "Codex 親" in text
-    assert "AskUserQuestion" in text
-    assert "request_user_input" in text
-    assert "step 1-4" in text
+    harness = text[text.index("## ハーネス・進捗") : text.index("## 書き込み契約")]
+    assert "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |" in harness
+    assert (
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |"
+    ) in harness
+    assert "`request_user_input` は判定キーにしない" in harness
+    assert "step 1-4" in harness
 
 
 def test_write_contract_limits_writes_and_execution():
     text = _skill_text()
     assert "step 1 は read-only" in text
     assert ".claude/handoff/YYYY-MM-DD-<slug>.md" in text
-    assert "同名ファイルは上書きせず" in text
+    assert "同名は上書きせず" in text
     assert "連番" in text
     assert "commit、push" in text
-    assert "repo の `.gitignore` と `.git/info/exclude` は変更しない" in text
+    assert "repo の `.gitignore` と `.git/info/exclude` も変更しない" in text
 
 
 def test_gitignore_self_contained_contract():
     text = _skill_text()
     assert ".claude/handoff/.gitignore" in text
     assert "`*` 1 行" in text
-    assert "既存の場合は内容を触らない" in text
-    assert "冪等" in text
-    assert "非 git repo では `.gitignore` 作成をスキップ" in text
-    assert "保存は中止しない" in text
+    assert "既存なら触らず" in text
+    assert "非 git repo では作成をスキップして保存は続ける" in text
     assert "git check-ignore -q .claude/handoff/<ファイル名>" in text
     assert "未追跡差分に出る状態" in text
 
@@ -93,7 +91,7 @@ def test_gitignore_self_contained_contract():
 def test_slug_is_sanitized_not_used_verbatim():
     text = _skill_text()
     assert "^[a-z0-9]+(-[a-z0-9]+)*$" in text
-    assert "そのまま slug に使わない" in text
+    assert "`$ARGUMENTS` をそのまま slug に使わず" in text
     assert "正規化した slug を提案" in text
 
 

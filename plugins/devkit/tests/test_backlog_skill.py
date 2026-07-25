@@ -56,8 +56,8 @@ def test_skill_frontmatter_contract():
 
 def test_read_only_contract_and_five_step_flow():
     text = _skill_text()
-    assert "## read-only 契約" in text
-    assert "allowed-tools に Write / Edit を含めない" in text
+    assert "## read-only 契約と境界" in text
+    assert "allowed-tools に Write / Edit を含めず" in text
     for step in (
         "### 1. スコープ確認",
         "### 2. 情報源スキャン",
@@ -67,16 +67,16 @@ def test_read_only_contract_and_five_step_flow():
     ):
         assert step in text
     assert "チャットへ提示" in text
-    assert "ファイルへは保存しない" in text
+    assert "ファイルへ保存しない" in text
 
 
 def test_dashboard_starts_with_summary_and_marks_backends_not_applicable():
     text = _skill_text()
     dashboard = text[text.index("### 4. ダッシュボード提示") : text.index("### 5. dig への引き継ぎで終了")]
     assert "結論 + 推奨次アクション(3 件以内)" in dashboard
-    assert "先頭提示" in dashboard
-    assert "計画レビュー / 実装 / diff レビューをすべて「適用なし」" in dashboard
-    assert "独立レビュー状態: `適用なし`" in dashboard
+    assert dashboard.index("結論 + 推奨次アクション(3 件以内)") < dashboard.index("一般形の状態")
+    assert "計画レビュー / 実装 / diff レビューはすべて「適用なし」" in dashboard
+    assert "独立レビュー状態(`適用なし`、backend も `適用なし`)" in dashboard
 
 
 def test_sources_freshness_and_gh_fallback_are_present():
@@ -90,7 +90,7 @@ def test_sources_freshness_and_gh_fallback_are_present():
         "git stash list",
         "open PR",
         "未解決レビューコメント",
-        "CI が落ちている check",
+        "失敗中の CI",
     ):
         assert source in text
     assert "PR 更新時刻" in text
@@ -100,26 +100,27 @@ def test_sources_freshness_and_gh_fallback_are_present():
 
 def test_boundaries_and_dig_handoff_are_present():
     text = _skill_text()
-    assert "## 境界" in text
-    assert "refactor = コードの負債" in text
-    assert "backlog = handoff、plan、goal run、git、GitHub に残る作業の残り" in text
-    assert "handoff = セッション終了時に残作業を書く側" in text
-    assert "backlog = 既存の handoff を含む情報源を読む側" in text
-    assert "TaskList = セッション内" in text
-    assert "コード内 TODO / FIXME は refactor の領分" in text
-    assert "## dig step 2 計画草案" in text
-    assert "### backlog 由来の根拠" in text
-    assert "$dig" in text
+    assert "backlog は handoff / plan / goal run / git / GitHub に残る作業を読む" in text
+    assert "コード負債と TODO / FIXME は refactor" in text
+    assert "handoff の新規作成・更新は handoff" in text
+    assert "タスクリストはセッション内進捗" in text
+    handoff = text[text.index("### 5. dig への引き継ぎで終了") :]
+    assert "dig の step 2" in handoff
+    for field in ("目的", "write_scope", "実装手順", "検証", "非対象", "backlog 由来の根拠"):
+        assert field in handoff
+    assert "$dig" in handoff
 
 
 def test_harness_and_task_list_contract():
     text = _skill_text()
-    assert "## ハーネス判定" in text
-    assert "## タスクリスト連動" in text
-    assert "スキル共通契約" in text
-    assert "AskUserQuestion" in text
-    assert "request_user_input" in text
-    assert "step 1-5" in text
+    harness = text[text.index("## ハーネス・進捗") : text.index("## read-only 契約と境界")]
+    assert "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |" in harness
+    assert (
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |"
+    ) in harness
+    assert "`request_user_input` は判定キーにしない" in harness
+    assert "step 1-5" in harness
 
 
 def test_agents_openai_yaml_exists_and_mentions_backlog_surface():

@@ -44,14 +44,14 @@ def test_approval_and_independent_review_contract():
     content = text()
     assert "承認前に Edit / Write を使わない" in content
     assert "独立レビュー(必須・スキップ不可)" in content
-    assert "指摘を修正して再検証" in content
+    assert "指摘を修正・再検証" in content
     assert "commit / push はユーザーが明示した場合だけ" in content
 
 
 def test_update_plan_uses_layered_summary_before_approval():
     content = text()
     step4 = content[content.index("### 4. 更新計画と承認") : content.index("### 5. 適用")]
-    assert "第 1 層「承認用サマリー」と後段の第 2 層「詳細」" in step4
+    assert "第 1 層「承認用サマリー」と第 2 層「詳細」" in step4
     assert "承認時点では未実施" in step4
     assert "適用後 step 7 で実施" in step4
     assert "独立レビュー状態" in step4
@@ -59,9 +59,14 @@ def test_update_plan_uses_layered_summary_before_approval():
 
 def test_harness_task_progress_and_boundaries():
     content = text()
-    for heading in ("## ハーネス判定", "## タスクリスト連動", "## 進捗可視化"):
-        assert heading in content
-    assert "スキル共通契約" in content
+    harness = content[content.index("## ハーネス・進捗") : content.index("## フロー")]
+    assert "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion | 外部 Codex |" in harness
+    assert (
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 | read-only 子 agent |"
+    ) in harness
+    assert "`request_user_input` は判定キーにしない" in harness
+    assert "step 1-8" in harness
     for boundary in ("memory-review", "improve-skill retro", "dig"):
         assert boundary in content
     assert "workflow contract 自体の変更" in content

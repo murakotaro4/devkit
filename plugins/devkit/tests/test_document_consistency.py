@@ -42,6 +42,28 @@ def _read(relpath: str) -> str:
     return (REPO_ROOT / relpath).read_text(encoding="utf-8")
 
 
+def _markdown_section(text: str, heading: str) -> str:
+    heading_match = re.search(
+        rf"^(?P<marks>#+) {re.escape(heading)}$",
+        text,
+        re.MULTILINE,
+    )
+    assert heading_match, f"見出しがない: {heading}"
+    level = len(heading_match.group("marks"))
+    section_start = heading_match.end()
+    next_heading = re.search(
+        rf"^#{{1,{level}}} ",
+        text[section_start:],
+        re.MULTILINE,
+    )
+    section_end = (
+        section_start + next_heading.start()
+        if next_heading
+        else len(text)
+    )
+    return text[section_start:section_end]
+
+
 def _backtick_fence(line: str) -> tuple[int, str] | None:
     match = re.match(r"^(`{3,})(.*)$", line)
     if not match:
@@ -377,20 +399,81 @@ def test_shared_skill_contract_canonical_and_referenced():
     agents = _read("AGENTS.md")
     assert "## スキル共通契約" in agents, "AGENTS.md にスキル共通契約の節がない"
     assert "## スキル採用基準" in agents, "AGENTS.md にスキル採用基準の節がない"
+    assert "各 SKILL.md は実行に必要な要点を自己完結で保持" in agents
 
     for skill_name in DISTRIBUTED_SKILLS:
         text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
-        assert "スキル共通契約" in text, f"{skill_name} の SKILL.md が共通契約を参照していない"
+        harness_heading = re.search(
+            r"^## (?P<title>ハーネス(?:判定(?:と実行差分)?|・進捗))$",
+            text,
+            re.MULTILINE,
+        )
+        assert harness_heading, (
+            f"{skill_name} の SKILL.md に自己完結したハーネス契約がない"
+        )
+        harness = _markdown_section(text, harness_heading.group("title"))
+        harness_lines = harness.splitlines()
+        assert any(
+            "AskUserQuestion" in line
+            and "Claude 親" in line
+            and ("使える" in line or "使えれば" in line)
+            for line in harness_lines
+        ), f"{skill_name} の Claude 親判定が AskUserQuestion に束縛されていない"
+        assert any(
+            "spawn_agent" in line
+            and "Codex 親" in line
+            and ("なく" in line or "なければ" in line)
+            for line in harness_lines
+        ), f"{skill_name} の Codex 親判定が AskUserQuestion 不在に束縛されていない"
+        assert "判定不能" in harness, f"{skill_name} に判定不能の分岐がない"
+        if skill_name == "goal-prompt":
+            assert "質問は Claude 親が AskUserQuestion、Codex 親 plan mode が `request_user_input`" in harness
+        else:
+            assert re.search(
+                r"`request_user_input` は(?:ハーネス)?判定(?:キー)?に(?:使わない|しない)",
+                harness,
+            ), f"{skill_name} が request_user_input をハーネス判定から除外していない"
 
 
 def test_delegating_skills_have_progress_visibility_contract():
+    agents_progress = _markdown_section(_read("AGENTS.md"), "タスクと進捗")
+    for canonical_term in ("継続時間", "推定原因"):
+        assert canonical_term in agents_progress, (
+            f"AGENTS.md の進捗正本に停滞報告の要素がない: {canonical_term}"
+        )
+
+    progress_headings = {
+        "dig": "タスクと進捗",
+        "improve-skill": "ハーネス判定",
+        "memory-review": "ハーネス判定",
+        "catch-up": "ハーネス・進捗",
+        "repo-loop": "ハーネス判定",
+    }
+    positive_progress_terms = {
+        "dig": "Codex 親は定期的に進捗を示す",
+        "improve-skill": "Codex 親は待機中も進捗を示し",
+        "memory-review": "Codex 親は待機中も進捗を示す",
+        "catch-up": "Codex 親は `wait_agent` で黙って待たない",
+        "repo-loop": "黙って待たず定期報告",
+    }
     for skill_name in DELEGATING_SKILLS:
         text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
-        assert "## 進捗可視化" in text, f"{skill_name} の SKILL.md に進捗可視化の見出しがない"
-        assert "1 ジョブ = 1 タスク" in text, f"{skill_name} の SKILL.md にジョブのタスク化契約がない"
-        assert "委譲・長時間ジョブの進捗可視化" in text, (
-            f"{skill_name} の SKILL.md が AGENTS.md の進捗可視化契約を参照していない"
+        progress = _markdown_section(text, progress_headings[skill_name])
+        assert re.search(
+            r"(?:1 ジョブ = 1 タスク|委譲ジョブはタスクリスト)",
+            progress,
+        ), f"{skill_name} の SKILL.md に委譲ジョブのタスク化契約がない"
+        assert positive_progress_terms[skill_name] in progress, (
+            f"{skill_name} の SKILL.md に Codex 親の肯定的な進捗提示契約がない"
         )
+        assert "停滞" in progress, (
+            f"{skill_name} の SKILL.md に停滞時の報告契約がない"
+        )
+        if skill_name in ("dig", "improve-skill", "memory-review"):
+            for detailed_term in ("時間", "推定原因"):
+                assert detailed_term in progress, (
+                    f"{skill_name} の停滞報告契約に要素がない: {detailed_term}"
+                )
 
         if skill_name in ("dig", "repo-loop"):
             frontmatter = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
@@ -413,12 +496,68 @@ def test_layered_output_contract_is_canonical_and_referenced():
         "AGENTS.md に計画・レポートの 2 層提示契約がない"
     )
 
-    for skill_name in LAYERED_OUTPUT_SKILLS:
-        text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
-        assert "承認用サマリー" in text, f"{skill_name} に承認用サマリー契約がない"
-        assert "計画・レポートの 2 層提示" in text, (
-            f"{skill_name} が AGENTS.md の 2 層提示契約を参照していない"
+    layer_sections = {
+        "dig": "2. 調査 + 計画(親)",
+        "refactor": "3. 優先順位付け",
+        "backlog": "4. ダッシュボード提示",
+        "catch-up": "4. 更新計画と承認",
+        "memory-review": "5. 監査レポート出力",
+    }
+    category_terms = {
+        1: ("何を / なぜ",),
+        2: ("判断してほしい点",),
+        3: ("既定からの逸脱",),
+        4: ("後戻りしにくい操作・外部影響",),
+        5: ("backend",),
+        6: ("検証", "green"),
+        7: ("独立レビュー状態",),
+    }
+    sections = {
+        "AGENTS.md": _markdown_section(agents, "計画・レポートの 2 層提示")
+    }
+    sections.update(
+        {
+            skill_name: _markdown_section(
+                _read(f"plugins/devkit/skills/{skill_name}/SKILL.md"),
+                heading,
+            )
+            for skill_name, heading in layer_sections.items()
+        }
+    )
+
+    for doc_name, section in sections.items():
+        category_lines = {
+            int(number): body
+            for number, body in re.findall(r"^([1-7])\. (.+)$", section, re.MULTILINE)
+        }
+        assert set(category_lines) == set(range(1, 8)), (
+            f"{doc_name} の第 1 層カテゴリ番号が不完全: {set(category_lines)}"
         )
+        for category_number, accepted_terms in category_terms.items():
+            assert any(
+                term in category_lines[category_number]
+                for term in accepted_terms
+            ), (
+                f"{doc_name} の第 1 層カテゴリ {category_number} が正本ラベルと不一致: "
+                f"{category_lines[category_number]}"
+            )
+
+    for skill_name in LAYERED_OUTPUT_SKILLS:
+        section = sections[skill_name]
+        assert "第 1 層" in section, f"{skill_name} に第 1 層の契約がない"
+        assert "第 2 層" in section or "レポート全体は次の 11 見出し" in section, (
+            f"{skill_name} に第 1 層より後段の詳細構造がない"
+        )
+        review_states = {
+            state
+            for state in ("実施済み(指摘 N 件反映)", "skip(理由)", "適用なし")
+            if state in section
+        }
+        assert review_states == {
+            "実施済み(指摘 N 件反映)",
+            "skip(理由)",
+            "適用なし",
+        }, f"{skill_name} の独立レビュー状態 enum が不完全: {review_states}"
 
 
 def test_layer1_size_target_and_completeness_priority():
@@ -457,12 +596,10 @@ def test_codex_model_and_effort_contract_stays_in_sync():
             f"{doc_name} に世代追従(catch-up + premises.json)の記載がない"
         )
         assert "推薦既定" not in text, f"{doc_name} に旧モデル非固定契約が残っている"
-        assert "Max は対応 surface の最深推論" in text
-        assert "Ultra は並列オーケストレーション" in text
         concrete_efforts = set(
             re.findall(r'model_reasoning_effort="([^"<>]+)"', text)
         )
-        assert concrete_efforts <= {"medium"}, (
+        assert concrete_efforts == {"medium"}, (
             f"{doc_name} に medium 以外の effort が残っている: {concrete_efforts}"
         )
 
@@ -517,19 +654,30 @@ def test_pr_merge_completion_contract_stays_in_sync():
         assert "PR" in text, f"{doc_name} に PR 経路の記載がない"
         assert "CI green" in text, f"{doc_name} に CI green 判定の記載がない"
         assert "merge" in text, f"{doc_name} に PR merge 完遂の記載がない"
-        assert (
-            "既定は PR 経由" in text or "既定は PR の提出" in text
-        ), f"{doc_name} に PR 経由を既定とする契約がない"
+        assert re.search(
+            r"(?:既定は PR(?: 経由| の提出| 提出)|PR 提出.*が既定)",
+            text,
+        ), (
+            f"{doc_name} に PR 経路を既定とする契約がない"
+        )
         for retired in retired_contracts:
             assert retired not in text, f"{doc_name} に旧 PR 統合契約が残っている: {retired}"
 
-    for doc_name in ("plugins/devkit/skills/dig/SKILL.md",):
-        assert "直接統合へ自動フォールバック" in documents[doc_name], (
-            f"{doc_name} に直接統合への自動フォールバック契約がない"
-        )
-    assert "別の統合方法へ黙って切り替えない" in documents[
-        "plugins/devkit/skills/dig/SKILL.md"
-    ]
+    dig = documents["plugins/devkit/skills/dig/SKILL.md"]
+    integration = dig.split("### 9. 統合・後始末・完了報告", 1)[1].split(
+        "\n## ", 1
+    )[0]
+    for invariant in (
+        "同じ SHA に束縛された checks",
+        "merge queue / auto-merge",
+        "--match-head-commit",
+        "--json state,mergedAt",
+        "`MERGED`",
+        "CI 赤・merge 失敗では PR を open のまま",
+    ):
+        assert invariant in integration, f"dig の PR 統合不変条件がない: {invariant}"
+    assert "計画時に直接統合へ決める" in dig
+    assert "計画した統合方法だけを実行する" in integration
 
 
 def test_goal_prompt_save_contract_stays_in_sync():
@@ -539,18 +687,40 @@ def test_goal_prompt_save_contract_stays_in_sync():
     }
     for doc_name, text in documents.items():
         assert ".claude/goal-runs/" in text, f"{doc_name} に goal-prompt の保存先(.claude/goal-runs/)の記載がない"
-        assert "上書きせず" in text, f"{doc_name} に goal-prompt の上書きせず連番の契約がない"
 
     agents = documents["AGENTS.md"]
+    agents_context = _markdown_section(agents, "Repo Context")
+    for invariant in (
+        ".claude/goal-runs/",
+        "連番保存",
+        "commit も premises.json 登録もしない",
+    ):
+        assert invariant in agents_context, (
+            f"AGENTS.md の goal-prompt 高水準契約がない: {invariant}"
+        )
     usage_heading = "## dig と goal-prompt の使い分け"
     assert usage_heading in agents, "AGENTS.md に dig と goal-prompt の使い分け節がない"
-    usage_section = agents.split(usage_heading, 1)[1].split("\n## ", 1)[0]
-    assert "上書きせず" in usage_section, "AGENTS.md の使い分け節に上書きせず連番の契約がない"
-    assert "自動算出" in usage_section, "AGENTS.md の使い分け節に上限停止の自動算出契約がない"
+
+    readme = documents["README.md"]
+    for invariant in ("上書きせず連番", "コード変更・commit / push・PR 作成はしない"):
+        assert invariant in readme, f"README の goal-prompt 高水準契約がない: {invariant}"
 
     goal_prompt_skill = _read("plugins/devkit/skills/goal-prompt/SKILL.md")
-    assert "上書きせず" in goal_prompt_skill, "goal-prompt/SKILL.md に上書きせず連番の契約がない"
-    assert "自動算出" in goal_prompt_skill, "goal-prompt/SKILL.md に上限停止の自動算出契約がない"
+    save_contract = goal_prompt_skill.split("## 保存契約", 1)[1].split("\n## ", 1)[0]
+    for invariant in (
+        ".claude/goal-runs/YYYY-MM-DD-<slug>-goal.md",
+        "上書きせず",
+        "YYYY-MM-DD-<slug>-2-goal.md",
+        "commit せず",
+        "premises.json` へ登録しない",
+    ):
+        assert invariant in save_contract, f"goal-prompt の保存契約がない: {invariant}"
+    limit_contract = goal_prompt_skill.split("## 上限停止の自動算出", 1)[1].split(
+        "\n## ", 1
+    )[0]
+    assert "明示値がある場合だけ上書きする" in limit_contract
+    for scale in ("小規模", "標準", "大規模"):
+        assert scale in limit_contract, f"goal-prompt の上限停止規模がない: {scale}"
 
 
 def test_rebase_conflict_resolution_contract_stays_in_sync():
@@ -563,6 +733,10 @@ def test_rebase_conflict_resolution_contract_stays_in_sync():
         assert keyword in contract, f"rebase 衝突の標準解消手順に契約キーワードがない: {keyword}"
 
     dig = _read("plugins/devkit/skills/dig/SKILL.md")
-    integration = dig.split("### 統合(step 9、終了条件達成後)", 1)[1].split("\n### ", 1)[0]
-    assert "標準解消手順" in integration, "dig の統合手順が標準解消手順を参照していない"
-    assert "git rebase --abort" in integration, "dig の統合手順に未知の衝突時の abort fallback がない"
+    integration = dig.split("### 9. 統合・後始末・完了報告", 1)[1].split(
+        "\n## ", 1
+    )[0]
+    assert "標準解消規則" in integration, "dig の統合手順が標準解消規則を参照していない"
+    assert "conflict は abort して停止" in integration, (
+        "dig の統合手順に未知の衝突時の abort fallback がない"
+    )
