@@ -343,6 +343,10 @@ def test_worktree_and_pr_integration_contract():
     assert "origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする" in implementation
     assert "remote 名は `origin` 固定で扱う" in implementation
     assert "一時 worktree と `<type>/<slug>` branch を作り" in implementation
+    # branch 名衝突で停止しない。この repo は他セッションの branch を正常な
+    # 進行中作業として扱うため、固定名だと同じ slug の run が全部止まる。
+    # 2026-07-25 の圧縮で連番付与が消えていた([P2])。
+    assert "`-2` から連番を付けて一意にする" in implementation
     assert "開始 commit を記録" in implementation
     assert "作成失敗時は主 worktree へ移らず停止" in implementation
     assert "実装・検証・レビューは worktree 内だけ" in implementation

@@ -146,7 +146,7 @@ codex -a never exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort
 
 ### 6. worktree 作成と実装委譲
 
-実装系は必ず worktree を使う。親が既定 branch を origin/HEAD、main、現在 branch の順で決める。origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする。remote 名は `origin` 固定で扱う(`upstream` など別名だけの repo は origin なし扱いになり、統合も直接統合へ倒れる)。一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。作成失敗時は主 worktree へ移らず停止する。以後の実装・検証・レビューは worktree 内だけで行う。
+実装系は必ず worktree を使う。親が既定 branch を origin/HEAD、main、現在 branch の順で決める。origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする。remote 名は `origin` 固定で扱う(`upstream` など別名だけの repo は origin なし扱いになり、統合も直接統合へ倒れる)。一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。branch 名が既存なら `-2` から連番を付けて一意にする(他セッションの branch は正常に存在するため、衝突で停止しない)。作成失敗時は主 worktree へ移らず停止する。以後の実装・検証・レビューは worktree 内だけで行う。
 
 委譲指示は目的 / write_scope / 変更内容 / 受け入れ条件 / 検証 / commit 禁止を 1 ブロックにする。実装 backend は commit しない。
 
