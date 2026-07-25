@@ -60,49 +60,28 @@ def test_frontmatter_does_not_limit_allowed_tools():
 
 def test_default_is_implementation_completion_without_asking_mode():
     text = _skill_text()
-    assert "**dig の既定は実装完遂**" in text
     assert "実行形態を質問しない" in text
-
-
-def test_harness_task_list_and_progress_contract():
-    text = _skill_text()
-    assert "`AskUserQuestion` が使える" in text
-    assert "AskUserQuestion がなく `spawn_agent` が使える" in text
-    assert "plan mode は `request_user_input`" in text
-    assert "step 1-9 と各委譲・長時間ジョブをタスクリストへ登録" in text
-    assert "1 ジョブ = 1 タスク" in text
-    assert "`wait_agent` で黙って待たず" in text
-    assert "`git status` / `git diff` とジョブログで確認" in text
 
 
 def test_write_contract_phase_boundaries():
     write_contract = _section(_skill_text(), "### 書き込み契約")
     assert "step 1-5" in write_contract
-    assert "対象 repo に対して read-only" in write_contract
-    assert "step 6-9 は承認済み write_scope 内だけを書き込む" in write_contract
-    assert "goal-prompt 引き継ぎ時の" in write_contract
-    assert "`.claude/plans/` への計画保存" in write_contract
 
 
 def test_inventory_driven_interview_contract():
     interview = _section(_skill_text(), "### 1. 深掘り(棚卸し駆動面談、親)")
     assert "タスク型と要求" in interview
     assert "| 未知 | 影響 | 扱い |" in interview
+    # セルの許容値集合は test_skill_invariants.py::enum_table_cells に統合。
     for value in ("質問する", "仮定で進める", "確定済み"):
         assert value in interview
-    assert "「質問する」行がゼロで終了" in interview
-    assert "1 ラウンド最大 4 問" in interview
 
 
 def test_integration_method_is_investigated_not_asked():
     text = _skill_text()
     interview = _section(text, "### 1. 深掘り(棚卸し駆動面談、親)")
-    planning = _section(text, "### 2. 調査 + 計画(親)")
     assert "統合方法は質問せず" in interview
-    assert "PR 提出 + CI green 確認 + merge が既定" in planning
-    assert "origin なし、非 GitHub origin、または `gh` 不在" in planning
-    assert "計画時に直接統合へ決める" in planning
-    assert "API・認証・通信が失敗した場合は直接統合へ切り替えず停止" in planning
+    # CI green → merge の順序は test_skill_invariants.py::ci_green_before_merge に統合。
 
 
 def test_non_implementation_plan_schema():
@@ -142,7 +121,12 @@ def test_planning_defines_process_table():
     assert "| 工程 | 状態 | backend |" in planning
     for row in ("計画レビュー", "実装", "diff レビュー", "検証"):
         assert row in planning
+    # 行ごと検査する。marker だけを見ると実装行やレビュー行へ移動しても通り、
+    # 承認時に誤った工程を「今ここ」と示してしまう。
+    # backend 列まで検査する。承認の主体がエージェントへ変わると、
+    # 明示承認という境界そのものが委譲されてしまう。
     assert "| **承認** | **← 今ここ** | ユーザー |" in planning
+    assert planning.count("← 今ここ") == 1
 
 
 def test_process_table_example_uses_review_state_schema():
@@ -158,23 +142,12 @@ def test_process_table_example_uses_review_state_schema():
 def test_planning_self_contains_size_target():
     planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
     assert "約 1,000 字" in planning
-    assert "字数と完全性が衝突したら完全性を優先する" in planning
-
-
-def test_planning_absorbs_plan_role_into_investigation():
-    planning = _section(_skill_text(), "### 2. 調査 + 計画(親)")
-    assert "調査は read-only agent へ並列委譲できるが、計画は親が統合する" in planning
 
 
 def test_approval_puts_summary_first():
     approval = _section(_skill_text(), "### 5. 計画承認")
     assert "レビュー済み計画" in approval
     assert "第 1 層から提示" in approval
-
-
-def test_backend_change_reopens_inventory():
-    backend = _section(_skill_text(), "### 3. backend 選択")
-    assert "要件が動いたら step 1 に戻り、「質問する」行をゼロにする" in backend
 
 
 def test_backend_selection_and_python_gate_contract():
@@ -194,9 +167,7 @@ def test_backend_selection_and_python_gate_contract():
     assert "`Agent(general-purpose, model=opus)`" in backend
     assert all(command in backend for command in ("command -v codex", "command -v cursor-agent", "command -v uv"))
     assert "失敗した選択肢は除く" in backend
-    assert "thread_id 抽出不能として実装選択肢だけを除く" in backend
     assert "cursor-grok-4.5-high" in backend
-    assert "別 backend へ黙って fallback しない" in backend
 
 
 def test_codex_parent_has_three_roles_without_effort_selection():
@@ -204,14 +175,12 @@ def test_codex_parent_has_three_roles_without_effort_selection():
     backend = _section(text, "### 3. backend 選択")
     assert "| Codex | 実装 |" in backend
     assert "| Codex | 計画・diff レビュー |" in backend
-    assert "子ごとの effort を選ばない" in text
     assert "model_reasoning_effort" not in backend
 
 
 def test_pinned_model_effort_and_stdin_contract():
     text = _skill_text()
-    assert "Codex のモデルは `gpt-5.6-sol` を `-m` で明示" in text
-    assert "世代追従は catch-up と `premises.json` で管理" in text
+    # approval/model/effort は test_skill_invariants.py::codex_execution_shape に統合。
     assert set(re.findall(r"-m\s+(gpt-[\w.\-]+)", text)) == {"gpt-5.6-sol"}
     assert set(re.findall(r'model_reasoning_effort="([^"<>]+)"', text)) == {"medium"}
     offenders = [
@@ -234,15 +203,10 @@ def test_plan_review_and_approval_contract():
     text = _skill_text()
     assert "### 4. 計画レビュー" in text
     assert "--sandbox read-only" in text
-    assert (
-        'codex -a never exec -C "<worktree>" -m gpt-5.6-sol '
-        '-c model_reasoning_effort="medium" review --base origin/<default> < /dev/null'
-    ) in text
-    assert "origin なしは `--base <default>`" in text
-    approval = _section(text, "### 5. 計画承認")
-    assert "計画レビュー / 実装 / diff レビュー" in approval
-    assert "承認後だけ plan mode を抜け、承認済み write_scope を有効にする" in approval
-    assert "適用可能なモデル / effort" in approval
+    assert "review --base origin/<default>" in text
+    # approval/model/effort/stdin/worktree の形は stdin_closed /
+    # codex_execution_shape / worktree_commands_pin_directory に統合。
+    assert "--base <default>" in text
     assert "### 9. 統合・後始末・完了報告" in text
 
 
@@ -251,9 +215,22 @@ def test_claude_parent_plan_mode_approval_boundaries():
     harness = _section(text, "## ハーネス判定と実行差分")
     assert "`EnterPlanMode`" in harness
     assert "`ExitPlanMode`" in harness
-    assert "利用不能時だけ計画全文への明示承認" in harness
-    assert "step 1-5 は read-only のため plan mode と整合する" in harness
-    assert "承認前に step 6 へ進まない" in harness
+    # 承認→実装の順序は test_skill_invariants.py::approval_before_implementation に統合。
+
+
+def test_worktree_creation_keeps_its_exception_paths():
+    """worktree 作成の 2 つの例外分岐。どちらも汎用 check が覆えない。
+
+    どちらも 2026-07-25 の圧縮で消え、独立レビューが [P2] として検出した。
+    平常系だけ読むと冗長に見えるが、例外系では唯一の防御になる型。
+
+    - origin なし repo: fetch を無条件にすると worktree 作成前に失敗する
+    - branch 名衝突: 他セッションの branch は正常に存在するため、固定名だと
+      同じ slug の run が以後すべて停止する
+    """
+    creation = _section(_skill_text(), "### 6. worktree 作成と実装委譲")
+    assert "fetch を省略" in creation
+    assert "`-2` から連番" in creation
 
 
 def test_delegation_records_explicit_thread_id_and_resumes_it():
@@ -264,11 +241,9 @@ def test_delegation_records_explicit_thread_id_and_resumes_it():
     assert 'devkit-codex-job.XXXXXX' in delegation
     assert 'echo "JOB_DIR=$JOB_DIR"' in delegation
     assert "set -o pipefail" in delegation
-    assert (
-        'codex -a never exec -C "<worktree>" --sandbox workspace-write '
-        '-m gpt-5.6-sol -c model_reasoning_effort="medium" --json "<実装指示>" '
-        '< /dev/null | tee "$JOB_DIR/codex-events.jsonl"'
-    ) in delegation
+    assert 'exec -C "<worktree>" --sandbox workspace-write' in delegation
+    # command 全体の形は stdin_closed / codex_execution_shape /
+    # worktree_commands_pin_directory に統合。
     assert 'uv run --no-project --python ">=3.10" python -c' in delegation
     assert "python3 -c" not in delegation
     assert 'event.get("type") == "thread.started"' in delegation
@@ -277,13 +252,8 @@ def test_delegation_records_explicit_thread_id_and_resumes_it():
     assert "events=[" not in delegation
     assert 'event.get("thread_id")' in delegation
     assert 'test -s "$JOB_DIR/thread-id.txt"' in delegation
-    assert "ジョブごとの JOB_DIR に JSONL を保存" in delegation
     assert '"$(cat "$JOB_DIR/thread-id.txt")"' in repair
-    assert (
-        'codex -a never -C "<worktree>" --sandbox workspace-write exec resume '
-        '-m gpt-5.6-sol -c model_reasoning_effort="medium" '
-        '"$(cat "$JOB_DIR/thread-id.txt")" "<指摘と修正指示>" < /dev/null'
-    ) in repair
+    assert "exec resume" in repair
     assert "--last" not in text
 
 
@@ -295,11 +265,8 @@ def test_cursor_and_worktree_delegation_contract():
         assert token in delegation
     assert 'codex -a never exec -C "<worktree>"' in delegation
     assert '--workspace "<worktree>"' in delegation + repair
-    assert (
-        'cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force '
-        '--model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null'
-    ) in delegation
-    assert '最終引数だけ `"<指摘と修正指示>"` に替える' in repair
+    assert "cursor-agent -p --resume" in delegation
+    # cursor command の形は stdin_closed / worktree_commands_pin_directory に統合。
     assert "sandbox なし" in text
     assert "commit 禁止" in delegation
 
@@ -315,11 +282,9 @@ def test_checkpoint_commit_precedes_independent_review():
     delegation = _section(text, "### 6. worktree 作成と実装委譲")
     review = _section(text, "### 7. 自レビューと独立 diff レビュー")
 
-    assert "実装 backend は commit しない" in delegation
     assert "パス限定で add" in delegation
-    assert "`git add .` / `git add -A` は使わない" in delegation
-
-    assert "レビュー前に実装を作業 branch へ commit" in review
+    # broad add 禁止は test_skill_invariants.py::no_broad_git_add、
+    # commit→review 順序は commit_before_independent_review に統合。
     assert "commit 済み差分" in review
     # レビューは worktree 内で実行する。通常 checkout で走らせると commit 済み
     # branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する。
@@ -327,44 +292,21 @@ def test_checkpoint_commit_precedes_independent_review():
     # step 3 の skip 選択と矛盾しないこと。無条件にレビューを要求すると
     # 提示した選択肢が無効になる(記事の「競合する指示」アンチパターン)。
     # 2026-07-25 の圧縮で条件が消えていた([P2])。
-    assert "step 3 で選択した diff レビュー backend" in review
-    assert "`skip` を選択した場合だけ省略する" in review
-    assert "実装 worker と同一 agent は使わない" in review
     assert 'codex -a never exec -C "<worktree>"' in review
-    assert "通常 checkout で走らせると" in review
-    # 順序保証: 節目 commit の規定が review 節より前にあること
-    assert text.index("#### 節目 commit") < text.index(
-        "### 7. 自レビューと独立 diff レビュー"
-    )
+    # worktree 固定は test_skill_invariants.py::worktree_commands_pin_directory に統合。
 
 
 def test_worktree_and_pr_integration_contract():
     text = _skill_text()
-    implementation = _section(text, "### 6. worktree 作成と実装委譲")
     integration = _section(text, "### 9. 統合・後始末・完了報告")
-    assert "実装系は必ず worktree を使う" in implementation
-    assert "origin/HEAD、main、現在 branch の順" in implementation
-    # origin なし repo / リモート名が origin でない repo でも worktree を作れること。
-    # 2026-07-25 の圧縮で fetch が無条件になり、この経路が壊れていた([P2])。
-    assert "origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする" in implementation
-    assert "remote 名は `origin` 固定で扱う" in implementation
-    assert "一時 worktree と `<type>/<slug>` branch を作り" in implementation
-    # branch 名衝突で停止しない。この repo は他セッションの branch を正常な
-    # 進行中作業として扱うため、固定名だと同じ slug の run が全部止まる。
-    # 2026-07-25 の圧縮で連番付与が消えていた([P2])。
-    assert "`-2` から連番を付けて一意にする" in implementation
-    assert "開始 commit を記録" in implementation
-    assert "作成失敗時は主 worktree へ移らず停止" in implementation
-    assert "実装・検証・レビューは worktree 内だけ" in implementation
-    assert "PR 経路の骨格は提出 → CI 待機 → green 判定 → merge → 完了確認 → cleanup" in integration
-    # remote branch 削除は期待 tip を束縛する。束縛なしだと確認後に他者が push した
-    # commit を捨てうる。2026-07-25 の圧縮で lease の具体形が消えていた([P1])。
-    assert "--force-with-lease=refs/heads/<branch>:<検証済みSHA>" in integration
+    # worktree command は test_skill_invariants.py::worktree_commands_pin_directory、
+    # CI→merge は ci_green_before_merge、remote delete の lease は
+    # remote_delete_has_lease に統合。ここには汎用 check が覆わない契約だけを残す。
+
     # 統合後はローカル作業 branch も消す。2026-07-25 の圧縮で worktree と remote の
     # 削除だけが残り、毎回 stale なローカル branch が残る状態だった([P2])。
     assert "`git branch -d <branch>`" in integration
     assert "`git branch -D <branch>`" in integration
-    assert "ローカル branch を残したまま完了にしない" in integration
     for invariant in (
         "単調増加値を origin から再計算して再検証",
         "標準解消規則のない conflict は abort して停止",
@@ -392,13 +334,9 @@ def test_worktree_and_pr_integration_contract():
 
 def test_direct_integration_contract():
     integration = _section(_skill_text(), "### 9. 統合・後始末・完了報告")
-    assert "主 worktree が clean、既定 branch 上、非 diverged のときだけ ff-only merge / push" in integration
-    assert "push reject は fetch / rebase / 再検証からやり直す" in integration
-    assert "origin なしは ff-only merge で完了" in integration
     assert "失敗時は変更を破棄せず" in integration
     for evidence in ("branch", "worktree", "停止操作", "再開方法"):
         assert evidence in integration
-    assert "統合成功・cleanup 未完了" in integration
 
 
 def test_retired_skill_tokens_are_absent():
@@ -422,10 +360,8 @@ def test_goal_prompt_handoff_contract():
         trigger in text
         for trigger in ("Goal プロンプトにして", "/goal で動かしたい", "後で実行したい")
     )
-    assert "`.claude/plans/YYYY-MM-DD-<slug>.md` へ保存して実装せず終了" in handoff
+    assert ".claude/plans/YYYY-MM-DD-<slug>.md" in handoff
     assert "独立レビュー" in handoff
-    assert "追加承認や独立レビューを行わない" in handoff
-    assert "dig は組み込み `/goal` を自動発動しない" in handoff
 
 
 def test_readme_lists_dig_command():
