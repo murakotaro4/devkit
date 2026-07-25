@@ -7,7 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from test_skill_invariants import _join_continuations
+from test_skill_invariants import _join_continuations, review_combines_scope_and_prompt
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -439,22 +439,10 @@ def test_non_skill_markdown_codex_review_scope_and_prompt_are_not_combined():
                 continue
             if "--base" not in command and "--uncommitted" not in command:
                 continue
-            after_scope = re.split(
-                r"--base\s+\S+|--uncommitted",
-                command,
-                maxsplit=1,
-            )[-1]
-            before_operator = re.split(
-                r"\s*(?:&&|\|\||[|;])\s*",
-                after_scope,
-                maxsplit=1,
-            )[0]
-            without_redirects = re.sub(
-                r"(?:^|\s)\d*(?:>>?|<)\s*(?:&\d+|\S+)",
-                " ",
-                before_operator,
-            ).strip()
-            if without_redirects:
+            # scope flag の後ろだけを見ると `review "<prompt>" --base main` の
+            # ように prompt を前置するだけで回避できる。review 以降の引数列
+            # 全体を見る(test_skill_invariants と同じ判定)。
+            if review_combines_scope_and_prompt(command):
                 offenders.append(f"{relpath}:{command}")
     assert not offenders, (
         "AGENTS/SKILL 外の codex review が scope と prompt を併用している: "

@@ -225,13 +225,14 @@ def _codex_commands(docs: Docs) -> list[tuple[str, str]]:
         for path, command in _command_lines(docs)
         if (path, command) not in fenced and _is_full_invocation(command)
     ]
-    return [
-        (path, command)
-        for path, command in fenced + inline
-        # 環境変数前置と、`&&` 以外の区切りの後ろも対象にする。
-        # 前置や区切りを変えるだけで model / effort / approval の検査が外れる。
-        if re.search(SEPARATOR + ENV_PREFIX + r"codex\s", command)
-    ]
+    # 複合行は segment ごとに切り出す。行全体を 1 つとして見ると、
+    # 片方の呼び出しにある `-a never` が、もう片方の欠落を隠してしまう。
+    commands: list[tuple[str, str]] = []
+    for path, command in fenced + inline:
+        for segment in re.split(r"\s*(?:&&|\|\||[|;])\s*", command):
+            if re.match("^" + ENV_PREFIX + r"codex\s", segment.strip()):
+                commands.append((path, segment.strip()))
+    return commands
 
 
 def check_codex_execution_shape(docs: Docs) -> list[str]:
@@ -296,39 +297,42 @@ def _scoped_review_commands(docs: Docs) -> list[tuple[str, str]]:
     ]
 
 
+def review_combines_scope_and_prompt(command: str) -> bool:
+    """`codex review` が scope flag と positional prompt を併用しているか。
+
+    scope flag の後ろだけを見ると `review "<prompt>" --base main` のように
+    prompt を前置するだけで回避できる。review 以降の引数列全体を見る。
+    `cd <worktree> && codex ... review ...` のように前段があるため、
+    先頭 segment ではなく review を含む segment を選ぶ。
+    """
+    segments = re.split(r"\s*(?:&&|\|\||[|;])\s*", command)
+    segment = next((part for part in segments if "review" in part.split()), segments[0])
+    # リダイレクト演算子は独立したトークンとして書かれる（`< /dev/null`、`2>&1`）。
+    # 演算子の直後に空白を要求しないと、`<remote>/<default>` のような
+    # placeholder をリダイレクトと誤認して引数ごと消してしまう。
+    without_redirects = re.sub(r"(?:^|\s)\d*(?:>>?|<)(?:\s+\S+|&\d+)", " ", segment)
+    tokens = without_redirects.split()
+    if "review" not in tokens:
+        return False
+    expecting_value = False
+    for token in tokens[tokens.index("review") + 1 :]:
+        if token.startswith("-"):
+            expecting_value = "=" not in token and token in _VALUE_FLAGS
+            continue
+        if expecting_value:
+            expecting_value = False
+            continue
+        return True
+    return False
+
+
 def check_review_scope_without_prompt(docs: Docs) -> list[str]:
     """codex review は scope flag と positional prompt を併用しない。"""
-    problems: list[str] = []
-    for path, command in _scoped_review_commands(docs):
-        # scope flag の後ろだけを見ると `review "<prompt>" --base main` のように
-        # prompt を前に置くだけで検査を回避できる。review 以降の引数列全体を見る。
-        # `cd <worktree> && codex ... review ...` のように前段があるため、
-        # 先頭 segment ではなく review を含む segment を選ぶ。
-        segments = re.split(r"\s*(?:&&|\|\||[|;])\s*", command)
-        segment = next(
-            (part for part in segments if "review" in part.split()), segments[0]
-        )
-        # リダイレクト演算子は独立したトークンとして書かれる（`< /dev/null`、`2>&1`）。
-        # 演算子の直後に空白を要求しないと、`<remote>/<default>` のような
-        # placeholder をリダイレクトと誤認して引数ごと消してしまう。
-        without_redirects = re.sub(
-            r"(?:^|\s)\d*(?:>>?|<)(?:\s+\S+|&\d+)", " ", segment
-        )
-        tokens = without_redirects.split()
-        if "review" not in tokens:
-            continue
-        rest = tokens[tokens.index("review") + 1 :]
-        expecting_value = False
-        for token in rest:
-            if token.startswith("-"):
-                expecting_value = "=" not in token and token in _VALUE_FLAGS
-                continue
-            if expecting_value:
-                expecting_value = False
-                continue
-            problems.append(f"{path}: review scope と prompt を併用: {command}")
-            break
-    return problems
+    return [
+        f"{path}: review scope と prompt を併用: {command}"
+        for path, command in _scoped_review_commands(docs)
+        if review_combines_scope_and_prompt(command)
+    ]
 
 
 def targets_review_scope_without_prompt(docs: Docs) -> int:
@@ -426,17 +430,35 @@ def mutate_shell_variables_assigned(docs: Docs) -> Docs:
     )
 
 
-def _shell_surfaces(docs: Docs) -> list[tuple[str, str]]:
-    """fenced block だけを実行指示の面として扱う。
+PROHIBITION = re.compile(r"(?:使わない|使用しない|禁止|してはならない|避ける)")
 
-    inline span も走査すると、禁止を明記した文中の引用
-    （「`git add .` / `git add -A` は使わない」）まで違反として拾ってしまい、
-    引用と指示を機械的に区別できない。実行指示は fenced block に置く前提とし、
-    禁止文の存在自体は各スキルの契約テストが別途検査する。
+
+def _shell_surfaces(docs: Docs) -> list[tuple[str, str]]:
+    """fenced block と、禁止文脈にない inline span。
+
+    inline span を丸ごと除くと、そこへ書くだけで検査を回避できる。丸ごと含めると
+    「`git add .` / `git add -A` は使わない」という**禁止文中の引用**まで違反に
+    なる。span が現れる文に禁止語があるかで、指示と引用を分ける。
     """
-    return [
+    surfaces = [
         (path, block) for path, text in docs.items() for block in _bash_blocks(text)
     ]
+    for path, text in docs.items():
+        for match in re.finditer(r"`([^`\n]+)`", text):
+            span = match.group(1).strip()
+            if not re.match("^" + ENV_PREFIX + r"(?:git|codex|cursor-agent)\b", span):
+                continue
+            sentence_start = max(
+                text.rfind("。", 0, match.start()), text.rfind("\n", 0, match.start())
+            )
+            sentence_end = text.find("。", match.end())
+            sentence = text[
+                sentence_start + 1 : sentence_end if sentence_end >= 0 else len(text)
+            ]
+            if PROHIBITION.search(sentence):
+                continue
+            surfaces.append((path, span))
+    return surfaces
 
 
 def check_no_broad_git_add(docs: Docs) -> list[str]:
