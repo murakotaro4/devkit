@@ -169,7 +169,7 @@ RECORD は人間向け要約と次の JSON を出す。secret・token・private 
 
 ## 重複実行防止
 
-中央 DB は持たない。repository identity / trigger / base SHA / normalized objective から安定した `run_key` を作る。`trigger.id` がなければ `trigger.name` / `trigger.url` / `trigger.summary` を含める。publish 前に open / closed を含む全状態の PR / Issue から marker を検索し、同一 marker があれば新規作成せず既存 URL を報告して `noop`。closed 済みでも同じで、再実行には新しい objective を要求する。同一 run 内の二重 publish は禁止する。
+中央 DB は持たない。repository identity / trigger / base SHA / normalized objective から安定した `run_key` を作る。`trigger.id` がなければ `trigger.name` / `trigger.url` / `trigger.summary` を含める。**実装前に** open / closed を含む全状態の PR / Issue から marker を検索し、同一 marker があれば worktree も作らず既存 URL を報告して `noop`。publish 直前の確認では、重複 run が実装・検証まで走り切り未 merge branch が残る。closed 済みでも同じで、再実行には新しい objective を要求する。同一 run 内の二重 publish は禁止する。
 
 ## 外部状態変更と非目的
 

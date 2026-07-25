@@ -123,8 +123,8 @@ frontmatter に `allowed-tools` を置かず、利用可能なツールもこの
 
 | 親 | 役割 | 選択肢 |
 |----|------|--------|
-| Claude | 実装 | codex（既定） / cursor-agent / Claude Sonnet |
-| Claude | 計画・diff レビュー | codex review（既定） / Claude Opus / skip（repo が独立レビュー必須なら不可） |
+| Claude | 実装 | codex（既定） / cursor-agent / Claude サブエージェント `Agent(general-purpose, model=sonnet)` |
+| Claude | 計画・diff レビュー | codex review（既定） / Claude サブエージェント `Agent(general-purpose, model=opus)` / skip（repo が独立レビュー必須なら不可） |
 | Codex | 実装 | `spawn_agent` worker / cursor-agent / 親実装 |
 | Codex | 計画・diff レビュー | `spawn_agent` explorer / skip（repo が独立レビュー必須なら不可） |
 
@@ -146,7 +146,7 @@ codex -a never exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort
 
 ### 6. worktree 作成と実装委譲
 
-実装系は必ず worktree を使う。親が既定 branch を origin/HEAD、main、現在 branch の順で決め、origin を fetch して一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。作成失敗時は主 worktree へ移らず停止する。以後の実装・検証・レビューは worktree 内だけで行う。
+実装系は必ず worktree を使う。親が既定 branch を origin/HEAD、main、現在 branch の順で決める。origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする(origin なし repo とリモート名が origin でない repo も対象)。一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。作成失敗時は主 worktree へ移らず停止する。以後の実装・検証・レビューは worktree 内だけで行う。
 
 委譲指示は目的 / write_scope / 変更内容 / 受け入れ条件 / 検証 / commit 禁止を 1 ブロックにする。実装 backend は commit しない。
 

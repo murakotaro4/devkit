@@ -142,6 +142,19 @@ def test_security_and_publication_guardrails():
         assert forbidden in text
 
 
+def test_duplicate_marker_is_checked_before_implementation():
+    """marker 検索は publish 直前ではなく実装前に行う。
+
+    2026-07-25 の圧縮で「実装前に」が「publish 前に」へ弱まり、重複 run が
+    worktree 作成・編集・検証・commit まで走り切ってから noop になる状態だった
+    (codex の diff レビューが [P2] として検出)。未 merge branch も残る。
+    """
+    text = _skill_text()
+    assert "**実装前に**" in text
+    assert "worktree も作らず既存 URL を報告して `noop`" in text
+    assert "publish 前に open" not in text
+
+
 def test_dedup_cleanup_and_non_goals():
     text = _skill_text()
     assert "open / closed を含む全状態" in text

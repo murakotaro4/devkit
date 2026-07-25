@@ -182,13 +182,16 @@ def test_backend_selection_and_python_gate_contract():
     for option in (
         "codex（既定）",
         "cursor-agent",
-        "Claude Sonnet",
         "codex review（既定）",
-        "Claude Opus",
         "`spawn_agent` worker",
         "`spawn_agent` explorer",
     ):
         assert option in backend
+    # 表示名ではなく Agent へ実際に渡す alias を書くこと。
+    # 2026-07-25 の圧縮で alias が表示名へ置き換わり、委譲時に何を指定するか
+    # 分からなくなっていた([P2])。
+    assert "`Agent(general-purpose, model=sonnet)`" in backend
+    assert "`Agent(general-purpose, model=opus)`" in backend
     assert all(command in backend for command in ("command -v codex", "command -v cursor-agent", "command -v uv"))
     assert "失敗した選択肢は除く" in backend
     assert "thread_id 抽出不能として実装選択肢だけを除く" in backend
@@ -330,7 +333,10 @@ def test_worktree_and_pr_integration_contract():
     integration = _section(text, "### 9. 統合・後始末・完了報告")
     assert "実装系は必ず worktree を使う" in implementation
     assert "origin/HEAD、main、現在 branch の順" in implementation
-    assert "origin を fetch" in implementation
+    # origin なし repo / リモート名が origin でない repo でも worktree を作れること。
+    # 2026-07-25 の圧縮で fetch が無条件になり、この経路が壊れていた([P2])。
+    assert "origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする" in implementation
+    assert "リモート名が origin でない repo も対象" in implementation
     assert "一時 worktree と `<type>/<slug>` branch を作り" in implementation
     assert "開始 commit を記録" in implementation
     assert "作成失敗時は主 worktree へ移らず停止" in implementation

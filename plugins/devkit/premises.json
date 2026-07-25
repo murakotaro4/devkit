@@ -674,16 +674,16 @@
       ]
     },
     {
-      "id": "claude-subagent-model-tier",
-      "summary": "Claude サブエージェント委譲の backend に指定する世代非依存モデル階層名",
-      "current_value": "Claude Opus",
+      "id": "claude-subagent-model-alias",
+      "summary": "Claude サブエージェント委譲で Agent へ渡す世代非依存モデル alias",
+      "current_value": "model=opus",
       "value_patterns": [
-        "(?<![A-Za-z0-9_])Claude Opus(?![A-Za-z0-9_-])",
-        "(?<![A-Za-z0-9_])Claude Sonnet(?![A-Za-z0-9_-])"
+        "(?<![A-Za-z0-9_])model=opus(?![A-Za-z0-9_-])",
+        "(?<![A-Za-z0-9_])model=sonnet(?![A-Za-z0-9_-])"
       ],
       "obsolete_value_patterns": [],
-      "verify_hint": "Agent ツールの model 選択肢 / Anthropic のモデル階層発表",
-      "update_notes": "階層名は世代非依存 alias なので世代交代では更新不要。階層体系そのものが変わった場合(Mythos 系の追加など)に dig の backend 表と契約テストを同時更新する",
+      "verify_hint": "Agent ツールの model 引数が受け付ける alias 一覧",
+      "update_notes": "alias は世代非依存なので世代交代では更新不要。alias 体系が変わった場合(新階層の追加など)に dig の backend 表と契約テストを同時更新する。表示名ではなく実際に渡す実行 alias を追跡する",
       "last_verified": "2026-07-25",
       "occurrences": [
         {
