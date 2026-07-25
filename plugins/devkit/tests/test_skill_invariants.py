@@ -537,16 +537,27 @@ def _delegated_segment(command: str) -> str:
 
 
 def check_worktree_commands_pin_directory(docs: Docs) -> list[str]:
-    """worktree 委譲・review command は実行 directory を明示する。"""
-    return [
-        f"{path}: worktree directory 指定なし: {command}"
-        for path, command in _worktree_commands(docs)
-        if not re.search(
-            r"(?:^|\s)(?:-C|--workspace)\s+"
-            r"(?:\"[^\"]+\"|'[^']+'|(?!-)\S+)",
-            _delegated_segment(command),
-        )
-    ]
+    """worktree 委譲・review command は**専用 worktree**を実行 directory に指定する。
+
+    任意の非オプション引数を許すと `-C "."` や `-C "<main-checkout>"` でも通り、
+    通常 checkout に対して review が走って空 diff を「指摘なし」と誤報する。
+    指す先が worktree であることまで要求する。
+    """
+    pinned = re.compile(
+        r"(?:^|\s)(?:-C|--workspace)\s+(?:\"([^\"]+)\"|'([^']+)'|((?!-)\S+))"
+    )
+    problems: list[str] = []
+    for path, command in _worktree_commands(docs):
+        match = pinned.search(_delegated_segment(command))
+        if match is None:
+            problems.append(f"{path}: worktree directory 指定なし: {command}")
+            continue
+        target = next(group for group in match.groups() if group is not None)
+        if "worktree" not in target and not target.startswith("$"):
+            problems.append(
+                f"{path}: 指定先が worktree でない ({target}): {command}"
+            )
+    return problems
 
 
 def targets_worktree_commands_pin_directory(docs: Docs) -> int:

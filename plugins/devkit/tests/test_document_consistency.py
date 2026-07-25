@@ -7,6 +7,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from test_skill_invariants import _join_continuations
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DISTRIBUTED_SKILLS = (
@@ -421,10 +423,12 @@ def test_non_skill_markdown_codex_review_scope_and_prompt_are_not_combined():
         ):
             continue
         text = path.read_text(encoding="utf-8")
+        # 行末 `\` の折り返しを畳んでから見る。物理行のままだと scope の後ろに
+        # 残る `\` を positional prompt と誤認し、無害な整形で CI が落ちる。
         commands = [
-            line.strip()
+            line
             for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL)
-            for line in block.splitlines()
+            for line in _join_continuations(block)
         ] + [
             span.strip()
             for span in re.findall(r"`([^`\n]+)`", text)
