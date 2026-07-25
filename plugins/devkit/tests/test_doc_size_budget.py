@@ -59,7 +59,9 @@ def test_total_distributed_doc_size_stays_within_budget():
 def test_budget_covers_every_distributed_skill():
     """スキルを増やしたら上限登録も必須にする（登録漏れで ratchet が空洞化しないように）。"""
     skills = {
-        str(path.relative_to(REPO_ROOT))
+        # Windows では relative_to が "\" 区切りを返すため BUDGETS のキーと
+        # 一致しない。as_posix() で正規化する。
+        path.relative_to(REPO_ROOT).as_posix()
         for path in (REPO_ROOT / "plugins" / "devkit" / "skills").glob("*/SKILL.md")
     }
     assert skills <= set(BUDGETS), f"上限未登録の SKILL.md がある: {sorted(skills - set(BUDGETS))}"

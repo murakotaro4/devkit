@@ -435,7 +435,8 @@ def test_codex_review_scope_flag_and_prompt_are_not_combined():
     """
     offenders: list[str] = []
     for path in sorted(Path(REPO_ROOT).rglob("*.md")):
-        relpath = str(path.relative_to(REPO_ROOT))
+        # Windows の "\" 区切りだと startswith の除外判定が効かない。
+        relpath = path.relative_to(REPO_ROOT).as_posix()
         if relpath.startswith((".git/", ".claude/", "docs/reviews/")):
             continue
         text = path.read_text(encoding="utf-8")
