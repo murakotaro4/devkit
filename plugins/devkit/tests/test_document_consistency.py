@@ -249,7 +249,7 @@ def test_claude_md_imports_agents_md():
 def test_agents_md_core_rules():
     text = _read("AGENTS.md")
     assert "Conventional Commits" in text, "AGENTS.md にコミット規約がない"
-    assert "Codex Exec 相談ルール" in text, "AGENTS.md に codex exec 相談ルールがない"
+    _markdown_section(text, "Codex Exec 相談ルール")
     assert "version" in text, "AGENTS.md に version bump ルールがない"
     for skill_name in DISTRIBUTED_SKILLS:
         assert skill_name in text, f"AGENTS.md に v7 の配布 skill がない: {skill_name}"
@@ -378,43 +378,6 @@ def test_agents_and_dig_noninteractive_stdin_guard():
     assert not offenders, f"stdin 閉鎖(< /dev/null)がない非対話コマンド行: {offenders}"
 
 
-def test_bash_blocks_assign_every_shell_variable_they_use():
-    """コマンド例の bash ブロックは、参照するシェル変数を同じブロック内で代入する。
-
-    シェル変数はツール呼び出し間で失われるため、別ブロックでの代入に依存すると
-    空文字へ展開して誤ったパスを対象にする。2026-07-25 の圧縮で setup が
-    `$SKILL_DIR` / `$TARGET_REPO` の代入を落としていた(codex の diff レビューが
-    [P2] として検出)。環境が与える変数だけ例外とする。
-    """
-    # ARGUMENTS はハーネスが置換するスキルテンプレートのプレースホルダ。
-    env_provided = {"TMPDIR", "HOME", "PATH", "PWD", "SHELL", "USER", "ARGUMENTS"}
-    offenders: list[str] = []
-    for path in sorted((REPO_ROOT / "plugins" / "devkit" / "skills").glob("*/SKILL.md")):
-        text = path.read_text(encoding="utf-8")
-        # fenced block だけでなく、実行形として完結したインラインコマンドも見る。
-        # 2026-07-25 の圧縮で setup の statusline コマンドがインライン化して
-        # 検査を素通りしていた([P2])。コマンドの一部を引用しただけの断片
-        # (`"$(cat "$JOB_DIR/thread-id.txt")"` など) は対象にしない。
-        runnable = re.compile(r"^(node|python|uv|codex|cursor-agent|git|npx|pwsh|bash|sh)\b")
-        blocks = re.findall(r"```bash\n(.*?)```", text, re.DOTALL) + [
-            span
-            for span in re.findall(r"`([^`\n]+)`", text)
-            if "$" in span and runnable.match(span)
-        ]
-        for block in blocks:
-            used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)\}?", block))
-            assigned = set(
-                re.findall(r"(?:^|[\s;&(])([A-Z][A-Z0-9_]*)=", block, re.MULTILINE)
-            )
-            missing = used - assigned - env_provided
-            if missing:
-                head = block.strip().splitlines()[0][:60]
-                offenders.append(
-                    f"{path.relative_to(REPO_ROOT)}: {sorted(missing)} ({head})"
-                )
-    assert not offenders, f"未代入のシェル変数を参照する bash ブロック: {offenders}"
-
-
 def test_extractor_input_file_is_created_before_use():
     """抽出スクリプトが読む一時ファイルは、使う前に作る手順が要る。
 
@@ -422,42 +385,76 @@ def test_extractor_input_file_is_created_before_use():
     書き出す手順が消え、抽出コマンドが必ず失敗する状態だった([P2])。
     """
     text = _read("plugins/devkit/skills/improve-skill/SKILL.md")
-    assert "--input-file /tmp/current-session.txt" in text
-    assert "現在セッションの要約を `/tmp/current-session.txt` へ書き出す" in text
+    input_path = "/tmp/current-session.txt"
+    use = re.search(rf"--input-file\s+{re.escape(input_path)}(?:\s|$)", text)
+    assert use, f"improve-skill に extractor input がない: {input_path}"
+    producer_lines = [
+        line
+        for line in text[: use.start()].splitlines()
+        if input_path in line
+        and re.search(r"(?:書き出す|作成する|保存する)", line)
+        and not re.search(
+            r"(?:書き出|作成|保存).{0,6}(?:しない|禁止|不要)",
+            line,
+        )
+    ]
+    assert producer_lines, (
+        f"extractor input の生成指示が利用箇所より前にない: {input_path}"
+    )
 
 
-def test_codex_review_scope_flag_and_prompt_are_not_combined():
-    """`codex exec review` は scope フラグと positional PROMPT を併用できない。
+# shell variable assignment は test_skill_invariants.check_shell_variables_assigned、
+# AGENTS/SKILL の review scope と prompt の排他は
+# check_review_scope_without_prompt が担う。その他の Markdown は次で補完する。
 
-    2026-07-25 に実測で確認（`error: the argument '--base <BRANCH>' cannot be used
-    with '[PROMPT]'`。`--uncommitted` も同じ）。repo-loop がこの併用形を記載しており、
-    そのまま実行すると必ず失敗していた。同じ逸脱を再発させないための検査。
-    """
+
+def test_non_skill_markdown_codex_review_scope_and_prompt_are_not_combined():
+    generic_targets = {"AGENTS.md"} | {
+        f"plugins/devkit/skills/{skill_name}/SKILL.md"
+        for skill_name in DISTRIBUTED_SKILLS
+    }
     offenders: list[str] = []
-    for path in sorted(Path(REPO_ROOT).rglob("*.md")):
-        # Windows の "\" 区切りだと startswith の除外判定が効かない。
+    for path in sorted(REPO_ROOT.rglob("*.md")):
         relpath = path.relative_to(REPO_ROOT).as_posix()
-        if relpath.startswith((".git/", ".claude/", "docs/reviews/")):
+        if relpath in generic_targets or relpath.startswith(
+            (".git/", ".claude/", "docs/reviews/")
+        ):
             continue
         text = path.read_text(encoding="utf-8")
-        # 実行されるコマンドだけを対象にする(散文で「codex review の例」等と
-        # 書いた行を誤検出しないため)。fenced block とインラインコードを見る。
         commands = [
-            line
+            line.strip()
             for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL)
             for line in block.splitlines()
-        ] + [span for span in re.findall(r"`([^`\n]+)`", text) if span.startswith("codex")]
-        for line in commands:
-            if "codex" not in line or " review " not in line:
+        ] + [
+            span.strip()
+            for span in re.findall(r"`([^`\n]+)`", text)
+            if span.strip().startswith("codex")
+        ]
+        for command in commands:
+            if "codex" not in command or " review " not in command:
                 continue
-            if "--base" not in line and "--uncommitted" not in line:
+            if "--base" not in command and "--uncommitted" not in command:
                 continue
-            after_scope = re.split(r"--base\s+\S+|--uncommitted", line, maxsplit=1)[-1]
-            if '"' in after_scope.split("< /dev/null")[0]:
-                offenders.append(f"{relpath}:{line.strip()}")
+            after_scope = re.split(
+                r"--base\s+\S+|--uncommitted",
+                command,
+                maxsplit=1,
+            )[-1]
+            before_operator = re.split(
+                r"\s*(?:&&|\|\||[|;])\s*",
+                after_scope,
+                maxsplit=1,
+            )[0]
+            without_redirects = re.sub(
+                r"(?:^|\s)\d*(?:>>?|<)\s*(?:&\d+|\S+)",
+                " ",
+                before_operator,
+            ).strip()
+            if without_redirects:
+                offenders.append(f"{relpath}:{command}")
     assert not offenders, (
-        "codex exec review に scope フラグと positional PROMPT を併用している"
-        f"(実行時に必ず失敗する): {offenders}"
+        "AGENTS/SKILL 外の codex review が scope と prompt を併用している: "
+        f"{offenders}"
     )
 
 
@@ -467,11 +464,29 @@ def test_codex_review_scope_flag_and_prompt_are_not_combined():
 def test_release_rules_canonical_in_agents_md():
     agents = _read("AGENTS.md")
     readme = _read("README.md")
-    assert "この節が version 運用ルールの正本" in agents, "AGENTS.md に Release Rules の正本宣言がない"
-    assert "正本は `AGENTS.md` の「Release Rules」" in readme, "README が Release Rules の正本を参照していない"
-    for doc_name, text in (("AGENTS.md", agents), ("README.md", readme)):
-        assert "以下なら push を block" in text, (
-            f"{doc_name} の pre-push gate 文言が実装(compare_semver <= 0 で block)と不一致"
+    release_sections = {
+        "AGENTS.md": _markdown_section(agents, "Release Rules"),
+        "README.md": _markdown_section(readme, "Release Rule"),
+    }
+    assert "正本" in release_sections["AGENTS.md"], (
+        "AGENTS.md の Release Rules 節に正本宣言がない"
+    )
+    readme_reference = release_sections["README.md"]
+    assert "AGENTS.md" in readme_reference and "Release Rules" in readme_reference, (
+        "README の Release Rule 節が AGENTS.md の正本節を参照していない"
+    )
+    for doc_name, section in release_sections.items():
+        gate_lines = [
+            line
+            for line in section.splitlines()
+            if re.search(
+                r"version.*origin/main.*以下.*push.*block",
+                line,
+            )
+            and not re.search(r"block\s*しない", line)
+        ]
+        assert gate_lines, (
+            f"{doc_name} の pre-push gate が version <= origin/main を表していない"
         )
 
 
@@ -480,9 +495,12 @@ def test_release_rules_canonical_in_agents_md():
 
 def test_shared_skill_contract_canonical_and_referenced():
     agents = _read("AGENTS.md")
-    assert "## スキル共通契約" in agents, "AGENTS.md にスキル共通契約の節がない"
-    assert "## スキル採用基準" in agents, "AGENTS.md にスキル採用基準の節がない"
-    assert "各 SKILL.md は実行に必要な要点を自己完結で保持" in agents
+    shared_contract = _markdown_section(agents, "スキル共通契約")
+    _markdown_section(agents, "スキル採用基準")
+    shared_intro = re.split(r"^### ", shared_contract, maxsplit=1, flags=re.MULTILINE)[0]
+    assert "正本" in shared_intro and "SKILL.md" in shared_intro, (
+        "AGENTS.md のスキル共通契約に正本と配布コピーの関係がない"
+    )
 
     for skill_name in DISTRIBUTED_SKILLS:
         text = _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
@@ -510,7 +528,16 @@ def test_shared_skill_contract_canonical_and_referenced():
         ), f"{skill_name} の Codex 親判定が AskUserQuestion 不在に束縛されていない"
         assert "判定不能" in harness, f"{skill_name} に判定不能の分岐がない"
         if skill_name == "goal-prompt":
-            assert "質問は Claude 親が AskUserQuestion、Codex 親 plan mode が `request_user_input`" in harness
+            assert any(
+                "Claude 親" in line and "AskUserQuestion" in line
+                for line in harness_lines
+            )
+            assert any(
+                "Codex 親" in line
+                and "plan mode" in line
+                and "request_user_input" in line
+                for line in harness_lines
+            )
         else:
             assert re.search(
                 r"`request_user_input` は(?:ハーネス)?判定(?:キー)?に(?:使わない|しない)",
@@ -575,9 +602,7 @@ def test_delegating_skills_have_progress_visibility_contract():
 
 def test_layered_output_contract_is_canonical_and_referenced():
     agents = _read("AGENTS.md")
-    assert "### 計画・レポートの 2 層提示" in agents, (
-        "AGENTS.md に計画・レポートの 2 層提示契約がない"
-    )
+    shared_contract = _markdown_section(agents, "スキル共通契約")
 
     layer_sections = {
         "dig": "2. 調査 + 計画(親)",
@@ -595,13 +620,20 @@ def test_layered_output_contract_is_canonical_and_referenced():
         6: ("検証", "green"),
         7: ("独立レビュー状態",),
     }
+    skill_texts = {
+        skill_name: _read(f"plugins/devkit/skills/{skill_name}/SKILL.md")
+        for skill_name in LAYERED_OUTPUT_SKILLS
+    }
     sections = {
-        "AGENTS.md": _markdown_section(agents, "計画・レポートの 2 層提示")
+        "AGENTS.md": _markdown_section(
+            shared_contract,
+            "計画・レポートの 2 層提示",
+        )
     }
     sections.update(
         {
             skill_name: _markdown_section(
-                _read(f"plugins/devkit/skills/{skill_name}/SKILL.md"),
+                skill_texts[skill_name],
                 heading,
             )
             for skill_name, heading in layer_sections.items()
@@ -628,7 +660,18 @@ def test_layered_output_contract_is_canonical_and_referenced():
     for skill_name in LAYERED_OUTPUT_SKILLS:
         section = sections[skill_name]
         assert "第 1 層" in section, f"{skill_name} に第 1 層の契約がない"
-        assert "第 2 層" in section or "レポート全体は次の 11 見出し" in section, (
+        detail_heading_numbers = {
+            int(number)
+            for number in re.findall(
+                r"^## ([1-9][0-9]*)\.",
+                skill_texts[skill_name],
+                re.MULTILINE,
+            )
+        }
+        has_numbered_detail = detail_heading_numbers == set(
+            range(1, len(detail_heading_numbers) + 1)
+        ) and len(detail_heading_numbers) >= 2
+        assert "第 2 層" in section or has_numbered_detail, (
             f"{skill_name} に第 1 層より後段の詳細構造がない"
         )
         review_states = {
@@ -645,10 +688,23 @@ def test_layered_output_contract_is_canonical_and_referenced():
 
 def test_layer1_size_target_and_completeness_priority():
     agents = _read("AGENTS.md")
-    assert "字数と完全性が衝突した場合は完全性を優先する" in agents
-    assert "見出し行を除く本文文字数" in agents
-    assert "工程表形式" in agents
-    assert "docs/reviews/2026-07-25-cognitive-load-metrics.md" in agents
+    shared_contract = _markdown_section(agents, "スキル共通契約")
+    contract = _markdown_section(shared_contract, "計画・レポートの 2 層提示")
+    lines = contract.splitlines()
+    assert any(
+        all(token in line for token in ("1〜4", "1,000", "見出し", "本文文字数"))
+        for line in lines
+    ), "第 1 層の計測対象と約 1,000 字の目標がない"
+    assert any(
+        re.search(r"字数.*完全性.*完全性.*優先", line)
+        and not re.search(r"優先\s*しない", line)
+        for line in lines
+    ), "字数目標よりカテゴリ完全性を優先する契約がない"
+    assert any(
+        all(token in line for token in ("dig", "5〜7", "工程 / 状態 / backend"))
+        for line in lines
+    ), "dig の工程表統合例外がない"
+    assert "docs/reviews/2026-07-25-cognitive-load-metrics.md" in contract
 
 
 def test_codex_model_pinned_to_current_generation():
@@ -747,9 +803,8 @@ def test_pr_merge_completion_contract_stays_in_sync():
             assert retired not in text, f"{doc_name} に旧 PR 統合契約が残っている: {retired}"
 
     dig = documents["plugins/devkit/skills/dig/SKILL.md"]
-    integration = dig.split("### 9. 統合・後始末・完了報告", 1)[1].split(
-        "\n## ", 1
-    )[0]
+    planning = _markdown_section(dig, "2. 調査 + 計画(親)")
+    integration = _markdown_section(dig, "9. 統合・後始末・完了報告")
     for invariant in (
         "同じ SHA に束縛された checks",
         "merge queue / auto-merge",
@@ -759,8 +814,21 @@ def test_pr_merge_completion_contract_stays_in_sync():
         "CI 赤・merge 失敗では PR を open のまま",
     ):
         assert invariant in integration, f"dig の PR 統合不変条件がない: {invariant}"
-    assert "計画時に直接統合へ決める" in dig
-    assert "計画した統合方法だけを実行する" in integration
+    assert any(
+        all(token in line for token in ("origin", "gh", "計画", "直接統合"))
+        for line in planning.splitlines()
+    ), "PR が使えない repo の統合方法を計画で確定する契約がない"
+    assert "統合方法" in planning
+    execution_lines = [
+        line
+        for line in integration.splitlines()
+        if all(token in line for token in ("計画", "統合方法", "実行"))
+        and any(limiter in line for limiter in ("だけ", "のみ"))
+        and not re.search(r"(?:無視|実行\s*しない|別方式へ切り替える)", line)
+    ]
+    assert execution_lines, (
+        "計画で確定した統合方法を実行工程へ引き継ぐ対応がない"
+    )
 
 
 def test_goal_prompt_save_contract_stays_in_sync():
@@ -801,7 +869,11 @@ def test_goal_prompt_save_contract_stays_in_sync():
     limit_contract = goal_prompt_skill.split("## 上限停止の自動算出", 1)[1].split(
         "\n## ", 1
     )[0]
-    assert "明示値がある場合だけ上書きする" in limit_contract
+    assert any(
+        re.search(r"明示値.*(?:だけ|のみ).*上書き", line)
+        and not re.search(r"上書き\s*しない", line)
+        for line in limit_contract.splitlines()
+    )
     for scale in ("小規模", "標準", "大規模"):
         assert scale in limit_contract, f"goal-prompt の上限停止規模がない: {scale}"
 
@@ -820,6 +892,13 @@ def test_rebase_conflict_resolution_contract_stays_in_sync():
         "\n## ", 1
     )[0]
     assert "標準解消規則" in integration, "dig の統合手順が標準解消規則を参照していない"
-    assert "conflict は abort して停止" in integration, (
+    assert any(
+        all(token in line for token in ("conflict", "abort", "停止"))
+        and not re.search(
+            r"(?:abort|停止).{0,6}(?:しない|せず|不要|禁止)",
+            line,
+        )
+        for line in integration.splitlines()
+    ), (
         "dig の統合手順に未知の衝突時の abort fallback がない"
     )

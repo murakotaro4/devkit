@@ -185,7 +185,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 3
+          "count": 2
         }
       ]
     },
@@ -243,15 +243,15 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 5
+          "count": 1
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
           "count": 4
         },
         {
-          "path": "plugins/devkit/tests/test_repo_loop_contract.py",
-          "count": 1
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 2
         }
       ]
     },
@@ -295,11 +295,7 @@
           "count": 1
         },
         {
-          "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 3
-        },
-        {
-          "path": "plugins/devkit/tests/test_repo_loop_contract.py",
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
           "count": 1
         }
       ]
@@ -384,7 +380,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 6
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
@@ -404,7 +400,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_repo_loop_contract.py",
-          "count": 4
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
@@ -477,15 +473,15 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 4
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
           "count": 1
         },
         {
-          "path": "plugins/devkit/tests/test_repo_loop_contract.py",
-          "count": 1
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 4
         }
       ]
     },
@@ -527,6 +523,10 @@
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
           "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 2
         }
       ]
     },
@@ -550,10 +550,14 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 4
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
           "count": 1
         }
       ]

@@ -1,0 +1,738 @@
+"""配布ドキュメントを文言ではなくカテゴリ単位の不変条件で検査する。"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SKILL_GLOB = "plugins/devkit/skills/*/SKILL.md"
+TARGET_PATHS = ("AGENTS.md",) + tuple(
+    path.relative_to(REPO_ROOT).as_posix()
+    for path in sorted(REPO_ROOT.glob(SKILL_GLOB))
+)
+Docs = dict[str, str]
+CheckRun = Callable[[Docs], list[str]]
+Mutation = Callable[[Docs], Docs]
+TargetCounter = Callable[[Docs], int]
+
+
+@dataclass(frozen=True)
+class Check:
+    run: CheckRun
+    mutate: Mutation | None
+    targets: TargetCounter
+    category: str
+    why: str
+
+
+def _copy(docs: Docs) -> Docs:
+    return dict(docs)
+
+
+def _replace_once(docs: Docs, path: str, old: str, new: str) -> Docs:
+    mutated = _copy(docs)
+    assert old in mutated[path], f"mutation の対象が実在しない: {path}: {old!r}"
+    mutated[path] = mutated[path].replace(old, new, 1)
+    assert mutated[path] != docs[path], f"mutation が空振りした: {path}"
+    return mutated
+
+
+def _swap_once(docs: Docs, path: str, first: str, second: str) -> Docs:
+    mutated = _copy(docs)
+    text = mutated[path]
+    assert text.count(first) == 1, f"swap 対象が一意でない: {path}: {first!r}"
+    assert text.count(second) == 1, f"swap 対象が一意でない: {path}: {second!r}"
+    placeholder = "\0SKILL_INVARIANT_SWAP\0"
+    assert placeholder not in text
+    mutated[path] = (
+        text.replace(first, placeholder, 1)
+        .replace(second, first, 1)
+        .replace(placeholder, second, 1)
+    )
+    assert mutated[path] != text
+    return mutated
+
+
+def _bash_blocks(text: str) -> list[str]:
+    return re.findall(r"```(?:bash|sh|shell)\n(.*?)```", text, re.DOTALL)
+
+
+def _inline_commands(text: str) -> list[str]:
+    runnable = re.compile(
+        r"^(?:[A-Z][A-Z0-9_]*=[^ ]+\s+)*(?:codex|cursor-agent|git|node|"
+        r"python|uv|npx|pwsh|bash|sh)\b"
+    )
+    return [
+        span
+        for span in re.findall(r"`([^`\n]+)`", text)
+        if runnable.match(span.strip())
+    ]
+
+
+def _command_lines(docs: Docs, *, include_inline: bool = True) -> list[tuple[str, str]]:
+    commands: list[tuple[str, str]] = []
+    for path, text in docs.items():
+        for block in _bash_blocks(text):
+            commands.extend(
+                (path, line.strip())
+                for line in block.splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            )
+        if include_inline:
+            commands.extend((path, command.strip()) for command in _inline_commands(text))
+    return commands
+
+
+def _noninteractive_commands(docs: Docs) -> list[tuple[str, str]]:
+    return [
+        (path, command)
+        for path, command in _command_lines(docs, include_inline=False)
+        if re.search(r"\bcodex\b.*\bexec\b", command)
+        or re.search(r"\bcursor-agent\s+-p\b", command)
+        or re.search(r"\bcursor-agent\s+create-chat\b", command)
+    ]
+
+
+def check_stdin_closed(docs: Docs) -> list[str]:
+    """非対話 CLI の fenced command は stdin を閉じる。"""
+    return [
+        f"{path}: stdin が閉じられていない: {command}"
+        for path, command in _noninteractive_commands(docs)
+        if "< /dev/null" not in command
+    ]
+
+
+def targets_stdin_closed(docs: Docs) -> int:
+    return len(_noninteractive_commands(docs))
+
+
+def mutate_stdin_closed(docs: Docs) -> Docs:
+    path = "AGENTS.md"
+    old = (
+        'codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" '
+        '"<内容>" < /dev/null'
+    )
+    return _replace_once(docs, path, old, old.removesuffix(" < /dev/null"))
+
+
+def _codex_commands(docs: Docs) -> list[tuple[str, str]]:
+    return [
+        (path, command)
+        for path, command in _command_lines(docs, include_inline=False)
+        if re.search(r"(?:^|&&\s*)codex\s", command)
+    ]
+
+
+def check_codex_execution_shape(docs: Docs) -> list[str]:
+    """codex command の approval、model、effort の指定値を検査する。"""
+    problems: list[str] = []
+    for path, command in _codex_commands(docs):
+        if not re.search(r"(?:^|\s)-a\s+never(?:\s|$)", command):
+            problems.append(f"{path}: codex に -a never がない: {command}")
+        model = re.search(r"(?:^|\s)-m\s+(\S+)", command)
+        if model and model.group(1) != "gpt-5.6-sol":
+            problems.append(f"{path}: codex model が不正: {model.group(1)}")
+        effort = re.search(r'model_reasoning_effort="([^"]+)"', command)
+        if effort and effort.group(1) != "medium":
+            problems.append(f"{path}: codex effort が不正: {effort.group(1)}")
+    return problems
+
+
+def targets_codex_execution_shape(docs: Docs) -> int:
+    return len(_codex_commands(docs))
+
+
+def mutate_codex_execution_shape(docs: Docs) -> Docs:
+    path = "AGENTS.md"
+    return _replace_once(docs, path, "codex -a never exec", "codex exec")
+
+
+def _scoped_review_commands(docs: Docs) -> list[tuple[str, str]]:
+    return [
+        (path, command)
+        for path, command in _command_lines(docs)
+        if "codex" in command
+        and " review " in command
+        and ("--base" in command or "--uncommitted" in command)
+    ]
+
+
+def check_review_scope_without_prompt(docs: Docs) -> list[str]:
+    """codex review は scope flag と positional prompt を併用しない。"""
+    problems: list[str] = []
+    for path, command in _scoped_review_commands(docs):
+        after_scope = re.split(
+            r"--base\s+\S+|--uncommitted", command, maxsplit=1
+        )[-1]
+        before_operator = re.split(r"\s*(?:&&|\|\||[|;])\s*", after_scope, maxsplit=1)[
+            0
+        ]
+        without_redirects = re.sub(
+            r"(?:^|\s)\d*(?:>>?|<)\s*(?:&\d+|\S+)",
+            " ",
+            before_operator,
+        ).strip()
+        if without_redirects:
+            problems.append(f"{path}: review scope と prompt を併用: {command}")
+    return problems
+
+
+def targets_review_scope_without_prompt(docs: Docs) -> int:
+    return len(_scoped_review_commands(docs))
+
+
+def mutate_review_scope_without_prompt(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/repo-loop/SKILL.md"
+    old = "review --base <remote>/<default> < /dev/null"
+    new = 'review --base <remote>/<default> "<レビュー依頼>" < /dev/null'
+    return _replace_once(docs, path, old, new)
+
+
+ENV_PROVIDED = {
+    "ARGUMENTS",
+    "HOME",
+    "PATH",
+    "PWD",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+    "USERPROFILE",
+}
+RUNNABLE_INLINE = re.compile(
+    r"^(node|python|uv|codex|cursor-agent|git|npx|pwsh|bash|sh)\b"
+)
+
+
+def _variable_blocks(docs: Docs) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    for path, text in docs.items():
+        blocks.extend((path, block) for block in _bash_blocks(text))
+        blocks.extend(
+            (path, span)
+            for span in re.findall(r"`([^`\n]+)`", text)
+            if "$" in span and RUNNABLE_INLINE.match(span)
+        )
+    return blocks
+
+
+def check_shell_variables_assigned(docs: Docs) -> list[str]:
+    """command block が使う shell 変数は同じ block 内で代入する。"""
+    problems: list[str] = []
+    for path, block in _variable_blocks(docs):
+        used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)\}?", block))
+        assigned = set(
+            re.findall(r"(?:^|[\s;&(])([A-Z][A-Z0-9_]*)=", block, re.MULTILINE)
+        )
+        missing = used - assigned - ENV_PROVIDED
+        if missing:
+            head = block.strip().splitlines()[0][:60]
+            problems.append(f"{path}: 未代入 {sorted(missing)} ({head})")
+    return problems
+
+
+def targets_shell_variables_assigned(docs: Docs) -> int:
+    return len(_variable_blocks(docs))
+
+
+def mutate_shell_variables_assigned(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/setup/SKILL.md"
+    return _replace_once(
+        docs,
+        path,
+        'SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"\n'
+        'TARGET_REPO="<対象リポジトリの絶対パス>"\n'
+        'uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/<script>"',
+        'TARGET_REPO="<対象リポジトリの絶対パス>"\n'
+        'uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/<script>"',
+    )
+
+
+def _shell_surfaces(docs: Docs) -> list[tuple[str, str]]:
+    return [
+        (path, block)
+        for path, text in docs.items()
+        for block in _bash_blocks(text)
+    ]
+
+
+def check_no_broad_git_add(docs: Docs) -> list[str]:
+    """実行例に broad git add を許さない。"""
+    problems: list[str] = []
+    for path, block in _shell_surfaces(docs):
+        for line in block.splitlines():
+            if re.search(r"(?:^|&&\s*)git\s+add\s+(?:\.|-A)(?:\s|$)", line.strip()):
+                problems.append(f"{path}: broad git add: {line.strip()}")
+    return problems
+
+
+def targets_no_broad_git_add(docs: Docs) -> int:
+    return len(_shell_surfaces(docs))
+
+
+def mutate_no_broad_git_add(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/dig/SKILL.md"
+    old = "```bash\ncodex -a never exec --sandbox read-only"
+    new = "```bash\ngit add .\ncodex -a never exec --sandbox read-only"
+    return _replace_once(docs, path, old, new)
+
+
+def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
+    return [
+        (path, command)
+        for path, command in _command_lines(docs)
+        if re.search(r"\bgit\s+push\b.*:refs/heads/", command)
+    ]
+
+
+def check_remote_delete_has_lease(docs: Docs) -> list[str]:
+    """remote branch delete は期待 tip に lease を束縛する。"""
+    return [
+        f"{path}: lease なし remote delete: {command}"
+        for path, command in _remote_delete_commands(docs)
+        if "--force-with-lease=" not in command
+    ]
+
+
+def targets_remote_delete_has_lease(docs: Docs) -> int:
+    return len(_remote_delete_commands(docs))
+
+
+def mutate_remote_delete_has_lease(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/dig/SKILL.md"
+    old = (
+        "git push --force-with-lease=refs/heads/<branch>:<検証済みSHA> "
+        "origin :refs/heads/<branch>"
+    )
+    new = "git push origin :refs/heads/<branch>"
+    return _replace_once(docs, path, old, new)
+
+
+def _worktree_commands(docs: Docs) -> list[tuple[str, str]]:
+    commands: list[tuple[str, str]] = []
+    for path, command in _command_lines(docs):
+        if path == "plugins/devkit/skills/dig/SKILL.md":
+            relevant = (
+                "review --base" in command
+                or "--sandbox workspace-write" in command
+                or re.search(r"\bcursor-agent\s+-p\b", command)
+            )
+        elif path == "plugins/devkit/skills/repo-loop/SKILL.md":
+            relevant = (
+                "review --base" in command
+                or (
+                    re.search(r"\bcodex\b", command)
+                    and "--sandbox read-only" in command
+                )
+            )
+        else:
+            relevant = False
+        if relevant:
+            commands.append((path, command))
+    return commands
+
+
+def check_worktree_commands_pin_directory(docs: Docs) -> list[str]:
+    """worktree 委譲・review command は実行 directory を明示する。"""
+    return [
+        f"{path}: worktree directory 指定なし: {command}"
+        for path, command in _worktree_commands(docs)
+        if not re.search(
+            r"(?:^|\s)(?:-C|--workspace)\s+"
+            r"(?:\"[^\"]+\"|'[^']+'|(?!-)\S+)",
+            command,
+        )
+    ]
+
+
+def targets_worktree_commands_pin_directory(docs: Docs) -> int:
+    return len(_worktree_commands(docs))
+
+
+def mutate_worktree_commands_pin_directory(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/repo-loop/SKILL.md"
+    return _replace_once(
+        docs,
+        path,
+        'codex -a never exec -C "<worktree>" -m',
+        "codex -a never exec -m",
+    )
+
+
+def _skill_docs(docs: Docs) -> list[tuple[str, str]]:
+    return [
+        (path, text)
+        for path, text in docs.items()
+        if path.startswith("plugins/devkit/skills/")
+    ]
+
+
+def check_frontmatter_name_matches_directory(docs: Docs) -> list[str]:
+    """全 SKILL.md の frontmatter name は親 directory 名と一致する。"""
+    problems: list[str] = []
+    for path, text in _skill_docs(docs):
+        frontmatter = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+        if not frontmatter:
+            problems.append(f"{path}: frontmatter がない")
+            continue
+        name = re.search(
+            r'^name:\s*["\']?([^"\'\n]+)["\']?\s*$',
+            frontmatter.group(1),
+            re.MULTILINE,
+        )
+        expected = Path(path).parent.name
+        if not name or name.group(1) != expected:
+            actual = name.group(1) if name else "<missing>"
+            problems.append(f"{path}: name={actual!r}, expected={expected!r}")
+    return problems
+
+
+def targets_frontmatter_name_matches_directory(docs: Docs) -> int:
+    return len(_skill_docs(docs))
+
+
+def mutate_frontmatter_name_matches_directory(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/backlog/SKILL.md"
+    return _replace_once(docs, path, 'name: "backlog"', 'name: "wrong-name"')
+
+
+ENUM_TABLES: dict[tuple[str, ...], set[str]] = {
+    ("未知", "影響", "扱い"): {"質問する", "仮定で進める", "確定済み"},
+    ("trigger", "対話", "主な証拠", "branch 名"): {"manual", "schedule", "event"},
+    ("risk", "例", "実装", "出口"): {"low", "medium", "high", "none"},
+    ("outcome", "意味"): {"noop", "draft_pr", "proposal", "blocked", "failed"},
+}
+ENUM_COLUMN = {
+    ("未知", "影響", "扱い"): "扱い",
+    ("trigger", "対話", "主な証拠", "branch 名"): "trigger",
+    ("risk", "例", "実装", "出口"): "risk",
+    ("outcome", "意味"): "outcome",
+}
+
+
+def _cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _enum_cells(docs: Docs) -> list[tuple[str, tuple[str, ...], str]]:
+    found: list[tuple[str, tuple[str, ...], str]] = []
+    for path, text in docs.items():
+        lines = text.splitlines()
+        for index, line in enumerate(lines):
+            if not line.startswith("|"):
+                continue
+            header = tuple(_cells(line))
+            if header not in ENUM_TABLES or index + 1 >= len(lines):
+                continue
+            column = header.index(ENUM_COLUMN[header])
+            for row in lines[index + 2 :]:
+                if not row.startswith("|"):
+                    break
+                row_cells = _cells(row)
+                if len(row_cells) <= column:
+                    found.append((path, header, "<missing-cell>"))
+                    continue
+                value = row_cells[column].strip("`")
+                for token in re.split(r"\s*/\s*", value):
+                    found.append((path, header, token.strip()))
+    return found
+
+
+def check_enum_table_cells(docs: Docs) -> list[str]:
+    """既知 enum table の対象 cell は許容値集合内に収める。"""
+    return [
+        f"{path}: {header} に未知の enum 値 {value!r}"
+        for path, header, value in _enum_cells(docs)
+        if value not in ENUM_TABLES[header]
+    ]
+
+
+def targets_enum_table_cells(docs: Docs) -> int:
+    return len(_enum_cells(docs))
+
+
+def mutate_enum_table_cells(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/repo-loop/SKILL.md"
+    return _replace_once(docs, path, "| `manual` |", "| `unexpected` |")
+
+
+def _docs_with_order_markers(
+    docs: Docs, before: re.Pattern[str], after: re.Pattern[str]
+) -> list[tuple[str, re.Match[str], re.Match[str]]]:
+    found = []
+    for path, text in docs.items():
+        before_match = before.search(text)
+        after_match = after.search(text)
+        if before_match and after_match:
+            found.append((path, before_match, after_match))
+    return found
+
+
+COMMIT_MARKER = re.compile(r"^#### 節目 commit$", re.MULTILINE)
+REVIEW_MARKER = re.compile(r"^### \d+\. 自レビューと独立 diff レビュー$", re.MULTILINE)
+
+
+def check_commit_before_independent_review(docs: Docs) -> list[str]:
+    """節目 commit の工程は独立 diff review より前に置く。"""
+    return [
+        f"{path}: 節目 commit が独立 review より後"
+        for path, commit, review in _docs_with_order_markers(
+            docs, COMMIT_MARKER, REVIEW_MARKER
+        )
+        if commit.start() >= review.start()
+    ]
+
+
+def targets_commit_before_independent_review(docs: Docs) -> int:
+    return len(_docs_with_order_markers(docs, COMMIT_MARKER, REVIEW_MARKER))
+
+
+def mutate_commit_before_independent_review(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/dig/SKILL.md"
+    return _swap_once(
+        docs,
+        path,
+        "#### 節目 commit",
+        "### 7. 自レビューと独立 diff レビュー",
+    )
+
+
+APPROVAL_MARKER = re.compile(r"^### \d+\. 計画承認$", re.MULTILINE)
+IMPLEMENTATION_MARKER = re.compile(
+    r"^### \d+\. worktree 作成と実装委譲$", re.MULTILINE
+)
+
+
+def check_approval_before_implementation(docs: Docs) -> list[str]:
+    """計画承認は実装委譲より前に置く。"""
+    return [
+        f"{path}: 計画承認が実装委譲より後"
+        for path, approval, implementation in _docs_with_order_markers(
+            docs, APPROVAL_MARKER, IMPLEMENTATION_MARKER
+        )
+        if approval.start() >= implementation.start()
+    ]
+
+
+def targets_approval_before_implementation(docs: Docs) -> int:
+    return len(
+        _docs_with_order_markers(docs, APPROVAL_MARKER, IMPLEMENTATION_MARKER)
+    )
+
+
+def mutate_approval_before_implementation(docs: Docs) -> Docs:
+    path = "plugins/devkit/skills/dig/SKILL.md"
+    return _swap_once(
+        docs,
+        path,
+        "### 5. 計画承認",
+        "### 6. worktree 作成と実装委譲",
+    )
+
+
+CI_MERGE_SURFACES = {
+    "AGENTS.md": ("## Workflow", "## 並行開発と worktree"),
+    "plugins/devkit/skills/dig/SKILL.md": (
+        "### 9. 統合・後始末・完了報告",
+        "## goal-prompt への引き継ぎ",
+    ),
+}
+
+
+def _ci_merge_sections(docs: Docs) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    for path, (start_marker, end_marker) in CI_MERGE_SURFACES.items():
+        text = docs.get(path, "")
+        start = text.find(start_marker)
+        end = text.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+        if start < 0 or end < 0:
+            sections.append((path, ""))
+        else:
+            sections.append((path, text[start:end]))
+    return sections
+
+
+def check_ci_green_before_merge(docs: Docs) -> list[str]:
+    """同じ workflow statement では CI green を merge より先に確認する。"""
+    problems: list[str] = []
+    for path, section in _ci_merge_sections(docs):
+        ci = re.search(r"CI (?:green|待機.*?green 判定)", section, re.DOTALL)
+        merge = re.search(r"\bmerge\b", section)
+        if not ci:
+            problems.append(f"{path}: CI green 確認がない")
+        elif not merge:
+            problems.append(f"{path}: merge 工程がない")
+        elif ci.start() >= merge.start():
+            problems.append(f"{path}: merge が CI green より前")
+    return problems
+
+
+def targets_ci_green_before_merge(docs: Docs) -> int:
+    return len(_ci_merge_sections(docs))
+
+
+def mutate_ci_green_before_merge(docs: Docs) -> Docs:
+    path = "AGENTS.md"
+    return _replace_once(
+        docs,
+        path,
+        "PR 提出、CI green、merge",
+        "PR 提出、merge",
+    )
+
+
+CHECKS: dict[str, Check] = {
+    "stdin_closed": Check(
+        run=check_stdin_closed,
+        mutate=mutate_stdin_closed,
+        targets=targets_stdin_closed,
+        category="A1",
+        why="非対話起動で stdin を閉じないと CLI がハングする",
+    ),
+    "codex_execution_shape": Check(
+        run=check_codex_execution_shape,
+        mutate=mutate_codex_execution_shape,
+        targets=targets_codex_execution_shape,
+        category="A2",
+        why="approval、model、effort の逸脱で実行契約が変わる",
+    ),
+    "review_scope_without_prompt": Check(
+        run=check_review_scope_without_prompt,
+        mutate=mutate_review_scope_without_prompt,
+        targets=targets_review_scope_without_prompt,
+        category="A3",
+        why="scope flag と positional prompt の併用は codex review が失敗する",
+    ),
+    "shell_variables_assigned": Check(
+        run=check_shell_variables_assigned,
+        mutate=mutate_shell_variables_assigned,
+        targets=targets_shell_variables_assigned,
+        category="A4",
+        why="shell 変数は tool 呼び出しを跨ぐと失われ誤 path を操作する",
+    ),
+    "no_broad_git_add": Check(
+        run=check_no_broad_git_add,
+        mutate=mutate_no_broad_git_add,
+        targets=targets_no_broad_git_add,
+        category="A5",
+        why="broad add は承認外の変更を staging する",
+    ),
+    "remote_delete_has_lease": Check(
+        run=check_remote_delete_has_lease,
+        mutate=mutate_remote_delete_has_lease,
+        targets=targets_remote_delete_has_lease,
+        category="A6",
+        why="lease なし remote delete は確認後の他者 push を捨てうる",
+    ),
+    "worktree_commands_pin_directory": Check(
+        run=check_worktree_commands_pin_directory,
+        mutate=mutate_worktree_commands_pin_directory,
+        targets=targets_worktree_commands_pin_directory,
+        category="A7",
+        why="通常 checkout を review すると空 diff を成功と誤判定する",
+    ),
+    "frontmatter_name_matches_directory": Check(
+        run=check_frontmatter_name_matches_directory,
+        mutate=mutate_frontmatter_name_matches_directory,
+        targets=targets_frontmatter_name_matches_directory,
+        category="B1",
+        why="skill identity と配布 directory のずれを防ぐ",
+    ),
+    "enum_table_cells": Check(
+        run=check_enum_table_cells,
+        mutate=mutate_enum_table_cells,
+        targets=targets_enum_table_cells,
+        category="B3",
+        why="workflow enum への未知値混入を防ぐ",
+    ),
+    "commit_before_independent_review": Check(
+        run=check_commit_before_independent_review,
+        mutate=mutate_commit_before_independent_review,
+        targets=targets_commit_before_independent_review,
+        category="C1",
+        why="未 commit diff の review 空振りを防ぐ",
+    ),
+    "approval_before_implementation": Check(
+        run=check_approval_before_implementation,
+        mutate=mutate_approval_before_implementation,
+        targets=targets_approval_before_implementation,
+        category="C2",
+        why="承認前の実装委譲を防ぐ",
+    ),
+    "ci_green_before_merge": Check(
+        run=check_ci_green_before_merge,
+        mutate=mutate_ci_green_before_merge,
+        targets=targets_ci_green_before_merge,
+        category="C3",
+        why="未確認の head を merge する順序退行を防ぐ",
+    ),
+}
+EXPECTED_CATEGORIES = {
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7",
+    "B1",
+    "B3",
+    "C1",
+    "C2",
+    "C3",
+}
+
+
+REAL_DOCS = {
+    path: (REPO_ROOT / path).read_text(encoding="utf-8") for path in TARGET_PATHS
+}
+
+
+def test_all_invariants_hold_on_real_docs():
+    """実際の配布ドキュメントが全 check を満たす。"""
+    failures = {
+        name: problems
+        for name, check in CHECKS.items()
+        if (problems := check.run(REAL_DOCS))
+    }
+    assert not failures, failures
+
+
+def test_every_invariant_fails_on_its_mutation():
+    """各 check が登録済み mutation を必ず検出する。"""
+    categories = [check.category for check in CHECKS.values()]
+    assert len(categories) == len(set(categories)), (
+        f"同じカテゴリの check が重複登録されている: {categories}"
+    )
+    assert set(categories) == EXPECTED_CATEGORIES, (
+        "必須カテゴリの check 登録が不完全: "
+        f"missing={sorted(EXPECTED_CATEGORIES - set(categories))}, "
+        f"extra={sorted(set(categories) - EXPECTED_CATEGORIES)}"
+    )
+    missing = [name for name, check in CHECKS.items() if check.mutate is None]
+    assert not missing, f"mutation 未登録: {missing}"
+
+    escaped: list[str] = []
+    unchanged: list[str] = []
+    for name, check in CHECKS.items():
+        assert check.mutate is not None
+        mutated = check.mutate(REAL_DOCS)
+        if mutated == REAL_DOCS:
+            unchanged.append(name)
+        if not check.run(mutated):
+            escaped.append(name)
+    assert not unchanged, f"mutation が docs を変更していない: {unchanged}"
+    assert not escaped, f"mutation を検出できない check: {escaped}"
+
+
+def test_every_invariant_inspects_at_least_one_target():
+    """どの check も実文書上の検査対象を 1 件以上見ている。"""
+    empty = {
+        name: check.targets(REAL_DOCS)
+        for name, check in CHECKS.items()
+        if check.targets(REAL_DOCS) < 1
+    }
+    assert not empty, f"検査対象がゼロの check: {empty}"
