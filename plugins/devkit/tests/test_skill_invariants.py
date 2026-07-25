@@ -81,15 +81,33 @@ def _inline_commands(text: str) -> list[str]:
     ]
 
 
+def _join_continuations(block: str) -> list[str]:
+    """行末 `\\` の継続を 1 コマンドへ畳む。
+
+    物理行ごとに検査すると、フラグを次行へ折り返しただけの整形で
+    「フラグがない」「stdin を閉じていない」と誤検出する。
+    """
+    joined: list[str] = []
+    pending = ""
+    for line in block.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.endswith("\\"):
+            pending += stripped[:-1].rstrip() + " "
+            continue
+        joined.append((pending + stripped).strip())
+        pending = ""
+    if pending:
+        joined.append(pending.strip())
+    return joined
+
+
 def _command_lines(docs: Docs, *, include_inline: bool = True) -> list[tuple[str, str]]:
     commands: list[tuple[str, str]] = []
     for path, text in docs.items():
         for block in _bash_blocks(text):
-            commands.extend(
-                (path, line.strip())
-                for line in block.splitlines()
-                if line.strip() and not line.lstrip().startswith("#")
-            )
+            commands.extend((path, line) for line in _join_continuations(block))
         if include_inline:
             commands.extend((path, command.strip()) for command in _inline_commands(text))
     return commands
@@ -104,14 +122,28 @@ def _is_full_invocation(command: str) -> bool:
     - 散文中の言及（dig の「`codex exec` の入れ子を選ばない」）: 対象外
     - 形の一部だけを示す短縮（repo-loop の `--sandbox read-only` まで）: 対象外
 
-    subcommand に加えて引数レベルの標識を 1 つ以上持つものだけを完全形とする。
-    catch-up の form は `-m` / `--uncommitted` / `< /dev/null` を持つため、
-    そのうち 1 つが落ちても残り 2 つで集合に留まり、検査から抜け落ちない。
+    判定には**必須フラグを使わない**。`-m` や `< /dev/null` の有無を membership の
+    条件にすると、それらが一斉に落ちたコマンドが「起動形ではない」と分類されて
+    検査から消え、まさに防ぎたい退行が素通りする。
+
+    代わりに「subcommand の後に位置引数があるか、`review` subcommand を持つか」で
+    判定する。どちらもフラグとは独立した構造の特徴。
     """
-    if not re.search(r"\b(?:exec|review)\b", command):
+    tokens = command.split()
+    if "review" in tokens:
+        return True
+    if "exec" not in tokens:
         return False
-    markers = ("< /dev/null", " -m ", "--uncommitted", "--base")
-    return any(marker in command for marker in markers)
+    rest = tokens[tokens.index("exec") + 1 :]
+    previous_is_flag = False
+    for token in rest:
+        if token.startswith("-"):
+            previous_is_flag = "=" not in token
+            continue
+        if not previous_is_flag:
+            return True  # フラグに属さない位置引数 = prompt
+        previous_is_flag = False
+    return False
 
 
 def _noninteractive_commands(docs: Docs) -> list[tuple[str, str]]:
