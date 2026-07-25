@@ -95,10 +95,40 @@ def _command_lines(docs: Docs, *, include_inline: bool = True) -> list[tuple[str
     return commands
 
 
+def _is_full_invocation(command: str) -> bool:
+    """散文中の言及ではなく、実行できる完全な起動形か。
+
+    inline span には 3 種類が混在する。
+
+    - 完全な起動形（catch-up の review command）: 検査対象
+    - 散文中の言及（dig の「`codex exec` の入れ子を選ばない」）: 対象外
+    - 形の一部だけを示す短縮（repo-loop の `--sandbox read-only` まで）: 対象外
+
+    subcommand に加えて引数レベルの標識を 1 つ以上持つものだけを完全形とする。
+    catch-up の form は `-m` / `--uncommitted` / `< /dev/null` を持つため、
+    そのうち 1 つが落ちても残り 2 つで集合に留まり、検査から抜け落ちない。
+    """
+    if not re.search(r"\b(?:exec|review)\b", command):
+        return False
+    markers = ("< /dev/null", " -m ", "--uncommitted", "--base")
+    return any(marker in command for marker in markers)
+
+
 def _noninteractive_commands(docs: Docs) -> list[tuple[str, str]]:
+    """fenced block と、完全な起動形の inline span を見る。
+
+    catch-up のように実行形を inline の code span だけで示すスキルがあり、
+    fenced block に限ると契約の一部が検査から外れる。
+    """
+    fenced = _command_lines(docs, include_inline=False)
+    inline = [
+        (path, command)
+        for path, command in _command_lines(docs)
+        if (path, command) not in fenced and _is_full_invocation(command)
+    ]
     return [
         (path, command)
-        for path, command in _command_lines(docs, include_inline=False)
+        for path, command in fenced + inline
         if re.search(r"\bcodex\b.*\bexec\b", command)
         or re.search(r"\bcursor-agent\s+-p\b", command)
         or re.search(r"\bcursor-agent\s+create-chat\b", command)
@@ -128,9 +158,16 @@ def mutate_stdin_closed(docs: Docs) -> Docs:
 
 
 def _codex_commands(docs: Docs) -> list[tuple[str, str]]:
+    """fenced block と、完全な起動形の inline span（catch-up が該当）。"""
+    fenced = _command_lines(docs, include_inline=False)
+    inline = [
+        (path, command)
+        for path, command in _command_lines(docs)
+        if (path, command) not in fenced and _is_full_invocation(command)
+    ]
     return [
         (path, command)
-        for path, command in _command_lines(docs, include_inline=False)
+        for path, command in fenced + inline
         if re.search(r"(?:^|&&\s*)codex\s", command)
     ]
 
@@ -308,6 +345,17 @@ def mutate_no_broad_git_add(docs: Docs) -> Docs:
     return _replace_once(docs, path, old, new)
 
 
+def _is_scoped_review(command: str) -> bool:
+    """scope 付き review command。`--base` と `--uncommitted` の両方を見る。
+
+    片方だけを見ると、scope を切り替えたときに worktree 固定の検査から
+    黙って外れ、通常 checkout をレビューする退行が素通りする。
+    """
+    return " review " in command and (
+        "--base" in command or "--uncommitted" in command
+    )
+
+
 def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
     """削除 refspec（source が空の `:refs/heads/...`）を持つ push だけを拾う。
 
@@ -322,12 +370,25 @@ def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
 
 
 def check_remote_delete_has_lease(docs: Docs) -> list[str]:
-    """remote branch delete は期待 tip に lease を束縛する。"""
-    return [
-        f"{path}: lease なし remote delete: {command}"
-        for path, command in _remote_delete_commands(docs)
-        if "--force-with-lease=" not in command
-    ]
+    """remote branch delete は**削除対象と同じ ref** に lease を束縛する。
+
+    `--force-with-lease=` の有無だけを見ると、無関係な ref への lease
+    （`--force-with-lease=refs/heads/other:<sha> ... :refs/heads/<branch>`）
+    を通してしまう。それでは削除対象が並行 push から守られず、
+    この不変条件が置き換えた失敗そのものが素通りする。
+    """
+    problems: list[str] = []
+    for path, command in _remote_delete_commands(docs):
+        deleted = re.search(r"\s:(refs/heads/\S+)", command)
+        lease = re.search(r"--force-with-lease=(refs/heads/[^:\s]+):", command)
+        if lease is None:
+            problems.append(f"{path}: lease なし remote delete: {command}")
+        elif deleted is not None and lease.group(1) != deleted.group(1):
+            problems.append(
+                f"{path}: lease の ref が削除対象と一致しない "
+                f"(lease={lease.group(1)} delete={deleted.group(1)}): {command}"
+            )
+    return problems
 
 
 def targets_remote_delete_has_lease(docs: Docs) -> int:
@@ -344,18 +405,26 @@ def mutate_remote_delete_has_lease(docs: Docs) -> Docs:
     return _replace_once(docs, path, old, new)
 
 
+def mutate_remote_delete_lease_targets_other_ref(docs: Docs) -> Docs:
+    """lease はあるが束縛先が削除対象と違う場合（無関係な ref への lease）。"""
+    path = "plugins/devkit/skills/dig/SKILL.md"
+    old = "--force-with-lease=refs/heads/<branch>:<検証済みSHA>"
+    new = "--force-with-lease=refs/heads/<other>:<検証済みSHA>"
+    return _replace_once(docs, path, old, new)
+
+
 def _worktree_commands(docs: Docs) -> list[tuple[str, str]]:
     commands: list[tuple[str, str]] = []
     for path, command in _command_lines(docs):
         if path == "plugins/devkit/skills/dig/SKILL.md":
             relevant = (
-                "review --base" in command
+                _is_scoped_review(command)
                 or "--sandbox workspace-write" in command
                 or re.search(r"\bcursor-agent\s+-p\b", command)
             )
         elif path == "plugins/devkit/skills/repo-loop/SKILL.md":
             relevant = (
-                "review --base" in command
+                _is_scoped_review(command)
                 or (
                     re.search(r"\bcodex\b", command)
                     and "--sandbox read-only" in command
@@ -660,9 +729,10 @@ CHECKS: dict[str, Check] = {
     "remote_delete_has_lease": Check(
         run=check_remote_delete_has_lease,
         mutate=mutate_remote_delete_has_lease,
+        extra_mutations=(mutate_remote_delete_lease_targets_other_ref,),
         targets=targets_remote_delete_has_lease,
         category="A6",
-        why="lease なし remote delete は確認後の他者 push を捨てうる",
+        why="lease なし・別 ref への lease は確認後の他者 push を捨てうる",
     ),
     "worktree_commands_pin_directory": Check(
         run=check_worktree_commands_pin_directory,
