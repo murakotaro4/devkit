@@ -652,6 +652,62 @@
           "count": 3
         }
       ]
+    },
+    {
+      "id": "claude-mem-update-command",
+      "summary": "user scope の claude-mem を更新する Claude Code plugin CLI 契約",
+      "current_value": "claude plugin update --scope user claude-mem@thedotmack",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])claude plugin update --scope user claude-mem@thedotmack(?![A-Za-z0-9_.-])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "claude plugin update --help と claude plugin list --json の実機確認",
+      "update_notes": "updater・README・契約テストを同時更新し、worker 停止確認より後に実行する",
+      "last_verified": "2026-07-25",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_claude_mem_update.py",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "claude-mem-worker-restart-contract",
+      "summary": "claude-mem 同梱 runner で worker の起動・version・health を検証する契約",
+      "current_value": "bun-runner.js + worker-service.cjs + worker restart",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])bun-runner\\.js \\+ worker-service\\.cjs \\+ worker restart(?![A-Za-z0-9_-])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "claude-mem plugin 同梱 scripts の worker-service.cjs restart 実装と実機 health check",
+      "update_notes": "README・updater の同梱 script 呼び出し・契約テストを同時更新する",
+      "last_verified": "2026-07-25",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_claude_mem_update.py",
+          "count": 1
+        }
+      ]
     }
   ]
 }

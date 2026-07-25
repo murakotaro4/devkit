@@ -15,6 +15,7 @@ DevKit の setup / update / verification scripts を置くディレクトリで�
 主な責務:
 
 - Claude Code / Codex CLI の install / update
+- user scope で有効な claude-mem の worker を停止確認してから `claude plugin update --scope user claude-mem@thedotmack` を実行し、更新後の install path にある `bun-runner.js + worker-service.cjs + worker restart` で起動・version・health を検証（停止を証明できない場合や失敗時は警告して続行）
 - managed script の配置更新
 - v10.1.0 の manifest が存在する場合の旧 Cursor 同期資産の安全 prune
 - Codex marketplace `murakotaro4/devkit` の登録確認
@@ -33,6 +34,8 @@ update-ccx --version
 update-ccx --cli-only
 update-ccx --devkit-only
 ```
+
+`--cli-only` は CLI 更新と claude-mem worker 保守を実行します。`--devkit-only` では claude-mem を変更しません。claude-mem が未導入または無効なら保守処理をスキップします。
 
 旧 Cursor 同期資産の移行掃除は `plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py` に安全ロジックを集約します。manifest の hash と一致する通常ファイルだけを prune し、ユーザー改変・symlink・manifest 非掲載ファイルは保持します。`~/.cursor/`、manifest、Python 3.10 以上のいずれかが無い環境では skip し、prune 自体の失敗は他 section の実行後に updater 全体を非ゼロ終了させます。`sync_cursor_skills.py` は v10.1.0 updater の初回更新を成立させる一時互換 stub で、同期せず同じ prune へ委譲します。
 

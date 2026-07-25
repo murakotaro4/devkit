@@ -102,6 +102,7 @@ update-ccx --version
 `update-ccx` が行うこと:
 
 - Claude Code / Codex CLI の install / update
+- user scope で有効な claude-mem の worker を停止確認してから `claude plugin update --scope user claude-mem@thedotmack` を実行し、更新後の install path にある `bun-runner.js + worker-service.cjs + worker restart` で起動・version・health を検証（停止を証明できない場合や失敗時は警告して続行）
 - DevKit 管理 script の配置更新
 - v10.1.0 の manifest が存在する場合の旧 Cursor skills / templates / scripts / statusline 安全 prune
 - Codex marketplace `murakotaro4/devkit` の登録確認
@@ -111,7 +112,7 @@ update-ccx --version
 - Claude Code plugin `devkit@murakotaro4` の update / install（実行中セッションには `/reload-plugins` を案内）
 - v6 移行 marker が無い場合の旧資産 prune
 
-`--cli-only` は CLI 更新のみ、`--devkit-only` は DevKit 管理ファイルと Claude/Codex plugin 登録のみを処理します。
+`--cli-only` は CLI 更新と claude-mem worker 保守のみ、`--devkit-only` は DevKit 管理ファイルと Claude/Codex plugin 登録のみを処理します。claude-mem が未導入または無効なら何もしません。
 
 ## Windows
 

@@ -623,6 +623,128 @@ section_update() {
     echo "[After]  $(join_summary_parts "${after_parts[@]}")"
 }
 
+claude_mem_plugin_state() {
+    command -v node &>/dev/null || return 3
+    local output parsed
+    if ! output="$(claude plugin list --json </dev/null 2>/dev/null)"; then return 1; fi
+    parsed="$(printf '%s\n' "$output" | node -e '
+const fs = require("fs");
+let data;
+try { data = JSON.parse(fs.readFileSync(0, "utf8")); } catch { process.exit(2); }
+if (!Array.isArray(data)) process.exit(2);
+const matching = data.filter(item => item && typeof item === "object"
+  && item.id === "claude-mem@thedotmack" && item.scope === "user");
+if (matching.length === 0) { process.stdout.write("missing"); process.exit(0); }
+const enabled = matching.find(item => item.enabled === true);
+if (!enabled) { process.stdout.write("disabled"); process.exit(0); }
+if (typeof enabled.installPath !== "string" || enabled.installPath.length === 0
+    || typeof enabled.version !== "string" || enabled.version.length === 0
+    || enabled.installPath.includes("\t") || enabled.version.includes("\t")) process.exit(2);
+process.stdout.write(["enabled", enabled.version, enabled.installPath].join("\t"));
+' 2>/dev/null)"
+    local parse_status=$?
+    [[ $parse_status -eq 0 ]] || return 2
+    printf '%s\n' "$parsed"
+}
+
+claude_mem_resolve_install() {
+    local install_path="$1" normalized=""
+    normalized="$(windows_path_to_posix "$install_path" || true)"
+    [[ -n "$normalized" ]] || normalized="$install_path"
+    [[ -f "$normalized/scripts/bun-runner.js" ]] || return 1
+    [[ -f "$normalized/scripts/worker-service.cjs" ]] || return 1
+    printf '%s\n' "$normalized"
+}
+
+run_claude_mem_worker() {
+    local install_path="$1" command_name="$2"
+    node "$install_path/scripts/bun-runner.js" \
+        "$install_path/scripts/worker-service.cjs" worker "$command_name"
+}
+
+section_claude_mem() {
+    echo ""
+    echo "=== [Claude-Mem Worker] ==="
+    if ! command -v claude &>/dev/null; then echo "SKIP Claude Code is not available"; return 0; fi
+    if ! command -v node &>/dev/null; then
+        echo "WARN claude-mem: Node.js is not available; worker maintenance skipped"
+        WARNINGS+=("claude-mem: Node.js unavailable; plugin update and worker restart skipped")
+        return 0
+    fi
+
+    local plugin_state state_status plugin_status plugin_version install_path
+    plugin_state="$(claude_mem_plugin_state)"; state_status=$?
+    if [[ $state_status -ne 0 ]]; then
+        echo "WARN claude-mem: installed plugin state could not be read"
+        if [[ $state_status -eq 1 ]]; then
+            WARNINGS+=("claude-mem: Claude plugin list failed; maintenance skipped")
+        else
+            WARNINGS+=("claude-mem: Claude plugin list JSON was invalid; maintenance skipped")
+        fi
+        return 0
+    fi
+    case "$plugin_state" in
+        missing) echo "SKIP claude-mem is not installed for user scope"; return 0 ;;
+        disabled) echo "SKIP claude-mem is disabled"; return 0 ;;
+        enabled$'\t'*) IFS=$'\t' read -r plugin_status plugin_version install_path <<<"$plugin_state" ;;
+        *) WARNINGS+=("claude-mem: installed plugin state was malformed; maintenance skipped"); return 0 ;;
+    esac
+
+    local resolved_install
+    resolved_install="$(claude_mem_resolve_install "$install_path" || true)"
+    if [[ -z "$resolved_install" ]]; then
+        echo "WARN claude-mem: worker scripts are missing from $install_path"
+        WARNINGS+=("claude-mem: worker scripts missing for v$plugin_version; maintenance skipped")
+        return 0
+    fi
+
+    echo -n "Stopping claude-mem worker v$plugin_version... "
+    local stop_output stop_status
+    stop_output="$(run_claude_mem_worker "$resolved_install" stop 2>&1)"; stop_status=$?
+    if [[ $stop_status -ne 0 ]]; then
+        echo "WARN"; WARNINGS+=("claude-mem: worker stop failed; plugin update skipped"); return 0
+    fi
+    echo "OK"
+
+    echo -n "Verifying claude-mem worker stopped... "
+    local status_output worker_status
+    status_output="$(run_claude_mem_worker "$resolved_install" status 2>&1)"; worker_status=$?
+    status_output="${status_output//$'\r'/}"
+    if [[ $worker_status -ne 0 || "$status_output" != "Worker is not running" ]]; then
+        echo "WARN"; WARNINGS+=("claude-mem: worker port was not proven free; plugin update skipped"); return 0
+    fi
+    echo "OK"
+
+    echo -n "Updating claude-mem plugin... "
+    local update_status=0
+    claude plugin update --scope user claude-mem@thedotmack </dev/null >/dev/null 2>&1 || update_status=$?
+    if [[ $update_status -eq 0 ]]; then echo "OK"; else
+        echo "WARN"; WARNINGS+=("claude-mem: plugin update failed; restoring the installed worker version")
+    fi
+
+    plugin_state="$(claude_mem_plugin_state)"; state_status=$?
+    if [[ $state_status -ne 0 || "$plugin_state" != enabled$'\t'* ]]; then
+        echo "WARN claude-mem: post-update install could not be resolved"
+        WARNINGS+=("claude-mem: post-update plugin state unavailable; stopped worker could not be restarted")
+        return 0
+    fi
+    IFS=$'\t' read -r plugin_status plugin_version install_path <<<"$plugin_state"
+    resolved_install="$(claude_mem_resolve_install "$install_path" || true)"
+    if [[ -z "$resolved_install" ]]; then
+        echo "WARN claude-mem: post-update worker scripts are missing from $install_path"
+        WARNINGS+=("claude-mem: post-update worker scripts missing; stopped worker could not be restarted")
+        return 0
+    fi
+
+    echo -n "Starting verified claude-mem worker v$plugin_version... "
+    local restart_output restart_status
+    restart_output="$(run_claude_mem_worker "$resolved_install" restart 2>&1)"; restart_status=$?
+    if [[ $restart_status -ne 0 ]]; then
+        echo "WARN"; WARNINGS+=("claude-mem: verified worker restart failed for v$plugin_version"); return 0
+    fi
+    echo "OK"
+}
+
 windows_path_from_posix() {
     local input_path="$1"
     command -v cygpath &>/dev/null || return 1
@@ -1194,6 +1316,7 @@ main() {
         section_prerequisites
         section_setup
         section_update
+        section_claude_mem
     fi
 
     if [[ "$CLI_ONLY" != true ]]; then
