@@ -113,6 +113,25 @@ def _command_lines(docs: Docs, *, include_inline: bool = True) -> list[tuple[str
     return commands
 
 
+# 値を取るフラグ。ここに無いフラグは boolean とみなす。
+# 配布ドキュメントに現れる codex / cursor-agent のフラグから起こしている。
+_VALUE_FLAGS = frozenset(
+    {
+        "-C",
+        "-c",
+        "-m",
+        "--base",
+        "--model",
+        "--output-format",
+        "--project",
+        "--python",
+        "--resume",
+        "--sandbox",
+        "--workspace",
+    }
+)
+
+
 def _is_full_invocation(command: str) -> bool:
     """散文中の言及ではなく、実行できる完全な起動形か。
 
@@ -135,14 +154,16 @@ def _is_full_invocation(command: str) -> bool:
     if "exec" not in tokens:
         return False
     rest = tokens[tokens.index("exec") + 1 :]
-    previous_is_flag = False
+    expecting_value = False
     for token in rest:
         if token.startswith("-"):
-            previous_is_flag = "=" not in token
+            # boolean flag の次を値と誤認すると、`--json "<prompt>"` の
+            # prompt が消えてコマンドごと検査対象から外れる。
+            expecting_value = "=" not in token and token in _VALUE_FLAGS
             continue
-        if not previous_is_flag:
+        if not expecting_value:
             return True  # フラグに属さない位置引数 = prompt
-        previous_is_flag = False
+        expecting_value = False
     return False
 
 
@@ -360,9 +381,10 @@ def check_no_broad_git_add(docs: Docs) -> list[str]:
     """実行例に broad git add を許さない。"""
     problems: list[str] = []
     for path, block in _shell_surfaces(docs):
-        for line in block.splitlines():
-            if re.search(r"(?:^|&&\s*)git\s+add\s+(?:\.|-A)(?:\s|$)", line.strip()):
-                problems.append(f"{path}: broad git add: {line.strip()}")
+        # 行末 `\` で `git add \` / `.` と折り返すと物理行では検出できない。
+        for line in _join_continuations(block):
+            if re.search(r"(?:^|&&\s*)git\s+add\s+(?:\.|-A)(?:\s|$)", line):
+                problems.append(f"{path}: broad git add: {line}")
     return problems
 
 
