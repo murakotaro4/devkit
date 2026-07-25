@@ -123,10 +123,10 @@ flowchart TD
 第一候補:
 
 ```bash
-codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> "<objective・selected_task・write_scope・検証結果の要約>" < /dev/null
+codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null
 ```
 
-利用不能なら独立サブエージェントを使う。findings は write_scope 内で修正・再検証する。独立レビュー手段がすべて不能で、対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格する。必須でない repo だけ、未実施を明記した Draft PR を許可する。
+`review` は scope フラグと positional PROMPT を併用できないため、objective・selected_task・write_scope・検証結果を渡す場合は `review` を使わず、その要約を prompt に含めた通常の `codex -a never exec --sandbox read-only` で追加レビューする。利用不能なら独立サブエージェントを使う。findings は write_scope 内で修正・再検証する。独立レビュー手段がすべて不能で、対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格する。必須でない repo だけ、未実施を明記した Draft PR を許可する。
 
 ### publish
 

@@ -301,6 +301,29 @@ def test_cursor_and_worktree_delegation_contract():
     assert "commit 禁止" in delegation
 
 
+def test_checkpoint_commit_precedes_independent_review():
+    """`review --base` は commit 済み差分しか見ないため、レビュー前 commit は必須契約。
+
+    2026-07-25 の圧縮でこの契約が統合節にしか残らなくなり、実装が未 commit のまま
+    独立レビューを起動して空 diff を「指摘なし」と誤報しうる状態になっていた
+    (codex の diff レビューが [P1] として検出)。再発防止の検査。
+    """
+    text = _skill_text()
+    delegation = _section(text, "### 6. worktree 作成と実装委譲")
+    review = _section(text, "### 7. 自レビューと独立 diff レビュー")
+
+    assert "実装 backend は commit しない" in delegation
+    assert "パス限定で add" in delegation
+    assert "`git add .` / `git add -A` は使わない" in delegation
+
+    assert "レビュー前に実装を作業 branch へ commit" in review
+    assert "commit 済み差分" in review
+    # 順序保証: 節目 commit の規定が review 節より前にあること
+    assert text.index("#### 節目 commit") < text.index(
+        "### 7. 自レビューと独立 diff レビュー"
+    )
+
+
 def test_worktree_and_pr_integration_contract():
     text = _skill_text()
     implementation = _section(text, "### 6. worktree 作成と実装委譲")

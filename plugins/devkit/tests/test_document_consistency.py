@@ -378,6 +378,32 @@ def test_agents_and_dig_noninteractive_stdin_guard():
     assert not offenders, f"stdin 閉鎖(< /dev/null)がない非対話コマンド行: {offenders}"
 
 
+def test_codex_review_scope_flag_and_prompt_are_not_combined():
+    """`codex exec review` は scope フラグと positional PROMPT を併用できない。
+
+    2026-07-25 に実測で確認（`error: the argument '--base <BRANCH>' cannot be used
+    with '[PROMPT]'`。`--uncommitted` も同じ）。repo-loop がこの併用形を記載しており、
+    そのまま実行すると必ず失敗していた。同じ逸脱を再発させないための検査。
+    """
+    offenders: list[str] = []
+    for path in sorted(Path(REPO_ROOT).rglob("*.md")):
+        relpath = str(path.relative_to(REPO_ROOT))
+        if relpath.startswith((".git/", ".claude/", "docs/reviews/")):
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "codex" not in line or " review " not in line:
+                continue
+            if "--base" not in line and "--uncommitted" not in line:
+                continue
+            after_scope = re.split(r"--base\s+\S+|--uncommitted", line, maxsplit=1)[-1]
+            if '"' in after_scope.split("< /dev/null")[0]:
+                offenders.append(f"{relpath}:{line.strip()}")
+    assert not offenders, (
+        "codex exec review に scope フラグと positional PROMPT を併用している"
+        f"(実行時に必ず失敗する): {offenders}"
+    )
+
+
 # ── 9. Release Rules の正本は AGENTS.md、README は参照 ─────────────
 
 

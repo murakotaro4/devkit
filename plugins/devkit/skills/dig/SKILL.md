@@ -171,7 +171,13 @@ Codex 親で cursor-agent を使う場合だけ末尾に `> "$JOB_DIR/cursor-age
 
 依存がなく write_scope が互いに素なジョブだけを並列化する。同一 worktree 内でも担当外変更と各ジョブ内のテスト実行を禁じ、親が統合後に一括検証する。
 
+#### 節目 commit
+
+実装 backend は commit しない。親がジョブを回収して diff を確認するたびに、そのジョブの write_scope をパス限定で add して commit する。`git add .` / `git add -A` は使わない。pre-commit が unstaged 変更を stash する repo では、並列ジョブ実行中は保留し、全ジョブ回収後にジョブ単位で順に commit する。
+
 ### 7. 自レビューと独立 diff レビュー
+
+**レビュー前に実装を作業 branch へ commit しておく。** `review --base` は commit 済み差分だけを対象とするため、未 commit のままだと空 diff を「指摘なし」と誤報し、必須の独立レビューが空振りする。
 
 親が基点からの diff 全文を計画と照合し、逸脱の理由・リスク・要確認点を判断する。プロジェクトのテスト・lint を実行し、実装 worker と別の reviewer にブランチ全体をレビューさせる。
 

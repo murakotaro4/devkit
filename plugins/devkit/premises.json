@@ -473,7 +473,7 @@
         },
         {
           "path": "plugins/devkit/skills/repo-loop/SKILL.md",
-          "count": 1
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
