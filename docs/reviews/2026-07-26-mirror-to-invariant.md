@@ -32,18 +32,22 @@
 
 | check | カテゴリ | 検出対象 | 検査対象数 |
 |---|---|---|---:|
-| `stdin_closed` | A1 | 非対話 CLI の stdin 未閉鎖 | 10 |
-| `codex_execution_shape` | A2 | `-a never` / model / effort の逸脱 | 8 |
+| `stdin_closed` | A1 | 非対話 CLI の stdin 未閉鎖 | 11 |
+| `codex_execution_shape` | A2 | `-a never` / model / effort の逸脱・欠落 | 9 |
 | `review_scope_without_prompt` | A3 | scope フラグと positional PROMPT の併用 | 3 |
 | `shell_variables_assigned` | A4 | シェル変数の同ブロック内未代入 | 14 |
-| `no_broad_git_add` | A5 | `git add .` / `git add -A` | 14 |
-| `remote_delete_has_lease` | A6 | lease なし remote branch 削除 | 1 |
+| `no_broad_git_add` | A5 | `git add .` / `-A` / `--all` / `-- .` | 61 |
+| `remote_delete_has_lease` | A6 | lease なし・別 ref への lease での remote 削除 | 1 |
 | `worktree_commands_pin_directory` | A7 | worktree 委譲・レビューの実行 dir 未指定 | 6 |
 | `frontmatter_name_matches_directory` | B1 | frontmatter 欠落・name 不一致 | 11 |
 | `enum_table_cells` | B3 | enum 表の未知値・欠損セル | 15 |
-| `commit_before_independent_review` | C1 | 節目 commit と独立レビューの順序逆転 | 1 |
-| `approval_before_implementation` | C2 | 計画承認と実装委譲の順序逆転 | 1 |
-| `ci_green_before_merge` | C3 | CI green 記述の欠落・merge との順序逆転 | 2 |
+| `commit_before_independent_review` | C1 | 節目 commit の順序逆転・消失・否定 | 1 |
+| `approval_before_implementation` | C2 | 計画承認の順序逆転・消失・否定 | 1 |
+| `ci_green_before_merge` | C3 | CI green / merge の欠落・順序逆転・否定 | 2 |
+
+mutation は 12 check に対して 16 本。1 つの check が複数の退行を防ぐ場合
+（値の誤りと欠落、単純形と `-C` 付き、lease なしと別 ref への lease）は、
+退行ごとに mutation を登録して片肺の検査を防いでいる。
 
 ### mutation fixture — この作業の本体
 
@@ -105,7 +109,44 @@ mirror は「消えたら一緒に消える」ため元から検出力を持た�
 **教訓**: 「汎用 check へ統合した」というコメントは、統合先が実在することを機械検査しないと嘘になりうる。
 今回は親が全コメントの参照先を `CHECKS` のキー集合と突き合わせて検証した。
 
-## 7. 実装しなかった不変条件
+## 7. 独立レビュー 19 巡の記録
+
+codex の diff レビューを findings がゼロになるまで繰り返した。**18 巡で 38 件、19 巡目で収束**。
+[前回の圧縮](2026-07-25-context-engineering-claude5.md)が 9 巡 17 件だったのに対し、倍以上かかった。
+
+### 検査を書く作業は、検査される作業より収束が遅い
+
+前回の 17 件は「本文から契約が消えた」という**1 種類**の欠陥だった。
+今回の 38 件は次の 3 種類が混ざり、後者ほど発見が遅い。
+
+| 種類 | 件数 | 例 |
+|---|---:|---|
+| 契約の消失（前回と同型） | 6 | origin なしの fetch 省略、branch 名の連番、承認行の backend、非対話での質問禁止 |
+| 検査の**回避経路** | 24 | 区切りを `&&` から `;` へ、前置を大文字から小文字へ、`-A` を `--all` へ、`git add` を `git -C ... add` へ |
+| 検査の**循環** | 8 | 検査対象のフラグを membership の条件にしており、フラグごと落ちると対象から外れて沈黙する |
+
+**循環がいちばん危険**だった。`-m` の値だけを見る check は `-m` ごと消えると「問題なし」を返す。
+`--sandbox workspace-write` を持つコマンドだけを worktree 検査の対象にすると、その旗が落ちた瞬間に検査から消える。
+いずれも**防ぎたい退行そのものが検査を無効化する**構造で、テストが green である限り気づけない。
+
+対策として、membership の判定には**検査対象と同じ層の値を使わない**という規則を採った。
+起動形の判定は「位置引数を持つか」、worktree 検査の対象は「どの工程の節に書かれているか」という、
+検査するフラグから独立した構造で決めている。
+
+### 否定は文単位でしか判定できない
+
+「肯定形の指示があること」を要求すると、次は文末で否定される（`commit する必要はない`）。
+かといって否定語を一律に禁止すると、`CI 赤なら merge しない` のような**正当な条件節**を弾く。
+肯定文を文単位で取り出し、その文の中だけで否定を見る、という形に落ち着いた。
+
+### 引用と指示は文脈でしか分けられない
+
+`git add .` の禁止を検査すると、「`git add .` は使わない」という**禁止文中の引用**が違反として挙がる。
+16 巡目でいったん inline span を検査対象から外したが、18 巡目に
+「禁止語を含む文かどうかで分ければよい」と指摘され、除外を撤回した。
+**検査面を狭めて誤検出を消すのは、回避経路を開けることと同じ**だった。
+
+## 8. 実装しなかった不変条件
 
 | # | 内容 | 理由 |
 |---|---|---|
@@ -114,7 +155,7 @@ mirror は「消えたら一緒に消える」ため元から検出力を持た�
 
 B2 は `EXPECTED_CATEGORIES` に含めていないため、追加するときは集合の更新が必要になる（黙って抜けない）。
 
-## 8. 今回やらなかったこと
+## 9. 今回やらなかったこと
 
 - 残り 9 テストファイルの本文散文ミラー 72 件 — 汎用 check の型が固まったので、横展開は別 PR で行う
 - `setup/SKILL.md` の step 番号の是正と B2 の実装 — 本文変更を伴うため別案件
