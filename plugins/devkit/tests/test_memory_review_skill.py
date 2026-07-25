@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -12,157 +13,145 @@ OPENAI_YAML_PATH = (
     REPO_ROOT / "plugins" / "devkit" / "skills" / "memory-review" / "agents" / "openai.yaml"
 )
 
+EXPECTED_TOOLS = [
+    "Read",
+    "Grep",
+    "Glob",
+    "Bash",
+    "AskUserQuestion",
+    "request_user_input",
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskOutput",
+    "Skill",
+    "Agent",
+    "spawn_agent",
+    "wait_agent",
+    "Write",
+    "Edit",
+]
+EXPECTED_CLASSIFICATIONS = {
+    "keep",
+    "update",
+    "merge",
+    "move",
+    "archive",
+    "delete candidate",
+    "needs human decision",
+}
+EXPECTED_VIEWPOINTS = {
+    "矛盾",
+    "古い前提",
+    "曖昧な指示",
+    "重複",
+    "危険な自動化",
+    "検証可能性",
+    "記憶候補抽出",
+}
+
 
 def _skill_text() -> str:
     return SKILL_PATH.read_text(encoding="utf-8")
 
 
 def _frontmatter() -> str:
-    text = _skill_text()
-    match = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+    match = re.match(r"^---\n(.*?)\n---\n", _skill_text(), re.DOTALL)
     assert match, "frontmatter が見つからない"
     return match.group(1)
 
 
 def test_skill_exists():
-    assert SKILL_PATH.exists(), "memory-review の SKILL.md が存在しない"
+    assert SKILL_PATH.exists()
 
 
 def test_skill_frontmatter_contract():
     frontmatter = _frontmatter()
-    assert 'name: "memory-review"' in frontmatter
-    assert "description:" in frontmatter
-    assert "メモリを棚卸しして" in frontmatter
-    assert "メモリ監査して" in frontmatter
-    assert "前提を点検して" in frontmatter
-    assert "/memory-review" in frontmatter
-    assert 'argument-hint: "[scope]"' in frontmatter
-
-    allowed_tools_match = re.search(r"allowed-tools:\s*\[(.*?)\]", frontmatter)
-    assert allowed_tools_match, "allowed-tools が見つからない"
-    allowed_tools = allowed_tools_match.group(1)
-    expected_tools = [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
-        "AskUserQuestion",
-        "request_user_input",
-        "TaskCreate",
-        "TaskUpdate",
-        "TaskOutput",
-        "Skill",
-        "Agent",
-        "spawn_agent",
-        "wait_agent",
-        "Write",
-        "Edit",
-    ]
-    actual_tools = re.findall(r'"([^"]+)"', allowed_tools)
-    assert actual_tools == expected_tools
+    assert re.search(r'^name: "memory-review"$', frontmatter, re.MULTILINE)
+    assert re.search(r'^argument-hint: "\[scope\]"$', frontmatter, re.MULTILINE)
+    assert all(trigger in frontmatter for trigger in ("メモリを棚卸しして", "メモリ監査して", "前提を点検して"))
+    tools = re.search(r"^allowed-tools:\s*(\[.*\])$", frontmatter, re.MULTILINE)
+    assert tools
+    assert ast.literal_eval(tools.group(1)) == EXPECTED_TOOLS
 
 
 def test_write_contract_has_step_boundaries_and_approval_gates():
     text = _skill_text()
-    assert "step 1-4(スコープ確認・正本特定・監査・分類)は read-only" in text
-    assert "step 5 は、保存先をユーザーに確認した後の監査レポートファイルの新規作成のみ Write 可" in text
-    assert "レポート保存のためのディレクトリ作成だけ許可" in text
-    assert "step 6 は、ユーザーが承認した軽微修正の適用のみ Edit / Write 可" in text
-    assert "自動削除しない" in text
-    assert "delete candidate は提示のみ" in text
-    assert "承認を得てから適用" in text
+    write_contract = text[text.index("## 書き込み契約") : text.index("## 監査対象 × 観点")]
+    rows = dict(re.findall(r"^\| ([^|]+) \| ([^|]+) \|$", write_contract, re.MULTILINE))
+    assert {"1-4", "5", "6", "7"} <= rows.keys()
+    assert "read-only" in rows["1-4"]
+    assert "新規作成" in rows["5"]
+    assert "承認された軽微修正" in rows["6"]
+    assert all(operation in write_contract for operation in ("削除", "上書き", "移動"))
 
 
-def test_audit_flow_contains_required_taxonomies_and_output_format():
+def test_audit_taxonomies_are_complete():
     text = _skill_text()
-    for viewpoint in (
-        "矛盾",
-        "古い前提",
-        "曖昧な指示",
-        "重複",
-        "危険な自動化",
-        "参照設計",
-        "テスト・検証",
-        "記憶候補抽出",
-    ):
-        assert viewpoint in text
-
-    for classification in (
-        "keep",
-        "update",
-        "merge",
-        "move",
-        "archive",
-        "delete candidate",
-        "needs human decision",
-    ):
-        assert classification in text
-
-    assert "影響度 3 段階" in text
-    assert "高: 誤実装、情報漏えい、破壊的操作、レビュー漏れ" in text
-    assert "中: 判断ブレ、手戻り、テスト漏れ" in text
-    assert "低: 重複、軽微な古さ、参照性低下" in text
-
-    expected_sections = [
-        "## 1. 結論(3件以内)",
-        "## 2. 全体評価",
-        "## 3. 重要な問題点",
-        "## 4. 分類結果",
-        "## 5. 矛盾リスト",
-        "## 6. 古い前提リスト",
-        "## 7. AI が勝手に決めると危険な点",
-        "## 8. 修正案(文章レベル)",
-        "## 9. 推奨する配置",
-        "## 10. 記憶候補(report-only)",
-        "## 11. 次アクション(3つ以内)",
-    ]
-    actual_sections = re.findall(r"^## \d+\. .+$", text, re.MULTILINE)
-    assert actual_sections == expected_sections
+    classifications = re.search(r"全項目を `([^`]+)` のいずれか", text)
+    assert classifications
+    assert {item.strip() for item in classifications.group(1).split("/")} == EXPECTED_CLASSIFICATIONS
+    audit_section = text[text.index("## 監査対象 × 観点") : text.index("## フロー")]
+    assert all(viewpoint in audit_section for viewpoint in EXPECTED_VIEWPOINTS)
+    impact_levels = re.search(r"影響度を `([^`]+)` のいずれか", text)
+    assert impact_levels
+    assert {item.strip() for item in impact_levels.group(1).split("/")} == {"高", "中", "低"}
+    assert "4 役(監査役 / 矛盾検出役 / 安全性レビュー役 / 修正案作成役)" in audit_section
 
 
-def test_conclusion_doubles_as_approval_summary():
+def test_report_has_fixed_ordered_sections():
     text = _skill_text()
     report = text[text.index("### 5. 監査レポート出力") : text.index("### 6. 修正の承認と適用")]
-    assert "## 1. 結論(3件以内)」を第 1 層の承認用サマリーとして兼用" in report
-    assert "判断してほしい点" in report
-    assert "backend 表" in report
-    assert "適用なし" in report
+    sections = re.findall(r"^## (\d+)\. ", report, re.MULTILINE)
+    assert sections == [str(number) for number in range(1, 12)]
+
+
+def test_conclusion_preserves_seven_category_summary():
+    text = _skill_text()
+    report = text[text.index("### 5. 監査レポート出力") : text.index("### 6. 修正の承認と適用")]
+    categories = re.findall(r"^\d+\. (.+)$", report, re.MULTILINE)
+    assert len(categories) == 7
+    assert all(
+        label in "\n".join(categories)
+        for label in ("何を / なぜ", "判断してほしい点", "逸脱", "外部影響", "backend", "検証", "独立レビュー状態")
+    )
+    assert {"実施済み(指摘 N 件反映)", "skip(理由)", "適用なし"} <= set(re.findall(r"`([^`]+)`", report))
 
 
 def test_dig_handoff_contract():
     text = _skill_text()
-    assert "plugins/devkit/skills/dig/SKILL.md" in text
-    assert "dig step 2 計画草案" in text
-    assert "$dig" in text
-    assert "大きい変更" in text
-    assert "構成変更を伴う大きい修正" in text
+    handoff = text[text.index("### 6. 修正の承認と適用") : text.index("### 7. 完了報告")]
+    assert "plugins/devkit/skills/dig/SKILL.md" in handoff
+    assert "dig step 2 計画草案" in handoff
+    assert all(field in handoff for field in ("目的", "write_scope", "実装手順", "検証", "非対象", "根拠"))
+    assert "$dig" in handoff
 
 
-def test_harness_detection_section():
+def test_harness_detection_is_centralized():
     text = _skill_text()
-    assert "## ハーネス判定" in text
-    assert "Claude 親" in text
-    assert "Codex 親" in text
-    assert "AskUserQuestion" in text
-    assert "request_user_input" in text
-    assert "1 呼び出し最大 3 問" in text
+    section = text[text.index("## ハーネス判定") : text.index("## 範囲と不変条件")]
+    assert all(tool in section for tool in ("AskUserQuestion", "spawn_agent", "request_user_input", "wait_agent"))
+    assert "判定キーに使わない" in section
+    assert text.count("## ハーネス判定") == 1
 
 
-def test_external_memory_scope_and_default_session_log_exclusion():
+def test_external_memory_scope_and_session_log_exclusion():
     text = _skill_text()
-    assert "Claude auto-memory" in text
-    assert "~/.claude/projects/<slug>/memory/" in text
-    assert "~/.codex/memories/MEMORY.md" in text
-    assert "~/.codex/AGENTS.md" in text
-    assert "対象 repo に言及している記述だけ" in text
+    assert all(
+        path in text
+        for path in (
+            "~/.claude/projects/<slug>/memory/",
+            "~/.codex/memories/MEMORY.md",
+            "~/.codex/AGENTS.md",
+            "~/repos/thought-db/",
+            "~/.codex/sessions",
+            "docs/reviews/",
+        )
+    )
     assert "過去セッションの会話ログは読まない" in text
-    assert "~/.codex/sessions" in text
-    assert "`docs/reviews/` がなければ作成する" in text
 
 
 def test_agents_openai_yaml_exists():
-    assert OPENAI_YAML_PATH.exists(), "agents/openai.yaml が存在しない"
+    assert OPENAI_YAML_PATH.exists()
     text = OPENAI_YAML_PATH.read_text(encoding="utf-8")
     assert 'display_name: "Memory Review"' in text
-    assert "$memory-review" in text
-    assert "$dig" in text
+    assert all(skill in text for skill in ("$memory-review", "$dig"))

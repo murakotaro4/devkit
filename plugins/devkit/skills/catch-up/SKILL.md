@@ -7,76 +7,62 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "WebSearch", "W
 
 # /catch-up - 外部前提の追従更新
 
-外部世界で変わったモデル世代、CLI フラグ、ハーネス機能、marketplace 名を、`plugins/devkit/premises.json` を起点に裏取り・棚卸し・更新する。
+モデル世代、CLI フラグ、ハーネス機能、marketplace 名の変化を `plugins/devkit/premises.json` 起点で裏取り・更新する。
 
 ## 対象
 
 $ARGUMENTS
 
-## ハーネス判定
+## ハーネス・進捗
 
-正本は devkit リポジトリの `AGENTS.md`「スキル共通契約」。フロー開始前に利用可能なツール名で判定し、この SKILL.md も実行に必要な要点を自己完結で保持する。
+| 判定 | 質問 | 独立レビュー |
+|---|---|---|
+| `AskUserQuestion` が使える Claude 親 | AskUserQuestion | 外部 Codex |
+| それがなく `spawn_agent` が使える Codex 親 | plan mode は `request_user_input`、通常 mode は選択肢付き自由文 | read-only 子 agent |
+| 判定不能 | 選択肢付き自由文 | 利用可能な独立 backend |
 
-- `AskUserQuestion` が使える -> Claude 親。
-- `AskUserQuestion` がなく `spawn_agent` が使える -> Codex 親。
-- どちらでもない -> 判定不能として扱う。
-- `request_user_input` は判定キーに使わず、Codex 親 plan mode の質問手段としてだけ使う。
-
-質問は Claude 親では AskUserQuestion、Codex 親 plan mode では `request_user_input`、Codex 親通常 mode / 判定不能では選択肢を箇条書きで提示して自由文回答を求める。
-
-## タスクリスト連動
-
-正本は `AGENTS.md`「スキル共通契約 > タスクリスト連動」。開始時に step 1-8 を登録し、開始時 `in_progress`、完了時 `completed` へ更新する。Claude 親は TaskCreate / TaskUpdate が利用可能なら使い、Codex 親は組み込み plan 機能または通常の進捗報告で同等に示す。
-
-## 進捗可視化
-
-正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 委譲・長時間ジョブの進捗可視化」。要点:
-
-- 委譲ジョブは 1 ジョブ = 1 タスクとしてタスクリストへ登録し、開始時 in_progress・完了時 completed へ更新する(親 step のタスクへ blockedBy で紐付ける)。
-- Claude 親の外部 CLI 委譲は Bash `run_in_background` で起動し、完了自動通知を契機に回収する。定期ハートビートは逐次表示せず、出力増分が長時間ない場合のみ停滞状況を報告する。
-- Codex 親の子 agent 委譲は `wait_agent` で黙って待たず、定期的に進捗をユーザーへ提示する。
-- 実体の進捗は `git status` / `git diff` で確認し、resume を進捗確認に使わない。
+`request_user_input` は判定キーにしない。step 1-8 と委譲ジョブはタスクリストまたは通常報告で開始・完了を示す。長時間ジョブは実体を `git status` / `git diff` で確認し、停滞時だけ報告する。Codex 親は `wait_agent` で黙って待たない。
 
 ## フロー
 
-### 1. 変化の受領とスコープ確認
+### 1. 変化とスコープ
 
-選択肢付き質問を 1 ラウンド行い、変化の種別、情報源、対象範囲、version bump 希望を確認する。目的 / 成功条件 / 非対象 / 採用した仮定を短く合意する。
+変化の種別、情報源、対象、version bump 希望のうち結果を左右する未知だけ確認し、目的 / 成功条件 / 非対象 / 仮定を揃える。
 
 ### 2. 実機裏取り(read-only)
 
-`command -v` で利用可否を確認してから `codex --version`、`cursor-agent --help`、`claude --help` などを実行し、公式 release note も WebSearch / WebFetch で確認する。実機出力の該当行と URL を証拠として記録する。裏取り不能な項目は確定事項にせず仮定と明示し、ユーザー確認を得る。
+`command -v` 後に各 CLI の version / help と公式情報を確認し、該当出力と URL を証拠化する。裏取り不能な値は確定せず、仮定として承認対象にする。
 
 ### 3. レジストリ起点の影響棚卸し(read-only)
 
-`plugins/devkit/premises.json` を読み、先に `plugins/devkit/scripts/check_external_premises.py` を実行する。red なら地図が壊れている別件として報告して停止する。green なら該当 premise の occurrences と repo 全体の `rg` を突き合わせ、今回の旧値と適用時に `obsolete_value_patterns` へ移す pattern を特定する。既存の obsolete pattern がある場合は、その取り残しがゼロであることも確認して、次の棚卸し表を提示する。
+`plugins/devkit/premises.json` を読み、最初に `plugins/devkit/scripts/check_external_premises.py` を実行する。red なら別件のレジストリ破損として報告し、更新を停止する。green なら `current_value`、`value_patterns`、`occurrences`、`obsolete_value_patterns`、`last_verified` と repo 全体の検索結果を照合し、旧値の取り残しも確認する。
 
 | premise | 旧値 -> 新値 | ファイル:出現数 | update_notes | 影響テスト |
 |---|---|---|---|---|
 
-レジストリが無い repo では grep ベースの臨時棚卸しへ fallback し、レジストリ新設を提案する。
+レジストリがない repo は grep で臨時棚卸しし、新設を提案する。
 
 ### 4. 更新計画と承認
 
-正本は devkit リポジトリの `AGENTS.md`「スキル共通契約 > 計画・レポートの 2 層提示」。更新計画は、冒頭の第 1 層「承認用サマリー」と後段の第 2 層「詳細」の 2 層で提示し、第 1 層だけで明示承認できるよう次の 7 カテゴリを省略しない。
+承認前に Edit / Write を使わない。計画は第 1 層「承認用サマリー」と第 2 層「詳細」に分け、第 1 層に次を含める。
 
-1. 何を / なぜ: 1〜2 文
-2. 判断してほしい点: 各項目に推奨を付け、最大 3 件程度。なければ「なし」
-3. 既定からの逸脱・採用した仮定: なければ「既定どおり」
-4. 後戻りしにくい操作・外部影響: merge / push / 削除 / 公開など該当するものだけ
-5. backend 表: 計画レビュー / 実装 / diff レビューを毎回記載し、適用不能な役割は「適用なし」と明記する。この表は省略しない
-6. 検証: 何が green なら成功かを 1 行
-7. 独立レビュー状態: `実施済み(指摘 N 件反映)` / `skip(理由)` / `適用なし` の 3 値のいずれかと実施 backend。承認時点では `skip(承認時点では未実施。適用後 step 7 で実施)` と表記し、未来のレビュー結果を保証しない。適用後の結果は完了報告で報告する
+1. 何を / なぜ
+2. 判断してほしい点(推奨付き、最大 3 件程度)
+3. 既定からの逸脱・採用した仮定
+4. 後戻りしにくい操作・外部影響
+5. backend 表(計画レビュー / 実装 / diff レビュー)
+6. green 条件
+7. 独立レビュー状態(`実施済み(指摘 N 件反映)` / `skip(理由)` / `適用なし`)と backend
 
-worktree・PR・CI green・merge など既定どおりの項目は「既定どおり」に畳み、逸脱と仮定だけを列挙する。必須項目は長さではなくカテゴリで定義する。第 2 層には write_scope、ファイルごとの具体編集、検証コマンド、version bump 案を置く。値だけの追従は patch、workflow contract の変更は minor を提案する。**承認前に Edit / Write を使わない。**
+承認時点の独立レビュー状態は `skip(承認時点では未実施。適用後 step 7 で実施)` とする。詳細には write_scope、ファイル別変更、検証コマンド、version bump 案を置く。値だけの追従は patch、workflow contract 変更は minor を提案する。
 
 ### 5. 適用
 
-承認済み write_scope 内だけを編集する。docs / tests / plugin manifest と同時に `premises.json` の `current_value`、`value_patterns`、`occurrences`、`last_verified` を更新する。値の移行時は旧値の pattern を `obsolete_value_patterns` へ移し、取り残しゼロを `check_external_premises.py` で強制する。
+承認済み write_scope 内で docs / tests / plugin manifest と `premises.json` を同期する。値の移行では旧 pattern を `obsolete_value_patterns` へ移し、取り残しを許さない。
 
 ### 6. 検証
 
-devkit repo では次を green まで実行する。
+devkit repo では次を green にする。
 
 ```bash
 uv run --project plugins/devkit python plugins/devkit/scripts/check_external_premises.py
@@ -85,23 +71,12 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 
 ### 7. 独立レビュー(必須・スキップ不可)
 
-- Claude 親: `codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --uncommitted < /dev/null` を background 起動し、完了通知で回収する。
-- Codex 親: `spawn_agent` explorer に read-only 指示、承認済み計画、diff 全文を渡す。
-
-指摘を修正して再検証し、追加 findings がなくなるまで独立レビューを繰り返す。
+Claude 親は `codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --uncommitted < /dev/null`、Codex 親は `spawn_agent` で承認計画と diff の read-only review を行う。指摘を修正・再検証し、追加 findings がなくなるまで繰り返す。
 
 ### 8. 完了報告と version bump 提案
 
-変更サマリー、裏取り証拠、レジストリ diff、検証結果、bump 後 version を報告する。commit / push はユーザーが明示した場合だけ行う。
+変更、裏取り証拠、レジストリ diff、検証、bump 後 version を報告する。commit / push はユーザーが明示した場合だけ行う。
 
-## 他スキルとの境界
+## 境界
 
-- `memory-review` は内部メモリ・ルールを監査して発見する。外部値の更新実務は catch-up が担う。
-- `improve-skill retro` はセッション内エラー起点のスキル修正。catch-up は外部世界の変化起点の値追従を担う。
-- `dig` は汎用実装。catch-up はレジストリ登録済みの値の追従専用で、workflow contract 自体の変更や新 backend 追加は dig へ渡す。
-
-## 注意
-
-- check は repo とレジストリの一致を検証するだけで、外部世界での最新性は検出しない。
-- 証拠の無い推測で外部前提を書き換えない。
-- 承認済み write_scope を越えない。
+内部メモリ監査は memory-review、セッション内エラー起点の改善は improve-skill retro、workflow contract 自体の変更や新 backend は dig が担う。catch-up は外部変化による登録済み premise の追従に限定する。check は repo とレジストリの一致を検証するもので、外部の最新性は別途裏取る。

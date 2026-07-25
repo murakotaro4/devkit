@@ -75,7 +75,7 @@ def test_inventory_and_prioritization_flow_headings():
     assert "コード重複" in text
     assert "TODO/FIXME" in text
     assert "テスト欠落" in text
-    assert "依存の問題" in text
+    assert "| 依存 |" in text
     assert "file:line" in text
     assert "影響" in text
     assert "コスト" in text
@@ -83,23 +83,20 @@ def test_inventory_and_prioritization_flow_headings():
 
     assert "### 3. 優先順位付け" in text
     assert "影響 x コスト x リスク" in text
-    assert "S/A/B/C" in text
-    assert "選択肢付き質問" in text
+    assert re.findall(r"^\| ([SABC]) \|", text, re.MULTILINE) == ["S", "A", "B", "C"]
 
     step3_start = text.index("### 3. 優先順位付け")
     step4_start = text.index("### 4. リファクタリング計画")
     step3 = text[step3_start:step4_start]
-    assert "multiSelect" in step3
-    assert "2〜4" in step3
-    assert "3+2" in step3
     assert "候補 0 件" in step3
-    assert "候補 1 件" in step3
+    assert "1 件は「引き継ぐ / 見送る」" in step3
     assert "引き継ぐ / 見送る" in step3
-    assert "番号" in step3
-    assert "このグループからは選ばない" in step3
     assert "選択合計が 0 件" in step3
     assert "要調査" in step3
-    assert "調査を先行し、結果を計画化する" in step3
+    assert "調査先行の草案" in step3
+    assert "S/A/B の各候補を名前・ランク・要約付きで個別選択" in step3
+    assert "C は報告のみ" in step3
+    assert "複数件はハーネスが扱える単位に分ける" in step3
     assert "推奨案:" not in text
     assert "保守案:" not in text
     assert "調査案:" not in text
@@ -110,18 +107,20 @@ def test_prioritization_starts_with_decision_summary():
     text = _skill_text()
     step3 = text[text.index("### 3. 優先順位付け") : text.index("### 4. リファクタリング計画")]
     assert "推奨候補・判断点サマリー" in step3
-    assert "先頭提示" in step3
-    assert "計画レビュー / 実装 / diff レビューをすべて「適用なし」" in step3
-    assert "独立レビュー状態: `適用なし`" in step3
+    assert step3.index("推奨候補・判断点サマリー") < step3.index("| ランク |")
+    assert "計画レビュー / 実装 / diff レビューはすべて「適用なし」" in step3
+    assert "独立レビュー状態(`適用なし`、backend も `適用なし`)" in step3
 
 
 def test_harness_detection_section():
     text = _skill_text()
-    assert "## ハーネス判定" in text
-    assert "Claude 親" in text
-    assert "Codex 親" in text
-    assert "AskUserQuestion" in text
-    assert "request_user_input" in text
+    harness = text[text.index("## ハーネス・進捗") : text.index("## read-only 契約")]
+    assert "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |" in harness
+    assert (
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |"
+    ) in harness
+    assert "`request_user_input` は判定キーにしない" in harness
 
 
 def test_agents_openai_yaml_exists():

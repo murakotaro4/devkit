@@ -7,128 +7,80 @@ allowed-tools: ["Read", "Grep", "Glob", "Bash", "AskUserQuestion", "request_user
 
 # /commit-push - 論理分割 commit + upstream push
 
-親エージェント = 未コミット変更の棚卸し、論理グループへの分割、安全検査、承認済みグループの commit、承認済み upstream への push、結果報告。各 commit は Conventional Commits の `<type>(<scope>): <summary>` を基本形とし、summary と本文は日本語で書く。レビュアー機能は持たず、コードレビューや独立レビューをこのスキル内では実施しない。
+未コミット変更を論理グループへ分け、承認済み範囲だけ commit し、解決済み upstream へ安全に push する。各 commit は `<type>(<scope>): <summary>` 形式の Conventional Commits、summary と本文は日本語とする。レビュー・修正・テスト・lint・format は責務外。
 
 ## 対象
 
 $ARGUMENTS
 
-## 共通契約
-
-共通動作の正本として devkit リポジトリの `AGENTS.md`「スキル共通契約」を参照する。配布先に同ファイルがない場合でも実行できるよう、必要な要点を以下に自己完結で記す。
-
 ## ハーネス判定
 
-- `AskUserQuestion` が使える → Claude 親。
-- `AskUserQuestion` がなく `spawn_agent` が使える → Codex 親。
-- どちらでもない場合は判定不能として扱う。
-- `request_user_input` は plan mode 依存のため、ハーネスの判定キーには使わない。
+`request_user_input` は判定キーに使わない。
 
-## 質問手段
+| 判定 | 分割案の質問・承認 | 進捗 |
+|---|---|---|
+| `AskUserQuestion` が使える Claude 親 | `AskUserQuestion` | TaskCreate / TaskUpdate |
+| 上記がなく `spawn_agent` が使える Codex 親 | plan mode は `request_user_input`、通常 mode は選択肢 + 自由文 | plan または進捗報告 |
+| 判定不能 | 選択肢 + 自由文 | 進捗報告 |
 
-- Claude 親: `AskUserQuestion`
-- Codex 親 plan mode: `request_user_input`
-- Codex 親通常 mode / 判定不能: 選択肢を箇条書きで提示して自由文回答を求める
-
-質問は分割案の承認に使う。承認後に対象ファイル、commit メッセージ、push 先のいずれかが変わった場合は、変更後の案を再提示して承認を取り直す。
-
-## タスクリスト連動
-
-Claude 親: `TaskCreate` / `TaskUpdate` が利用可能なら、workflow の step を登録し開始時 `in_progress`・完了時 `completed` に更新する。
-
-Codex 親: 組み込み plan 機能または通常の進捗報告で同等の進捗提示を行う。
-
-commit-push 開始時に step 1-7 を登録し、停止した step は未完了のまま停止理由を報告する。
+step 1-7 をタスク化する。承認後に対象ファイル、メッセージ、push 先が変われば全案を再承認する。
 
 ## 安全契約
 
 ### commit
 
-- 論理グループは最大 5 個とする。
-- commit 前に、分割案（論理グループ・対象ファイル・コミットメッセージ案・解決済み push 先）を提示し、ユーザー承認を得る。
-- バイナリ・巨大ファイルは内容検査不能として、承認前に明示する。
-- `git add -A` / `git add .` / `git commit -a` を禁止する。
-- add は `git --literal-pathspecs add -- <paths>` のみを使う。
-- `--literal-pathspecs` は pathspec magic と glob 展開を無効化する。
-- `--` はオプション終端であり path を literal 化しないため、`--literal-pathspecs` を必須とする。
-- `--no-verify` などによる hook 迂回を禁止する。
-- 開始時に既存の staged 変更があれば停止する。
-- グループ単位で、index 空確認 → literal add → `git diff --cached --name-only` の完全一致確認 → commit → `git show --name-only --format= HEAD` で照合、という 5 段階検証を行う。
+- 開始時に既存 staged 変更があれば、commit / unstage / push せず停止する。
+- 論理グループは最大 5 個。ファイルを重複させず、目的・理由・検証単位から分割はエージェントが判断する。6 個以上なら範囲縮小か安全な統合案を確認する。
+- commit 前に、各グループの目的・対象ファイル・差分概要・日本語 Conventional Commits 案、解決済み push 先、内容検査不能なバイナリ・巨大ファイルを提示して承認を得る。
+- add は承認済み path だけを `git --literal-pathspecs add -- <paths>` で行う。`git add -A` / `git add .` / `git commit -a`、hook を迂回する `--no-verify` は禁止。
+- 各グループで `index 空 → literal add → staged path 完全一致 + 内容 secret 検査 → commit → commit path 完全一致 + index 空` を満たす。不一致や失敗では後続 commit と push を止める。
 
 ### secret 2 層検査
 
-- パス層では secret-like path を対象から外して報告する。
-- 内容層では commit 直前に staged diff へ既知パターン検査を行う。
-- 内容層で secret を検出した場合は、自動除外して続行せず停止する。
+| 層 | 不変条件 |
+|---|---|
+| path | `.env`、credentials、secrets、秘密鍵、token 等の secret-like path を対象外にして報告 |
+| staged 内容 | commit 直前に API key、access token、private key、password 代入等の既知パターンを検査 |
 
-secret-like path には `.env`、credentials、secrets、秘密鍵、証明書秘密鍵、token を示す名前などを含める。内容層では API key、access token、private key、password 代入などの既知パターンを検査する。検出内容の値をチャットやログへ転載せず、ファイルパスとパターン種別だけを報告する。バイナリ・巨大ファイルは内容層で安全を証明できないため、通常ファイルと同じ扱いで黙って commit しない。
+値は表示しない。内容層で検出したら自動除外せず停止する。バイナリ・巨大ファイルは安全を証明できないものとして承認前に明示する。
 
 ### push
 
-- push 前に `git rev-parse --abbrev-ref --symbolic-full-name @{u}` で upstream を解決し、承認提示に含める。
-- push は `git push <remote> HEAD:<branch>` の明示単一 refspec のみを使う。
-- force push・`--tags`・複数 ref を禁止する。
-- upstream 不在・detached HEAD・origin なしでは push せず停止して報告する。
-- push reject 時は fetch して状況を報告し、自動 rebase しない。
-
-承認済みの remote と branch 以外へ push しない。push 直前の再解決結果が承認済み push 先と異なる場合も停止し、新しい分割案として再承認を得る。
+- `git rev-parse --abbrev-ref --symbolic-full-name @{u}` で upstream を解決し、承認時と push 直前の remote / branch が完全一致する場合だけ進む。
+- push は承認済み先への `git push <remote> HEAD:<branch>` という明示単一 refspec を 1 回だけ使う。force push、`--tags`、複数 ref は禁止。
+- upstream 不在、detached HEAD、origin なしは push しない。自動で upstream を設定しない。
+- reject 時は対象 remote を fetch して ahead / behind / diverged と理由を報告し、自動 rebase / merge / force push / 別 branch push はしない。
 
 ## フロー
 
 ### 1. 開始時チェック
 
-対象が git repo であること、現在の branch、remote 一覧、作業ツリーの状態を読み取る。`git diff --cached --quiet` 相当で index が空であることを確認する。既存 staged 変更が 1 件でもあれば、そのパスを報告して commit、unstage、push を行わず停止する。detached HEAD、upstream 不在、origin なしはここで検出して記録し、push 不可として扱う(commit 自体は妨げない。扱いは step 2 と step 6 に従う)。
+git repo、branch、remote、作業ツリー、index を確認する。push 不可条件は記録するが、既存 staged 変更以外は commit 自体を妨げない。
 
-### 2. 変更棚卸しとグループ分割
+### 2. 変更棚卸しと分割
 
-tracked、untracked、削除、rename を含む未コミット変更を読み取り、各ファイルの差分と役割を確認する。ユーザーが scope を指定した場合はその範囲だけを候補にする。1 ファイルを複数グループへ重複させず、同じ目的・理由・検証単位を持つ変更を 1 グループにまとめる。
+指定 scope 内の tracked / untracked / delete / rename と差分を読み、安全契約に従って最大 5 グループの案を作る。upstream を解決し、解決不能なら「push なし」とする。
 
-論理グループは最大 5 個とする。6 個以上が必要なら勝手に統合せず、今回扱う範囲を絞る案または安全にまとめられる案を提示して確認する。各グループについて、目的、対象ファイル、差分概要、日本語 Conventional Commits のメッセージ案を作る。
+### 3. secret path 検査
 
-承認案の準備として、`git rev-parse --abbrev-ref --symbolic-full-name @{u}` を実行し、出力を `<remote>/<branch>` に分解する。解決した remote と origin が remote 一覧に存在することを確認し、解決済み push 先を記録する。upstream を解決できない場合(upstream 不在・detached HEAD)や origin がない場合は、解決済み push 先の代わりに「push なし」と分割案へ明示する(自動で `-u` 設定はしない)。バイナリ・巨大ファイルは内容検査不能として、承認前に明示する。
+secret-like path を全グループから除外し、値を出さず報告する。空になったグループは削除して案を更新する。
 
-### 3. secret パス層検査
+### 4. ユーザー承認
 
-候補ファイルのパスを secret-like path の既知パターンと照合し、該当したファイルは対象から外して報告する。対象外にしたファイルはどのグループにも含めず、値や内容は表示しない。除外後にグループが空になった場合はそのグループを削除し、最大 5 グループの範囲で分割案を更新する。
+全グループと push 先を提示し、承認まで add / commit / push しない。
 
-### 4. 分割案のユーザー承認
+### 5. commit
 
-commit 前に、分割案（論理グループ・対象ファイル・コミットメッセージ案・解決済み push 先）を提示し、ユーザー承認を得る。質問には「質問手段」のハーネス別手段を使う。承認されるまで add、commit、push を行わない。修正指定があれば分割、対象ファイル、メッセージ、push 先を更新し、全体を再提示する。
+承認順に安全契約の検証列を実行する。path 一覧は `git diff --cached --name-only` と `git show --name-only --format= HEAD` で照合する。secret、path 不一致、hook・commit 失敗時は index と作成済み commit を勝手に戻さず停止する。
 
-### 5. グループ単位の commit
+### 6. push
 
-承認された順に、各グループを次の 5 段階で処理する。途中で不一致、secret、hook 失敗、commit 失敗が起きたら後続グループへ進まず停止する。
-
-1. **index 空確認**: `git diff --cached --quiet` 相当で index が空であることを確認する。空でなければ想定外の staged パスを報告して停止する。
-2. **literal add**: 承認済みグループのパスだけを `git --literal-pathspecs add -- <paths>` で add する(この形以外の add は使わない)。各 path はシェル引数として安全に引用し、承認されていない path を渡さない。
-3. **staged 完全一致・内容層 secret 検査**: `git diff --cached --name-only` の結果が承認済みパス一覧と完全一致することを確認する。不一致なら commit せず停止する。続けて、staged diff 全文へ既知パターンの内容層検査を行い、secret を検出したら自動除外で続行せず停止する。
-4. **commit**: 承認済みの日本語 Conventional Commits メッセージで commit する。hook は通常どおり実行させ、迂回オプションを付けない。
-5. **commit 照合**: `git show --name-only --format= HEAD` の結果を承認済みパス一覧と照合する。不一致なら後続 commit と push を行わず停止する。照合後、次グループに進む前に index が空であることも確認する。
-
-### 6. upstream 解決と push
-
-分割案が「push なし」で承認されている場合は push を行わない。origin なし repo は commit のみで終了と報告し、upstream 不在・detached HEAD は push せず停止して報告する。
-
-push する場合は、全グループの commit と照合が完了した後、upstream、解決した remote、origin の存在を再確認する。承認時と同じコマンドで upstream を再解決し、`<remote>/<branch>` が承認済み push 先と完全一致する場合だけ、「安全契約 > push」の契約に従って明示単一 refspec で 1 回だけ push する。
-
-push が reject された場合は、対象 remote を fetch して ahead / behind / diverged、reject 理由、現在の branch と upstream を読み取り、状況を報告して停止する(自動 rebase・merge・force push・別 branch への push は行わない)。
+全 commit の照合後、upstream と remote を再解決する。承認済み先と一致したときだけ明示単一 refspecで push する。「push なし」承認なら commit のみで終了する。
 
 ### 7. 結果報告
 
-次を簡潔に報告する。
+commit hash・メッセージ・対象ファイル、グループ別成否、secret-like path 除外と内容検査不能ファイルの有無、upstream と単一 refspec、push 結果を報告する。失敗時は停止地点と、ユーザー判断が必要な次の操作を示す。
 
-- 作成した commit の hash、メッセージ、対象ファイル
-- 論理グループ数と各グループの成否
-- secret-like path として対象外にしたパスの有無（秘密の値は記載しない）
-- 内容検査不能として明示したバイナリ・巨大ファイルの有無
-- 解決した upstream と実行した単一 refspec
-- push の成否。失敗時は停止地点、reject 後の fetch 結果、ユーザーが判断すべき次の操作
+## 境界
 
-## 禁止事項と境界
-
-- レビュー、修正提案、テスト、lint、format はこのスキルの責務に含めない。ユーザーが commit 前レビューを求める場合は、このスキルを開始せず別工程で完了させる。
-- `git add -A` / `git add .` / `git commit -a` を禁止する。
-- `--no-verify` などによる hook 迂回を禁止する。
-- force push・`--tags`・複数 ref を禁止する。
-- secret 検出、対象パス不一致、hook 失敗、upstream 異常、push reject を自動修復して続行しない。
-- ユーザー承認の範囲外にある変更を add、commit、discard、stash しない。
+承認外の変更を add / commit / discard / stash しない。commit 前レビューが必要なら、このスキル開始前に別工程で完了させる。

@@ -36,8 +36,16 @@
           "count": 1
         },
         {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 1
+        },
+        {
           "path": "plugins/devkit/tests/test_check_external_premises.py",
           "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_skill.py",
+          "count": 1
         }
       ]
     },
@@ -59,10 +67,6 @@
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
-          "count": 1
-        },
-        {
-          "path": "plugins/devkit/tests/test_setup_skill.py",
           "count": 1
         }
       ]
@@ -145,7 +149,7 @@
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
-          "count": 2
+          "count": 1
         },
         {
           "path": "plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py",
@@ -173,7 +177,7 @@
       "occurrences": [
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 5
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_check_external_premises.py",
@@ -199,7 +203,7 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
-          "count": 5
+          "count": 1
         },
         {
           "path": "README.md",
@@ -219,7 +223,7 @@
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 17
+          "count": 6
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
@@ -239,11 +243,15 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 7
+          "count": 5
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
           "count": 4
+        },
+        {
+          "path": "plugins/devkit/tests/test_repo_loop_contract.py",
+          "count": 1
         }
       ]
     },
@@ -264,7 +272,7 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
-          "count": 2
+          "count": 1
         },
         {
           "path": "plugins/devkit/skills/catch-up/SKILL.md",
@@ -272,7 +280,7 @@
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 8
+          "count": 6
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
@@ -289,6 +297,10 @@
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 3
+        },
+        {
+          "path": "plugins/devkit/tests/test_repo_loop_contract.py",
+          "count": 1
         }
       ]
     },
@@ -308,7 +320,7 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
-          "count": 8
+          "count": 5
         },
         {
           "path": "plugins/devkit/skills/backlog/SKILL.md",
@@ -316,15 +328,15 @@
         },
         {
           "path": "plugins/devkit/skills/catch-up/SKILL.md",
-          "count": 10
+          "count": 9
         },
         {
           "path": "plugins/devkit/skills/commit-push/SKILL.md",
-          "count": 8
+          "count": 7
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 22
+          "count": 14
         },
         {
           "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
@@ -332,11 +344,11 @@
         },
         {
           "path": "plugins/devkit/skills/handoff/SKILL.md",
-          "count": 5
+          "count": 7
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
-          "count": 9
+          "count": 10
         },
         {
           "path": "plugins/devkit/skills/improve-skill/scripts/refresh_mapper.py",
@@ -344,11 +356,11 @@
         },
         {
           "path": "plugins/devkit/skills/memory-review/SKILL.md",
-          "count": 10
+          "count": 9
         },
         {
           "path": "plugins/devkit/skills/refactor/SKILL.md",
-          "count": 9
+          "count": 7
         },
         {
           "path": "plugins/devkit/skills/repo-loop/SKILL.md",
@@ -356,43 +368,47 @@
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
-          "count": 5
-        },
-        {
-          "path": "plugins/devkit/tests/test_backlog_skill.py",
-          "count": 4
-        },
-        {
-          "path": "plugins/devkit/tests/test_catch_up_skill.py",
-          "count": 2
-        },
-        {
-          "path": "plugins/devkit/tests/test_commit_push_skill.py",
           "count": 7
         },
         {
-          "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 3
+          "path": "plugins/devkit/tests/test_backlog_skill.py",
+          "count": 7
         },
         {
-          "path": "plugins/devkit/tests/test_handoff_skill.py",
-          "count": 4
+          "path": "plugins/devkit/tests/test_catch_up_skill.py",
+          "count": 7
         },
         {
-          "path": "plugins/devkit/tests/test_memory_review_skill.py",
+          "path": "plugins/devkit/tests/test_commit_push_skill.py",
           "count": 5
         },
         {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/tests/test_document_consistency.py",
+          "count": 8
+        },
+        {
+          "path": "plugins/devkit/tests/test_handoff_skill.py",
+          "count": 7
+        },
+        {
+          "path": "plugins/devkit/tests/test_memory_review_skill.py",
+          "count": 6
+        },
+        {
           "path": "plugins/devkit/tests/test_refactor_skill.py",
-          "count": 4
+          "count": 7
         },
         {
           "path": "plugins/devkit/tests/test_repo_loop_contract.py",
-          "count": 3
+          "count": 4
         },
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
-          "count": 1
+          "count": 6
         }
       ]
     },
@@ -411,7 +427,7 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
-          "count": 4
+          "count": 2
         },
         {
           "path": "README.md",
@@ -419,11 +435,11 @@
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 5
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 5
+          "count": 2
         }
       ]
     },
@@ -441,7 +457,7 @@
       "occurrences": [
         {
           "path": "AGENTS.md",
-          "count": 2
+          "count": 1
         },
         {
           "path": "plugins/devkit/skills/catch-up/SKILL.md",
@@ -449,7 +465,7 @@
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 5
+          "count": 4
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
@@ -457,14 +473,18 @@
         },
         {
           "path": "plugins/devkit/skills/repo-loop/SKILL.md",
-          "count": 1
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 3
+          "count": 4
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_repo_loop_contract.py",
           "count": 1
         }
       ]
@@ -494,18 +514,18 @@
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
-          "count": 4
+          "count": 2
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
-          "count": 8
-        },
-        {
-          "path": "plugins/devkit/tests/test_setup_skill.py",
-          "count": 1
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_setup_skill.py",
           "count": 1
         }
       ]
@@ -526,11 +546,11 @@
       "occurrences": [
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 8
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 6
+          "count": 4
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
@@ -618,7 +638,7 @@
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
-          "count": 3
+          "count": 1
         },
         {
           "path": "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
@@ -650,6 +670,29 @@
         {
           "path": "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
           "count": 3
+        }
+      ]
+    },
+    {
+      "id": "claude-subagent-model-alias",
+      "summary": "Claude サブエージェント委譲で Agent へ渡す世代非依存モデル alias",
+      "current_value": "model=opus",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])model=opus(?![A-Za-z0-9_-])",
+        "(?<![A-Za-z0-9_])model=sonnet(?![A-Za-z0-9_-])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "Agent ツールの model 引数が受け付ける alias 一覧",
+      "update_notes": "alias は世代非依存なので世代交代では更新不要。alias 体系が変わった場合(新階層の追加など)に dig の backend 表と契約テストを同時更新する。表示名ではなく実際に渡す実行 alias を追跡する",
+      "last_verified": "2026-07-25",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/skills/dig/SKILL.md",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_dig_skill.py",
+          "count": 2
         }
       ]
     }

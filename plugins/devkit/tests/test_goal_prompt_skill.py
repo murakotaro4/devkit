@@ -52,16 +52,16 @@ def test_save_destination_and_filename_contract():
     save_contract = _section(_skill_text(), "## 保存契約")
     assert ".claude/goal-runs/YYYY-MM-DD-<slug>-goal.md" in save_contract
     assert "既存ファイルがある場合は上書きせず" in save_contract
-    assert "`-goal` サフィックスの前に連番を挟んだ `YYYY-MM-DD-<slug>-2-goal.md` から採番する" in save_contract
+    assert "`-goal` の前へ連番を入れて `YYYY-MM-DD-<slug>-2-goal.md` から採番する" in save_contract
 
 
 def test_gitignore_creation_contract():
     save_contract = _section(_skill_text(), "## 保存契約")
-    assert "`.claude/goal-runs/.gitignore` が無ければ `*` 1 行で新規作成し" in save_contract
-    assert "既存の `.gitignore` は内容を変更しない" in save_contract
-    assert "`git check-ignore` で保存ファイルが ignore されているか確認し" in save_contract
-    assert "ignore されていなければ最終出力で警告する" in save_contract
-    assert "非 git ディレクトリでは検証不能のため skip する" in save_contract
+    assert "`.claude/goal-runs/.gitignore` が無ければ `*` 1 行で新規作成" in save_contract
+    assert "既存の `.gitignore` は変更しない" in save_contract
+    assert "git repo では `git check-ignore` で保存ファイルを確認" in save_contract
+    assert "未 ignore なら警告" in save_contract
+    assert "非 git では skip" in save_contract
 
 
 def test_launch_prompt_output_basic_form():
@@ -76,7 +76,7 @@ def test_launch_prompt_output_basic_form():
 
 def test_auto_calculated_stop_limits_contract():
     limits = _section(_skill_text(), "## 上限停止の自動算出")
-    assert "毎回ユーザーへ聞かない" in limits
+    assert "毎回ユーザーへ聞かず" in limits
     for row in (
         ("小規模", "12 ターンまたは 45 分", "2 周", "20 分"),
         ("標準", "24 ターンまたは 120 分", "3 周", "30 分"),
@@ -89,19 +89,19 @@ def test_auto_calculated_stop_limits_contract():
 
 def test_prohibited_actions_contract():
     prohibitions = _section(_skill_text(), "## 禁止事項")
-    for phrase in (
-        "コード変更しない。",
-        "実装しない。",
-        "PR を作らない。",
-        "commit しない。",
-        "push しない。",
-        "計画レビューしない。",
-        "Goal プロンプトの独立レビューを行わない",
-        "Claude Code 組み込み `/goal` を自動発動しない",
-        "scheduler・loop 登録をしない。",
-        "thought-db へ書き込まない。",
+    assert "Goal ファイルと専用 `.gitignore` の作成以外は変更しない" in prohibitions
+    for prohibited in (
+        "コード実装",
+        "PR",
+        "commit",
+        "push",
+        "計画レビュー",
+        "独立レビュー",
+        "Claude Code 組み込み `/goal` の自動発動",
+        "scheduler / loop 登録",
+        "thought-db 書き込み",
     ):
-        assert phrase in prohibitions
+        assert prohibited in prohibitions
 
 
 def test_retired_terms_are_absent():
