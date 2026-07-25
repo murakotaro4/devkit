@@ -123,10 +123,6 @@ def test_contract_is_safe_and_runs_in_expected_modes():
     assert main.count("section_claude_mem") == 1
     assert main.index("section_update") < main.index("section_claude_mem")
     assert "section_claude_mem" in devkit_block
-    assert "if [[ ${#ERRORS[@]} -eq 0 ]]; then" in main
-    assert 'echo "OK All done"' in main
-    assert 'echo "Errors occurred:"' in main
-    assert "exit 1" in main
     assert (
         "section_claude_mem" not in main.split('if [[ "$CLI_ONLY" != true ]]; then')[-1]
     )
@@ -369,6 +365,35 @@ def test_maintenance_scenarios(tmp_path, scenario, expected, warnings):
     )
     assert actual == expected
     assert f"warnings:{warnings}" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("warnings", "errors", "returncode", "marker"),
+    [
+        (["claude-mem warning"], [], 0, "OK All done"),
+        (["claude-mem warning"], ["unrelated failure"], 1, "Errors occurred:"),
+    ],
+)
+def test_warning_only_does_not_hide_unrelated_error_exit(
+    warnings, errors, returncode, marker
+):
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    main_body = shell.split("main()", 1)[1].split('\n}\n\nmain "$@"', 1)[0]
+    finish = 'finish() {\n    echo ""'
+    finish += main_body.rsplit('    echo ""', 1)[1] + "\n}\n"
+    warning_values = " ".join(json.dumps(value) for value in warnings)
+    error_values = " ".join(json.dumps(value) for value in errors)
+    probe = finish
+    probe += f"WARNINGS=({warning_values})\nERRORS=({error_values})\nfinish\n"
+    result = subprocess.run(
+        [bash_path(), "-c", probe],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == returncode, result.stderr + result.stdout
+    assert marker in result.stdout
 
 
 def test_external_contract_is_documented():
