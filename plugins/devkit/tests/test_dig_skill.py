@@ -123,7 +123,9 @@ def test_planning_defines_process_table():
         assert row in planning
     # 行ごと検査する。marker だけを見ると実装行やレビュー行へ移動しても通り、
     # 承認時に誤った工程を「今ここ」と示してしまう。
-    assert "| **承認** | **← 今ここ** |" in planning
+    # backend 列まで検査する。承認の主体がエージェントへ変わると、
+    # 明示承認という境界そのものが委譲されてしまう。
+    assert "| **承認** | **← 今ここ** | ユーザー |" in planning
     assert planning.count("← 今ここ") == 1
 
 

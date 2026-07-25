@@ -407,10 +407,15 @@ def mutate_shell_variables_assigned(docs: Docs) -> Docs:
 
 
 def _shell_surfaces(docs: Docs) -> list[tuple[str, str]]:
+    """fenced block だけを実行指示の面として扱う。
+
+    inline span も走査すると、禁止を明記した文中の引用
+    （「`git add .` / `git add -A` は使わない」）まで違反として拾ってしまい、
+    引用と指示を機械的に区別できない。実行指示は fenced block に置く前提とし、
+    禁止文の存在自体は各スキルの契約テストが別途検査する。
+    """
     return [
-        (path, block)
-        for path, text in docs.items()
-        for block in _bash_blocks(text)
+        (path, block) for path, text in docs.items() for block in _bash_blocks(text)
     ]
 
 
@@ -424,8 +429,11 @@ def check_no_broad_git_add(docs: Docs) -> list[str]:
             # 禁止しているはずの broad staging が素通りしてしまう。
             # `git -C "<worktree>" add .` のように global option を挟む形も拾う。
             if re.search(
-                # `-A` の別名 `--all` も broad staging。
-                _git_subcommand_pattern("add") + r"\s+(?:\.|-A|--all)(?:\s|$)", line
+                # `-A` の別名 `--all`、および option 終端 `--` の後ろの `.` も
+                # broad staging。`git add -- .` は全体を stage する。
+                _git_subcommand_pattern("add")
+                + r"(?:\s+--)?\s+(?:\.|-A|--all)(?:\s|$)",
+                line,
             ):
                 problems.append(f"{path}: broad git add: {line}")
     return problems
@@ -483,6 +491,20 @@ def _is_scoped_review(command: str) -> bool:
     )
 
 
+def _deleted_refs(command: str) -> set[str]:
+    """1 コマンドが削除する branch をすべて集める。
+
+    `--delete <remote> <a> <b>` と `:<ref>` の両形式に対応する。
+    """
+    refs = {_strip_ref_prefix(ref) for ref in re.findall(r"\s:(\S+)", command)}
+    delete = re.search(r"\s(?:--delete|-d)\s+(.*)$", command)
+    if delete:
+        # `--delete` の直後は remote 名。以降のフラグでない token が branch。
+        tokens = [token for token in delete.group(1).split() if not token.startswith("-")]
+        refs.update(_strip_ref_prefix(token) for token in tokens[1:])
+    return refs
+
+
 def _strip_ref_prefix(ref: str) -> str:
     """`refs/heads/x` と `x` を同じ branch として比べられるようにする。"""
     return ref.removeprefix("refs/heads/")
@@ -518,24 +540,21 @@ def check_remote_delete_has_lease(docs: Docs) -> list[str]:
         # 削除は `:refs/heads/x`、`:x`、`--delete <remote> <branch>` のいずれでも
         # 書ける。1 形式しか見ないと、書き方を変えるだけで lease 要求から外れる。
         # `--delete` の直後は remote 名なので、branch はその次のトークン。
-        deleted_match = re.search(
-            r"\s(?:--delete|-d)\s+\S+\s+(\S+)"
-            r"|\s(?:--delete|-d)\s+(\S+)\s*$"
-            r"|\s:(\S+)",
-            command,
-        )
-        deleted = (
-            _strip_ref_prefix(next(g for g in deleted_match.groups() if g))
-            if deleted_match
-            else None
-        )
-        lease = re.search(r"--force-with-lease=(\S+?):", command)
-        if lease is None:
+        deleted = _deleted_refs(command)
+        leases = {
+            _strip_ref_prefix(ref)
+            for ref in re.findall(r"--force-with-lease=(\S+?):", command)
+        }
+        if not leases:
             problems.append(f"{path}: lease なし remote delete: {command}")
-        elif deleted is not None and _strip_ref_prefix(lease.group(1)) != deleted:
+            continue
+        # 1 回の push で複数 branch を消せる。1 つ目だけ見ると、lease の無い
+        # 2 つ目の branch へ並行 push された commit を捨てうる。
+        unleased = sorted(ref for ref in deleted if ref not in leases)
+        if unleased:
             problems.append(
-                f"{path}: lease の ref が削除対象と一致しない "
-                f"(lease={lease.group(1)} delete={deleted}): {command}"
+                f"{path}: lease の無い削除対象がある {unleased} "
+                f"(lease={sorted(leases)}): {command}"
             )
     return problems
 
