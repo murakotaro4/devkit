@@ -221,7 +221,9 @@ def _codex_commands(docs: Docs) -> list[tuple[str, str]]:
     return [
         (path, command)
         for path, command in fenced + inline
-        if re.search(r"(?:^|&&\s*)codex\s", command)
+        # `FOO=x codex exec ...` のような環境変数前置も対象にする。
+        # 前置を足すだけで model / effort / approval の検査が外れてしまう。
+        if re.search(r"(?:^|&&\s*)(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*codex\s", command)
     ]
 
 
@@ -285,7 +287,12 @@ def check_review_scope_without_prompt(docs: Docs) -> list[str]:
     for path, command in _scoped_review_commands(docs):
         # scope flag の後ろだけを見ると `review "<prompt>" --base main` のように
         # prompt を前に置くだけで検査を回避できる。review 以降の引数列全体を見る。
-        segment = re.split(r"\s*(?:&&|\|\||[|;])\s*", command, maxsplit=1)[0]
+        # `cd <worktree> && codex ... review ...` のように前段があるため、
+        # 先頭 segment ではなく review を含む segment を選ぶ。
+        segments = re.split(r"\s*(?:&&|\|\||[|;])\s*", command)
+        segment = next(
+            (part for part in segments if "review" in part.split()), segments[0]
+        )
         # リダイレクト演算子は独立したトークンとして書かれる（`< /dev/null`、`2>&1`）。
         # 演算子の直後に空白を要求しないと、`<remote>/<default>` のような
         # placeholder をリダイレクトと誤認して引数ごと消してしまう。
@@ -351,11 +358,15 @@ def check_shell_variables_assigned(docs: Docs) -> list[str]:
     """command block が使う shell 変数は同じ block 内で代入する。"""
     problems: list[str] = []
     for path, block in _variable_blocks(docs):
-        used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)\}?", block))
+        # shell 変数は case-sensitive で小文字も正当。大文字だけを見ていると
+        # 変数名を小文字へ rename するだけで未代入の検査が外れる。
+        used = set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", block))
         # 代入は「最初の使用より前」でなければ意味がない。block 内のどこかに
         # 代入があればよい、とすると使用後に代入する例が通ってしまう。
         assigned = set()
-        for match in re.finditer(r"(?:^|[\s;&(])([A-Z][A-Z0-9_]*)=", block, re.MULTILINE):
+        for match in re.finditer(
+            r"(?:^|[\s;&(])([A-Za-z_][A-Za-z0-9_]*)=", block, re.MULTILINE
+        ):
             name = match.group(1)
             first_use = re.search(rf"\$\{{?{name}\}}?", block)
             if first_use is None or match.start() < first_use.start():
@@ -666,14 +677,25 @@ REVIEW_MARKER = re.compile(r"^### \d+\. 自レビューと独立 diff レビュ�
 
 
 def check_commit_before_independent_review(docs: Docs) -> list[str]:
-    """節目 commit の工程は独立 diff review より前に置く。"""
-    return [
-        f"{path}: 節目 commit が独立 review より後"
-        for path, commit, review in _docs_with_order_markers(
-            docs, COMMIT_MARKER, REVIEW_MARKER
-        )
-        if commit.start() >= review.start()
-    ]
+    """節目 commit の工程は独立 diff review より前に置き、実際に commit を指示する。
+
+    見出しの順序だけを見ると、節の中身が消えても「commit しない」に反転しても
+    通ってしまう。`review --base` が空 diff を見て「指摘なし」と誤報する退行は
+    まさにそれなので、肯定形の commit 指示が review より前にあることまで見る。
+    """
+    problems: list[str] = []
+    for path, commit, review in _docs_with_order_markers(
+        docs, COMMIT_MARKER, REVIEW_MARKER
+    ):
+        if commit.start() >= review.start():
+            problems.append(f"{path}: 節目 commit が独立 review より後")
+            continue
+        body = docs[path][commit.end() : review.start()]
+        if not re.search(r"(?<!しない。)commit する", body):
+            problems.append(f"{path}: review 前に commit を指示する記述がない")
+        if re.search(r"(?:親|節目)[^。\n]{0,20}commit しない", body):
+            problems.append(f"{path}: 節目 commit の指示が否定されている")
+    return problems
 
 
 def targets_commit_before_independent_review(docs: Docs) -> int:
@@ -697,14 +719,27 @@ IMPLEMENTATION_MARKER = re.compile(
 
 
 def check_approval_before_implementation(docs: Docs) -> list[str]:
-    """計画承認は実装委譲より前に置く。"""
-    return [
-        f"{path}: 計画承認が実装委譲より後"
-        for path, approval, implementation in _docs_with_order_markers(
-            docs, APPROVAL_MARKER, IMPLEMENTATION_MARKER
-        )
-        if approval.start() >= implementation.start()
-    ]
+    """計画承認は実装委譲より前に置き、承認が実装の条件だと明記する。
+
+    見出しの順序だけを見ると、承認節が残ったまま本文が「承認なしでも実装してよい」
+    に変わっても通る。承認境界の退行を検出するには、承認と write_scope 有効化を
+    結ぶ肯定形の記述まで見る必要がある。
+    """
+    problems: list[str] = []
+    for path, approval, implementation in _docs_with_order_markers(
+        docs, APPROVAL_MARKER, IMPLEMENTATION_MARKER
+    ):
+        if approval.start() >= implementation.start():
+            problems.append(f"{path}: 計画承認が実装委譲より後")
+            continue
+        body = docs[path][approval.end() : implementation.start()]
+        if "明示承認" not in body:
+            problems.append(f"{path}: 承認節に明示承認の要求がない")
+        if not re.search(r"承認後だけ[^。\n]*write_scope[^。\n]*有効", body):
+            problems.append(f"{path}: 承認と write_scope 有効化が結ばれていない")
+        if re.search(r"承認(?:なし|前)[^。\n]{0,20}(?:実装してよい|進んでよい)", body):
+            problems.append(f"{path}: 承認境界が否定されている")
+    return problems
 
 
 def targets_approval_before_implementation(docs: Docs) -> int:
