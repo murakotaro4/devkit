@@ -32,7 +32,6 @@ REQUIRED_PATHS = {
     "plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py",
     "plugins/devkit/skills/setup/scripts/sync_claude_env.py",
     "plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py",
-    "plugins/devkit/skills/setup/scripts/sync_cursor_skills.py",
     "plugins/devkit/skills/setup/scripts/setup_terminal_font.py",
     "plugins/devkit/statusline/install.js",
     "plugins/devkit/statusline/statusline.js",
@@ -57,6 +56,10 @@ REMOVED_PATHS = {
     "plugins/devkit/scripts/devkit-runtime-sync.ps1",
     "plugins/devkit/scripts/devkit-skill-update.ps1",
     "plugins/devkit/.claude-plugin/marketplace.json",
+    # v11.0.0 で 1 リリース限りとして残した v10.1.0 updater 用の互換 stub。
+    # 実処理は prune_legacy_cursor_sync へ委譲するだけで、現行 updater は
+    # そちらを直接呼ぶ。plugin 内部に閉じており install されないため orphan prune は不要。
+    "plugins/devkit/skills/setup/scripts/sync_cursor_skills.py",
     ".devkit",
 }
 MIN_PLUGIN_VERSION = (7, 0, 0)

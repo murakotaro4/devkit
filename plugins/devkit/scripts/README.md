@@ -34,7 +34,7 @@ update-ccx --cli-only
 update-ccx --devkit-only
 ```
 
-旧 Cursor 同期資産の移行掃除は `plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py` に安全ロジックを集約します。manifest の hash と一致する通常ファイルだけを prune し、ユーザー改変・symlink・manifest 非掲載ファイルは保持します。`~/.cursor/`、manifest、Python 3.10 以上のいずれかが無い環境では skip し、prune 自体の失敗は他 section の実行後に updater 全体を非ゼロ終了させます。`sync_cursor_skills.py` は v10.1.0 updater の初回更新を成立させる一時互換 stub で、同期せず同じ prune へ委譲します。
+旧 Cursor 同期資産の移行掃除は `plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py` に安全ロジックを集約します。manifest の hash と一致する通常ファイルだけを prune し、ユーザー改変・symlink・manifest 非掲載ファイルは保持します。`~/.cursor/`、manifest、Python 3.10 以上のいずれかが無い環境では skip し、prune 自体の失敗は他 section の実行後に updater 全体を非ゼロ終了させます。
 
 `plugins/devkit/skills/setup/scripts/sync_claude_env.py` は、`~/.claude/settings.json` の他設定を保持したまま Claude Code の compaction env 2 キーを同期します。既存ファイルは timestamp 付きバックアップの成功後に atomic replace し、壊れた JSON、object でない `env`、symlink、ディレクトリは無変更で非ゼロ終了します。
 

@@ -16,7 +16,6 @@ from conftest import require_symlink_support
 ROOT = Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = ROOT / "plugins/devkit"
 SCRIPT = PLUGIN_ROOT / "skills/setup/scripts/prune_legacy_cursor_sync.py"
-STUB = PLUGIN_ROOT / "skills/setup/scripts/sync_cursor_skills.py"
 MANIFEST_NAME = ".devkit-sync-manifest.json"
 
 
@@ -33,17 +32,17 @@ def add_managed(target: Path, relpath: str, content: bytes = b"managed\n") -> Pa
     return path
 
 
-def run_cli(target: Path, *extra: str, script: Path = SCRIPT) -> subprocess.CompletedProcess[str]:
+def run_cli(target: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(script), "--target", str(target), "--format", "json", *extra],
+        [sys.executable, str(SCRIPT), "--target", str(target), "--format", "json", *extra],
         check=False,
         capture_output=True,
         text=True,
     )
 
 
-def run_json(target: Path, *extra: str, script: Path = SCRIPT) -> dict[str, object]:
-    result = run_cli(target, *extra, script=script)
+def run_json(target: Path, *extra: str) -> dict[str, object]:
+    result = run_cli(target, *extra)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -287,21 +286,6 @@ def test_check_reports_without_writing(tmp_path):
     assert "prune:skills/setup/SKILL.md" in result["actions"]
     assert managed.is_file()
     assert manifest.is_file()
-
-
-def test_v101_compatibility_stub_accepts_old_cli_and_prunes(tmp_path):
-    target = tmp_path / ".cursor"
-    target.mkdir()
-    managed = add_managed(target, "skills/setup/SKILL.md")
-    write_manifest(target, {"skills/setup/SKILL.md": sha256(managed.read_bytes()).hexdigest()})
-
-    result = run_cli(target, "--source", str(tmp_path / "ignored-plugin"), script=STUB)
-
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert payload["changed"] is True
-    assert not managed.exists()
-    assert not (target / MANIFEST_NAME).exists()
 
 
 def make_fake_codex(bin_dir: Path) -> None:
