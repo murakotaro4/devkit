@@ -107,6 +107,10 @@ def test_scope_worktree_and_attempt_invariants():
     assert "<remote>/<default>" in text
     assert "実装・修正は合計 2 回まで" in text
     assert "untrusted な event 由来の ref を基点にせず" in text
+    # event 起点実行では hook / CI wrapper の GIT_* が継承され、別 repo や別 index を
+    # 操作しうる。2026-07-25 の圧縮でこの遮断が消えていた([P1])。
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        assert var in text
 
 
 def test_independent_review_and_downgrade_contract():

@@ -342,6 +342,9 @@ def test_worktree_and_pr_integration_contract():
     assert "作成失敗時は主 worktree へ移らず停止" in implementation
     assert "実装・検証・レビューは worktree 内だけ" in implementation
     assert "PR 経路の骨格は提出 → CI 待機 → green 判定 → merge → 完了確認 → cleanup" in integration
+    # remote branch 削除は期待 tip を束縛する。束縛なしだと確認後に他者が push した
+    # commit を捨てうる。2026-07-25 の圧縮で lease の具体形が消えていた([P1])。
+    assert "--force-with-lease=refs/heads/<branch>:<検証済みSHA>" in integration
     for invariant in (
         "単調増加値を origin から再計算して再検証",
         "標準解消規則のない conflict は abort して停止",

@@ -110,6 +110,7 @@ flowchart TD
 ### worktree・実装・検証
 
 - INIT で remote（既定名は `origin`）と default branch を解決し、以降の fetch / base 解決 / レビュー / publication で同じ remote を使う。`git fetch <remote>` が不能なら観測時は warning、worktree 準備時は古い base へ fallback せず `blocked`。
+- repository 操作の前に、外部 hook / CI wrapper 由来の `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` が別 repo や別 index へ漏れないようにする（event 起点の自動実行で継承されうる）。
 - 通常 checkout には書き込まない。最新 `<remote>/<default>` から専用 worktree を作り、branch 衝突時は一意サフィックス、なお衝突すれば連番を付ける。他セッションの worktree・branch は変更しない。
 - worktree 作成後に evidence を最新 base 上で再検証し、解消済みなら実装せず `noop`。非 default branch の event でも untrusted な event 由来の ref を基点にせず、default branch 基点で解決できる課題だけ実装する。
 - baseline で既存 failure と今回の failure を分離する。selected_task / write_scope 外の「ついで修正」はしない。

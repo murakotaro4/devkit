@@ -216,7 +216,7 @@ cursor-agent は step 6 の完全形の最終引数だけ `"<指摘と修正指�
 - merge queue / auto-merge が有効、または preflight が確認不能なら merge せず停止・報告する。
 - merge 直前の head が検証済み SHA と同じ場合だけ `gh pr merge <PR番号> --merge --match-head-commit <検証済みSHA>` を実行する。repo 規則の方式フラグを必ず明示し、`--delete-branch` は使わず、失敗時に別方式へ切り替えない。
 - `gh pr view <PR番号> --json state,mergedAt` で `MERGED` を確認するまで統合完了としない。
-- cleanup は remote tip が検証済み SHA と一致することを確認してから行う。不在時も PR の headRefOid で同一性を確認する。確認不能・不一致・lease 失敗は remote を削除せず「統合成功・cleanup 未完了」として残存物を報告する。
+- cleanup は remote tip が検証済み SHA と一致することを確認してから行う。不在時も PR の headRefOid で同一性を確認する。remote branch の削除は期待 tip を束縛した `git push --force-with-lease=refs/heads/<branch>:<検証済みSHA> origin :refs/heads/<branch>` で行う（束縛なしで消すと、確認後に他者が push した commit を捨てうる）。確認不能・不一致・lease 失敗は remote を削除せず「統合成功・cleanup 未完了」として残存物を報告する。
 - CI 赤・merge 失敗では PR を open のまま残し、worktree・branch・commit を破棄せず停止する。
 
 直接統合は主 worktree が clean、既定 branch 上、非 diverged のときだけ ff-only merge / push する。push reject は fetch / rebase / 再検証からやり直す。origin なしは ff-only merge で完了とする。
