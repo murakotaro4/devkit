@@ -70,8 +70,10 @@ def _bash_blocks(text: str) -> list[str]:
 
 
 def _inline_commands(text: str) -> list[str]:
+    # 環境変数前置は小文字も正当。大文字だけを見ていると、前置を小文字へ
+    # 変えるだけでコマンドが inline 抽出から外れる。
     runnable = re.compile(
-        r"^(?:[A-Z][A-Z0-9_]*=[^ ]+\s+)*(?:codex|cursor-agent|git|node|"
+        r"^(?:[A-Za-z_][A-Za-z0-9_]*=[^ ]*\s+)*(?:codex|cursor-agent|git|node|"
         r"python|uv|npx|pwsh|bash|sh)\b"
     )
     return [
@@ -498,9 +500,12 @@ def check_remote_delete_has_lease(docs: Docs) -> list[str]:
     """
     problems: list[str] = []
     for path, command in _remote_delete_commands(docs):
-        # 削除は `:refs/heads/x`、`:x`、`--delete x` のいずれでも書ける。
-        # 1 形式しか見ないと、書き方を変えるだけで lease 要求から外れる。
-        deleted_match = re.search(r"\s--delete\s+(\S+)|\s:(\S+)", command)
+        # 削除は `:refs/heads/x`、`:x`、`--delete <remote> <branch>` のいずれでも
+        # 書ける。1 形式しか見ないと、書き方を変えるだけで lease 要求から外れる。
+        # `--delete` の直後は remote 名なので、branch はその次のトークン。
+        deleted_match = re.search(
+            r"\s--delete\s+\S+\s+(\S+)|\s--delete\s+(\S+)\s*$|\s:(\S+)", command
+        )
         deleted = (
             _strip_ref_prefix(next(g for g in deleted_match.groups() if g))
             if deleted_match
@@ -847,8 +852,16 @@ def check_ci_green_before_merge(docs: Docs) -> list[str]:
         negated = re.search(
             r"CI green[^。\n]{0,20}?(?:確認せず|確認しないで|待たずに|スキップ|無視)", section
         )
+        # merge 側は「否定の禁止」では検査できない。CI 赤なら merge しない、は
+        # 正当な条件節だから。代わりに**肯定形の merge 指示**の存在を要求する。
+        # これが消えれば、工程そのものが失われたことを検出できる。
+        affirmative_merge = re.search(
+            r"merge (?:まで完遂|を実行|する)|`gh pr merge|ff-only merge", section
+        )
         if negated:
             problems.append(f"{path}: CI green の要求が否定されている: {negated.group(0)}")
+        elif affirmative_merge is None:
+            problems.append(f"{path}: merge を実行する肯定形の指示がない")
         elif not ci:
             problems.append(f"{path}: CI green 確認がない")
         elif not merge:
