@@ -189,11 +189,16 @@ def _noninteractive_commands(docs: Docs) -> list[tuple[str, str]]:
 
 
 def check_stdin_closed(docs: Docs) -> list[str]:
-    """非対話 CLI の fenced command は stdin を閉じる。"""
+    """非対話 CLI の command は stdin を閉じる。
+
+    行全体ではなく委譲コマンド自身の segment を見る。行のどこかに
+    `< /dev/null` があればよいとすると、別コマンドのリダイレクトで
+    委譲側の未閉鎖が隠れてハングする。
+    """
     return [
         f"{path}: stdin が閉じられていない: {command}"
         for path, command in _noninteractive_commands(docs)
-        if "< /dev/null" not in command
+        if "< /dev/null" not in _delegated_segment(command)
     ]
 
 
@@ -465,6 +470,11 @@ def _is_scoped_review(command: str) -> bool:
     )
 
 
+def _strip_ref_prefix(ref: str) -> str:
+    """`refs/heads/x` と `x` を同じ branch として比べられるようにする。"""
+    return ref.removeprefix("refs/heads/")
+
+
 def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
     """削除 refspec（source が空の `:refs/heads/...`）を持つ push だけを拾う。
 
@@ -474,7 +484,7 @@ def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
     return [
         (path, command)
         for path, command in _command_lines(docs)
-        if re.search(_git_subcommand_pattern("push") + r".*\s:refs/heads/", command)
+        if re.search(_git_subcommand_pattern("push") + r".*(?:\s--delete\b|\s:\S)", command)
     ]
 
 
@@ -488,14 +498,21 @@ def check_remote_delete_has_lease(docs: Docs) -> list[str]:
     """
     problems: list[str] = []
     for path, command in _remote_delete_commands(docs):
-        deleted = re.search(r"\s:(refs/heads/\S+)", command)
-        lease = re.search(r"--force-with-lease=(refs/heads/[^:\s]+):", command)
+        # 削除は `:refs/heads/x`、`:x`、`--delete x` のいずれでも書ける。
+        # 1 形式しか見ないと、書き方を変えるだけで lease 要求から外れる。
+        deleted_match = re.search(r"\s--delete\s+(\S+)|\s:(\S+)", command)
+        deleted = (
+            _strip_ref_prefix(next(g for g in deleted_match.groups() if g))
+            if deleted_match
+            else None
+        )
+        lease = re.search(r"--force-with-lease=(\S+?):", command)
         if lease is None:
             problems.append(f"{path}: lease なし remote delete: {command}")
-        elif deleted is not None and lease.group(1) != deleted.group(1):
+        elif deleted is not None and _strip_ref_prefix(lease.group(1)) != deleted:
             problems.append(
                 f"{path}: lease の ref が削除対象と一致しない "
-                f"(lease={lease.group(1)} delete={deleted.group(1)}): {command}"
+                f"(lease={lease.group(1)} delete={deleted}): {command}"
             )
     return problems
 
