@@ -427,7 +427,15 @@ def test_codex_review_scope_flag_and_prompt_are_not_combined():
         relpath = str(path.relative_to(REPO_ROOT))
         if relpath.startswith((".git/", ".claude/", "docs/reviews/")):
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
+        text = path.read_text(encoding="utf-8")
+        # 実行されるコマンドだけを対象にする(散文で「codex review の例」等と
+        # 書いた行を誤検出しないため)。fenced block とインラインコードを見る。
+        commands = [
+            line
+            for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL)
+            for line in block.splitlines()
+        ] + [span for span in re.findall(r"`([^`\n]+)`", text) if span.startswith("codex")]
+        for line in commands:
             if "codex" not in line or " review " not in line:
                 continue
             if "--base" not in line and "--uncommitted" not in line:

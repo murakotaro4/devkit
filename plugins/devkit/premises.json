@@ -477,7 +477,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 3
+          "count": 4
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",

@@ -235,8 +235,8 @@ def test_plan_review_and_approval_contract():
     assert "### 4. 計画レビュー" in text
     assert "--sandbox read-only" in text
     assert (
-        'codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" '
-        'review --base origin/<default> < /dev/null'
+        'codex -a never exec -C "<worktree>" -m gpt-5.6-sol '
+        '-c model_reasoning_effort="medium" review --base origin/<default> < /dev/null'
     ) in text
     assert "origin なしは `--base <default>`" in text
     approval = _section(text, "### 5. 計画承認")
@@ -321,6 +321,11 @@ def test_checkpoint_commit_precedes_independent_review():
 
     assert "レビュー前に実装を作業 branch へ commit" in review
     assert "commit 済み差分" in review
+    # レビューは worktree 内で実行する。通常 checkout で走らせると commit 済み
+    # branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する。
+    # 2026-07-25 の圧縮で「worktree 内で」の指定が消えていた([P1])。
+    assert 'codex -a never exec -C "<worktree>"' in review
+    assert "通常 checkout で走らせると" in review
     # 順序保証: 節目 commit の規定が review 節より前にあること
     assert text.index("#### 節目 commit") < text.index(
         "### 7. 自レビューと独立 diff レビュー"
@@ -336,7 +341,7 @@ def test_worktree_and_pr_integration_contract():
     # origin なし repo / リモート名が origin でない repo でも worktree を作れること。
     # 2026-07-25 の圧縮で fetch が無条件になり、この経路が壊れていた([P2])。
     assert "origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする" in implementation
-    assert "リモート名が origin でない repo も対象" in implementation
+    assert "remote 名は `origin` 固定で扱う" in implementation
     assert "一時 worktree と `<type>/<slug>` branch を作り" in implementation
     assert "開始 commit を記録" in implementation
     assert "作成失敗時は主 worktree へ移らず停止" in implementation

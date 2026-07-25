@@ -146,7 +146,7 @@ codex -a never exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort
 
 ### 6. worktree 作成と実装委譲
 
-実装系は必ず worktree を使う。親が既定 branch を origin/HEAD、main、現在 branch の順で決める。origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする(origin なし repo とリモート名が origin でない repo も対象)。一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。作成失敗時は主 worktree へ移らず停止する。以後の実装・検証・レビューは worktree 内だけで行う。
+実装系は必ず worktree を使う。親が既定 branch を origin/HEAD、main、現在 branch の順で決める。origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする。remote 名は `origin` 固定で扱う(`upstream` など別名だけの repo は origin なし扱いになり、統合も直接統合へ倒れる)。一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。作成失敗時は主 worktree へ移らず停止する。以後の実装・検証・レビューは worktree 内だけで行う。
 
 委譲指示は目的 / write_scope / 変更内容 / 受け入れ条件 / 検証 / commit 禁止を 1 ブロックにする。実装 backend は commit しない。
 
@@ -181,10 +181,10 @@ Codex 親で cursor-agent を使う場合だけ末尾に `> "$JOB_DIR/cursor-age
 
 親が基点からの diff 全文を計画と照合し、逸脱の理由・リスク・要確認点を判断する。プロジェクトのテスト・lint を実行し、実装 worker と別の reviewer にブランチ全体をレビューさせる。
 
-codex review の例（origin なしは `--base <default>`）:
+codex review の例（origin なしは `--base <default>`）。**`-C "<worktree>"` で worktree を指定する**。通常 checkout で走らせると commit 済み branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する:
 
 ```bash
-codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base origin/<default> < /dev/null
+codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base origin/<default> < /dev/null
 ```
 
 ### 8. 修正ループ
