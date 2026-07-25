@@ -283,19 +283,29 @@ def check_review_scope_without_prompt(docs: Docs) -> list[str]:
     """codex review は scope flag と positional prompt を併用しない。"""
     problems: list[str] = []
     for path, command in _scoped_review_commands(docs):
-        after_scope = re.split(
-            r"--base\s+\S+|--uncommitted", command, maxsplit=1
-        )[-1]
-        before_operator = re.split(r"\s*(?:&&|\|\||[|;])\s*", after_scope, maxsplit=1)[
-            0
-        ]
+        # scope flag の後ろだけを見ると `review "<prompt>" --base main` のように
+        # prompt を前に置くだけで検査を回避できる。review 以降の引数列全体を見る。
+        segment = re.split(r"\s*(?:&&|\|\||[|;])\s*", command, maxsplit=1)[0]
+        # リダイレクト演算子は独立したトークンとして書かれる（`< /dev/null`、`2>&1`）。
+        # 演算子の直後に空白を要求しないと、`<remote>/<default>` のような
+        # placeholder をリダイレクトと誤認して引数ごと消してしまう。
         without_redirects = re.sub(
-            r"(?:^|\s)\d*(?:>>?|<)\s*(?:&\d+|\S+)",
-            " ",
-            before_operator,
-        ).strip()
-        if without_redirects:
+            r"(?:^|\s)\d*(?:>>?|<)(?:\s+\S+|&\d+)", " ", segment
+        )
+        tokens = without_redirects.split()
+        if "review" not in tokens:
+            continue
+        rest = tokens[tokens.index("review") + 1 :]
+        expecting_value = False
+        for token in rest:
+            if token.startswith("-"):
+                expecting_value = "=" not in token and token in _VALUE_FLAGS
+                continue
+            if expecting_value:
+                expecting_value = False
+                continue
             problems.append(f"{path}: review scope と prompt を併用: {command}")
+            break
     return problems
 
 
@@ -342,9 +352,14 @@ def check_shell_variables_assigned(docs: Docs) -> list[str]:
     problems: list[str] = []
     for path, block in _variable_blocks(docs):
         used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)\}?", block))
-        assigned = set(
-            re.findall(r"(?:^|[\s;&(])([A-Z][A-Z0-9_]*)=", block, re.MULTILINE)
-        )
+        # 代入は「最初の使用より前」でなければ意味がない。block 内のどこかに
+        # 代入があればよい、とすると使用後に代入する例が通ってしまう。
+        assigned = set()
+        for match in re.finditer(r"(?:^|[\s;&(])([A-Z][A-Z0-9_]*)=", block, re.MULTILINE):
+            name = match.group(1)
+            first_use = re.search(rf"\$\{{?{name}\}}?", block)
+            if first_use is None or match.start() < first_use.start():
+                assigned.add(name)
         missing = used - assigned - ENV_PROVIDED
         if missing:
             head = block.strip().splitlines()[0][:60]
@@ -383,7 +398,11 @@ def check_no_broad_git_add(docs: Docs) -> list[str]:
     for path, block in _shell_surfaces(docs):
         # 行末 `\` で `git add \` / `.` と折り返すと物理行では検出できない。
         for line in _join_continuations(block):
-            if re.search(r"(?:^|&&\s*)git\s+add\s+(?:\.|-A)(?:\s|$)", line):
+            # `&&` だけでなく `;` `||` `|` の後ろも見る。区切りを変えるだけで
+            # 禁止しているはずの broad staging が素通りしてしまう。
+            if re.search(
+                r"(?:^|&&|\|\||[|;]|\()\s*git\s+add\s+(?:\.|-A)(?:\s|$)", line
+            ):
                 problems.append(f"{path}: broad git add: {line}")
     return problems
 
@@ -491,6 +510,21 @@ def _worktree_commands(docs: Docs) -> list[tuple[str, str]]:
     return commands
 
 
+def _delegated_segment(command: str) -> str:
+    """複合行から codex / cursor-agent の呼び出し部分だけを取り出す。
+
+    `git -C "<worktree>" status && codex ... review --base main` のような行では、
+    無関係な git の -C を見て「worktree に固定されている」と誤認しうる。
+    誤った directory での review はまさにこの不変条件が防ぐ失敗なので、
+    対象コマンド自身のフラグだけを見る。
+    """
+    segments = re.split(r"\s*(?:&&|\|\||[|;])\s*", command)
+    for segment in segments:
+        if re.match(r"^(?:[A-Z][A-Z0-9_]*=\S+\s+)*(?:codex|cursor-agent)\b", segment):
+            return segment
+    return command
+
+
 def check_worktree_commands_pin_directory(docs: Docs) -> list[str]:
     """worktree 委譲・review command は実行 directory を明示する。"""
     return [
@@ -499,7 +533,7 @@ def check_worktree_commands_pin_directory(docs: Docs) -> list[str]:
         if not re.search(
             r"(?:^|\s)(?:-C|--workspace)\s+"
             r"(?:\"[^\"]+\"|'[^']+'|(?!-)\S+)",
-            command,
+            _delegated_segment(command),
         )
     ]
 
@@ -717,7 +751,14 @@ def check_ci_green_before_merge(docs: Docs) -> list[str]:
     for path, section in _ci_merge_sections(docs):
         ci = re.search(r"CI (?:green|待機.*?green 判定)", section, re.DOTALL)
         merge = re.search(r"\bmerge\b", section)
-        if not ci:
+        # 順序だけを見ると「CI green を確認しないで merge」のような否定形が
+        # 通ってしまう。安全契約の反転を green のままにしない。
+        negated = re.search(
+            r"CI green[^。\n]{0,20}?(?:確認せず|確認しないで|待たずに|スキップ|無視)", section
+        )
+        if negated:
+            problems.append(f"{path}: CI green の要求が否定されている: {negated.group(0)}")
+        elif not ci:
             problems.append(f"{path}: CI green 確認がない")
         elif not merge:
             problems.append(f"{path}: merge 工程がない")
