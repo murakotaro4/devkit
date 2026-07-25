@@ -228,9 +228,9 @@ def _codex_commands(docs: Docs) -> list[tuple[str, str]]:
     return [
         (path, command)
         for path, command in fenced + inline
-        # `FOO=x codex exec ...` のような環境変数前置も対象にする。
-        # 前置を足すだけで model / effort / approval の検査が外れてしまう。
-        if re.search(r"(?:^|&&\s*)(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*codex\s", command)
+        # 環境変数前置と、`&&` 以外の区切りの後ろも対象にする。
+        # 前置や区切りを変えるだけで model / effort / approval の検査が外れる。
+        if re.search(SEPARATOR + ENV_PREFIX + r"codex\s", command)
     ]
 
 
@@ -244,16 +244,20 @@ def check_codex_execution_shape(docs: Docs) -> list[str]:
     for path, command in _codex_commands(docs):
         if not re.search(r"(?:^|\s)-a\s+never(?:\s|$)", command):
             problems.append(f"{path}: codex に -a never がない: {command}")
-        model = re.search(r"(?:^|\s)-m\s+(\S+)", command)
-        if model is None:
+        # 最初の 1 つだけを見ると `-m gpt-5.6-sol -m other` のように後勝ちの
+        # 重複指定で実際の値を差し替えられる。全出現を検査する。
+        models = re.findall(r"(?:^|\s)-m\s+(\S+)", command)
+        if not models:
             problems.append(f"{path}: codex に -m の指定がない: {command}")
-        elif model.group(1) != "gpt-5.6-sol":
-            problems.append(f"{path}: codex model が不正: {model.group(1)}")
-        effort = re.search(r'model_reasoning_effort="([^"]+)"', command)
-        if effort is None:
+        for value in models:
+            if value != "gpt-5.6-sol":
+                problems.append(f"{path}: codex model が不正: {value}")
+        efforts = re.findall(r'model_reasoning_effort="([^"]+)"', command)
+        if not efforts:
             problems.append(f"{path}: codex に model_reasoning_effort の指定がない: {command}")
-        elif effort.group(1) != "medium":
-            problems.append(f"{path}: codex effort が不正: {effort.group(1)}")
+        for value in efforts:
+            if value != "medium":
+                problems.append(f"{path}: codex effort が不正: {value}")
     return problems
 
 
@@ -420,7 +424,8 @@ def check_no_broad_git_add(docs: Docs) -> list[str]:
             # 禁止しているはずの broad staging が素通りしてしまう。
             # `git -C "<worktree>" add .` のように global option を挟む形も拾う。
             if re.search(
-                _git_subcommand_pattern("add") + r"\s+(?:\.|-A)(?:\s|$)", line
+                # `-A` の別名 `--all` も broad staging。
+                _git_subcommand_pattern("add") + r"\s+(?:\.|-A|--all)(?:\s|$)", line
             ):
                 problems.append(f"{path}: broad git add: {line}")
     return problems
@@ -446,6 +451,12 @@ def mutate_no_broad_git_add_with_global_option(docs: Docs) -> Docs:
         "codex -a never exec --sandbox read-only"
     )
     return _replace_once(docs, path, old, new)
+
+
+# shell の区切りと環境変数前置。判定ごとに書き分けると片方だけ緩くなり、
+# 区切りや前置を変えるだけで検査から外れる穴ができる。1 箇所に集約する。
+SEPARATOR = r"(?:^|&&|\|\||[|;]|\()\s*"
+ENV_PREFIX = r"(?:[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"]*\"|'[^']*'|\S*)\s+)*"
 
 
 def _git_subcommand_pattern(subcommand: str) -> str:
@@ -486,7 +497,11 @@ def _remote_delete_commands(docs: Docs) -> list[tuple[str, str]]:
     return [
         (path, command)
         for path, command in _command_lines(docs)
-        if re.search(_git_subcommand_pattern("push") + r".*(?:\s--delete\b|\s:\S)", command)
+        # `--delete` の短縮形 `-d` も削除。
+        if re.search(
+            _git_subcommand_pattern("push") + r".*(?:\s(?:--delete|-d)\b|\s:\S)",
+            command,
+        )
     ]
 
 
@@ -504,7 +519,10 @@ def check_remote_delete_has_lease(docs: Docs) -> list[str]:
         # 書ける。1 形式しか見ないと、書き方を変えるだけで lease 要求から外れる。
         # `--delete` の直後は remote 名なので、branch はその次のトークン。
         deleted_match = re.search(
-            r"\s--delete\s+\S+\s+(\S+)|\s--delete\s+(\S+)\s*$|\s:(\S+)", command
+            r"\s(?:--delete|-d)\s+\S+\s+(\S+)"
+            r"|\s(?:--delete|-d)\s+(\S+)\s*$"
+            r"|\s:(\S+)",
+            command,
         )
         deleted = (
             _strip_ref_prefix(next(g for g in deleted_match.groups() if g))
@@ -578,7 +596,7 @@ def _delegated_segment(command: str) -> str:
     """
     segments = re.split(r"\s*(?:&&|\|\||[|;])\s*", command)
     for segment in segments:
-        if re.match(r"^(?:[A-Z][A-Z0-9_]*=\S+\s+)*(?:codex|cursor-agent)\b", segment):
+        if re.match("^" + ENV_PREFIX + r"(?:codex|cursor-agent)\b", segment):
             return segment
     return command
 

@@ -251,7 +251,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_skill_invariants.py",
-          "count": 3
+          "count": 4
         }
       ]
     },
