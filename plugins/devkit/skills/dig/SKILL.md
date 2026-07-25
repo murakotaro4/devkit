@@ -221,7 +221,7 @@ cursor-agent は step 6 の完全形の最終引数だけ `"<指摘と修正指�
 
 直接統合は主 worktree が clean、既定 branch 上、非 diverged のときだけ ff-only merge / push する。push reject は fetch / rebase / 再検証からやり直す。origin なしは ff-only merge で完了とする。
 
-cleanup は統合確認後だけ行い、未追跡ファイル等で worktree remove が拒否されたら `--force` を使わない。節目 commit は親だけが行い、ジョブの write_scope をパス限定で add する。`git add .` / `git add -A` は使わない。
+cleanup は統合確認後だけ行い、`git worktree remove <worktree>` → ローカル branch 削除の順で進める。merge commit 方式は `git merge-base --is-ancestor` で取り込み済みを確認して `git branch -d <branch>`、squash / rebase 方式は PR の `state` / `mergedAt` / `headRefOid` 一致を根拠に記録してから `git branch -D <branch>`。ローカル branch を残したまま完了にしない。未追跡ファイル等で worktree remove が拒否されたら `--force` を使わない。節目 commit は親だけが行い、ジョブの write_scope をパス限定で add する。`git add .` / `git add -A` は使わない。
 
 失敗時は変更を破棄せず、branch、worktree、停止操作、再開方法を報告する。完了報告には変更、検証、逸脱・仮定、残課題、commit、PR、CI、merge の `MERGED` 確認、cleanup 状態を含める。
 

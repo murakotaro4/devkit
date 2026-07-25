@@ -415,6 +415,17 @@ def test_bash_blocks_assign_every_shell_variable_they_use():
     assert not offenders, f"未代入のシェル変数を参照する bash ブロック: {offenders}"
 
 
+def test_extractor_input_file_is_created_before_use():
+    """抽出スクリプトが読む一時ファイルは、使う前に作る手順が要る。
+
+    2026-07-25 の圧縮で improve-skill から `/tmp/current-session.txt` を
+    書き出す手順が消え、抽出コマンドが必ず失敗する状態だった([P2])。
+    """
+    text = _read("plugins/devkit/skills/improve-skill/SKILL.md")
+    assert "--input-file /tmp/current-session.txt" in text
+    assert "現在セッションの要約を `/tmp/current-session.txt` へ書き出す" in text
+
+
 def test_codex_review_scope_flag_and_prompt_are_not_combined():
     """`codex exec review` は scope フラグと positional PROMPT を併用できない。
 

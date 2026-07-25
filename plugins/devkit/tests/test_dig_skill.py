@@ -350,6 +350,11 @@ def test_worktree_and_pr_integration_contract():
     # remote branch 削除は期待 tip を束縛する。束縛なしだと確認後に他者が push した
     # commit を捨てうる。2026-07-25 の圧縮で lease の具体形が消えていた([P1])。
     assert "--force-with-lease=refs/heads/<branch>:<検証済みSHA>" in integration
+    # 統合後はローカル作業 branch も消す。2026-07-25 の圧縮で worktree と remote の
+    # 削除だけが残り、毎回 stale なローカル branch が残る状態だった([P2])。
+    assert "`git branch -d <branch>`" in integration
+    assert "`git branch -D <branch>`" in integration
+    assert "ローカル branch を残したまま完了にしない" in integration
     for invariant in (
         "単調増加値を origin から再計算して再検証",
         "標準解消規則のない conflict は abort して停止",
