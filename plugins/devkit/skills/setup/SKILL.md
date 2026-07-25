@@ -43,7 +43,11 @@ $ARGUMENTS
 
 共通実行形は次の 1 つ。`<script>` と `<args>` だけを下表で差し替える。`--no-project` と `--python ">=3.10"` は対象 repo の環境から分離するため必須。
 
+2 つの変数は各コマンド実行時に必ず代入する。シェル変数は呼び出し間で失われるため、同じブロック内で代入する。`TARGET_REPO` は `git -C "<対象>" rev-parse --show-toplevel` で得た repo root を使う。
+
 ```bash
+SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
+TARGET_REPO="<対象リポジトリの絶対パス>"
 uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/<script>" <args> --format json
 ```
 
@@ -86,6 +90,7 @@ Claude 親かつ `node` がある場合だけ、`node "$SKILL_DIR/../../statusli
 非 Windows は skip。Windows は次を確認し、選択肢付き質問で承認後、同じコマンドから `--check` だけ外して適用する。
 
 ```bash
+SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
 uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/setup_terminal_font.py" --check --format json
 ```
 

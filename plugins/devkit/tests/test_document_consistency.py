@@ -378,6 +378,32 @@ def test_agents_and_dig_noninteractive_stdin_guard():
     assert not offenders, f"stdin 閉鎖(< /dev/null)がない非対話コマンド行: {offenders}"
 
 
+def test_bash_blocks_assign_every_shell_variable_they_use():
+    """コマンド例の bash ブロックは、参照するシェル変数を同じブロック内で代入する。
+
+    シェル変数はツール呼び出し間で失われるため、別ブロックでの代入に依存すると
+    空文字へ展開して誤ったパスを対象にする。2026-07-25 の圧縮で setup が
+    `$SKILL_DIR` / `$TARGET_REPO` の代入を落としていた(codex の diff レビューが
+    [P2] として検出)。環境が与える変数だけ例外とする。
+    """
+    env_provided = {"TMPDIR", "HOME", "PATH", "PWD", "SHELL", "USER"}
+    offenders: list[str] = []
+    for path in sorted((REPO_ROOT / "plugins" / "devkit" / "skills").glob("*/SKILL.md")):
+        text = path.read_text(encoding="utf-8")
+        for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL):
+            used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)\}?", block))
+            assigned = set(
+                re.findall(r"(?:^|[\s;&(])([A-Z][A-Z0-9_]*)=", block, re.MULTILINE)
+            )
+            missing = used - assigned - env_provided
+            if missing:
+                head = block.strip().splitlines()[0][:60]
+                offenders.append(
+                    f"{path.relative_to(REPO_ROOT)}: {sorted(missing)} ({head})"
+                )
+    assert not offenders, f"未代入のシェル変数を参照する bash ブロック: {offenders}"
+
+
 def test_codex_review_scope_flag_and_prompt_are_not_combined():
     """`codex exec review` は scope フラグと positional PROMPT を併用できない。
 
