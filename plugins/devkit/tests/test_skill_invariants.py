@@ -733,6 +733,34 @@ def _docs_with_order_markers(
     return found
 
 
+def _missing_order_markers(
+    docs: Docs,
+    before: re.Pattern[str],
+    after: re.Pattern[str],
+    required: tuple[str, ...],
+) -> list[str]:
+    """必ず両 marker を持つべき文書から marker が消えたことを検出する。
+
+    marker が無い文書を黙って skip すると、見出しごと消したときに検査対象が
+    ゼロになって check が沈黙する。工程そのものの消失を見逃すため、
+    対象文書を明示して不在を fail にする。
+    """
+    problems: list[str] = []
+    for path in required:
+        text = docs.get(path)
+        if text is None:
+            problems.append(f"{path}: 対象文書が存在しない")
+            continue
+        if before.search(text) is None:
+            problems.append(f"{path}: 前段 marker が消えている ({before.pattern})")
+        if after.search(text) is None:
+            problems.append(f"{path}: 後段 marker が消えている ({after.pattern})")
+    return problems
+
+
+DIG = "plugins/devkit/skills/dig/SKILL.md"
+
+
 COMMIT_MARKER = re.compile(r"^#### 節目 commit$", re.MULTILINE)
 REVIEW_MARKER = re.compile(r"^### \d+\. 自レビューと独立 diff レビュー$", re.MULTILINE)
 
@@ -744,7 +772,7 @@ def check_commit_before_independent_review(docs: Docs) -> list[str]:
     通ってしまう。`review --base` が空 diff を見て「指摘なし」と誤報する退行は
     まさにそれなので、肯定形の commit 指示が review より前にあることまで見る。
     """
-    problems: list[str] = []
+    problems = _missing_order_markers(docs, COMMIT_MARKER, REVIEW_MARKER, (DIG,))
     for path, commit, review in _docs_with_order_markers(
         docs, COMMIT_MARKER, REVIEW_MARKER
     ):
@@ -786,7 +814,9 @@ def check_approval_before_implementation(docs: Docs) -> list[str]:
     に変わっても通る。承認境界の退行を検出するには、承認と write_scope 有効化を
     結ぶ肯定形の記述まで見る必要がある。
     """
-    problems: list[str] = []
+    problems = _missing_order_markers(
+        docs, APPROVAL_MARKER, IMPLEMENTATION_MARKER, (DIG,)
+    )
     for path, approval, implementation in _docs_with_order_markers(
         docs, APPROVAL_MARKER, IMPLEMENTATION_MARKER
     ):
