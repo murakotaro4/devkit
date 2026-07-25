@@ -844,8 +844,15 @@ def check_approval_before_implementation(docs: Docs) -> list[str]:
         body = docs[path][approval.end() : implementation.start()]
         if "明示承認" not in body:
             problems.append(f"{path}: 承認節に明示承認の要求がない")
-        if not re.search(r"承認後だけ[^。\n]*write_scope[^。\n]*有効", body):
+        # 肯定形の接頭辞に一致しても、その後ろで否定されれば契約は反転する。
+        # 文末までを取って否定語の有無まで見る。
+        activation = re.search(r"承認後だけ[^。\n]*write_scope[^。\n]*有効[^。\n]*", body)
+        if activation is None:
             problems.append(f"{path}: 承認と write_scope 有効化が結ばれていない")
+        elif re.search(r"(?:必要はない|しない|されない|とは限らない)", activation.group(0)):
+            problems.append(
+                f"{path}: write_scope 有効化が否定されている: {activation.group(0)}"
+            )
         if re.search(r"承認(?:なし|前)[^。\n]{0,20}(?:実装してよい|進んでよい)", body):
             problems.append(f"{path}: 承認境界が否定されている")
     return problems

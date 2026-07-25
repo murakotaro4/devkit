@@ -121,7 +121,10 @@ def test_planning_defines_process_table():
     assert "| 工程 | 状態 | backend |" in planning
     for row in ("計画レビュー", "実装", "diff レビュー", "検証"):
         assert row in planning
-    assert "**← 今ここ**" in planning
+    # 行ごと検査する。marker だけを見ると実装行やレビュー行へ移動しても通り、
+    # 承認時に誤った工程を「今ここ」と示してしまう。
+    assert "| **承認** | **← 今ここ** |" in planning
+    assert planning.count("← 今ここ") == 1
 
 
 def test_process_table_example_uses_review_state_schema():
