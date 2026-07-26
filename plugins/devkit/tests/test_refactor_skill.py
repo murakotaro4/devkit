@@ -115,8 +115,8 @@ def test_prioritization_starts_with_decision_summary():
 def test_harness_detection_section():
     text = _skill_text()
     harness = text[text.index("## ハーネス・進捗") : text.index("## read-only 契約")]
-    assert "| AskUserQuestion |" in harness
-    assert "| plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |" in harness
+    assert "Claude 親 | AskUserQuestion |" in harness
+    assert "Codex 親 | plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |" in harness
     assert "`request_user_input` は判定キーにしない" in harness
 
 

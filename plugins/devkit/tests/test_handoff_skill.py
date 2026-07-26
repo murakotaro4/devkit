@@ -59,8 +59,8 @@ def test_skill_frontmatter_contract():
 def test_harness_and_task_list_contract():
     text = _skill_text()
     harness = text[text.index("## ハーネス・進捗") : text.index("## 書き込み契約")]
-    assert "| AskUserQuestion |" in harness
-    assert "| plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |" in harness
+    assert "Claude 親 | AskUserQuestion |" in harness
+    assert "Codex 親 | plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |" in harness
     assert "`request_user_input` は判定キーにしない" in harness
 
 
