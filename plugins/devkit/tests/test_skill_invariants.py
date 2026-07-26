@@ -1605,6 +1605,390 @@ def mutate_ci_green_before_merge(docs: Docs) -> Docs:
     )
 
 
+# ---------------------------------------------------------------------------
+# B8: ハーネス判定表の構造を固定する
+# ---------------------------------------------------------------------------
+
+# 散文ハーネスは構造的に判定できないため未検査とする。
+# goal-prompt のハーネス節は 2 文からなり、前者は親の決定、後者は親ごとの質問手段
+# （正当に `request_user_input` を含む）。両者を文言に頼らず区別する手段がない。
+UNCHECKED_HARNESS_DOCS = frozenset({"plugins/devkit/skills/goal-prompt/SKILL.md"})
+# レベルを問わず「ハーネス…」見出しを拾う。SKILL.md の 3 形式
+# (`## ハーネス判定` / `## ハーネス・進捗` / `## ハーネス判定と実行差分`) と
+# AGENTS.md 正本の `### ハーネス判定` を同じ規則で扱う。
+HARNESS_HEADING = re.compile(r"^#{2,6} ハーネス[^\n]*$", re.MULTILINE)
+AGENTS = "AGENTS.md"
+GOAL_PROMPT = "plugins/devkit/skills/goal-prompt/SKILL.md"
+HANDOFF = "plugins/devkit/skills/handoff/SKILL.md"
+BACKTICK_IDENTIFIER = re.compile(r"`([^`]+)`")
+# CamelCase または snake_case。判定セルの backtick 外未知識別子検出に使う。
+IDENTIFIER_SHAPE = re.compile(
+    r"(?<![A-Za-z0-9_])(?=[A-Za-z_]*[A-Z_])[A-Za-z][A-Za-z0-9_]*(?![A-Za-z0-9_])"
+)
+# 判定列のセル文言に現れる役割ラベル。判定キーではない。
+DECISION_PROSE_LABELS = frozenset({"Claude", "Codex"})
+# dig の否定句として判定セルに裸で現れる。判定キーは backtick 側だけを見る。
+DECISION_ALLOWED_BARE_IDS = frozenset({"AskUserQuestion"}) | DECISION_PROSE_LABELS
+# 判定列の行ごとの backtick 識別子集合。文言は揺れるが構成は正本含め一致する。
+EXPECTED_DECISION_IDS = (
+    frozenset({"AskUserQuestion"}),
+    frozenset({"spawn_agent"}),
+    frozenset(),
+)
+# Markdown 表の区切り行。ヘッダ直後がこれでないと表として描画されない。
+TABLE_SEPARATOR = re.compile(r"\|(?:\s*:?-{2,}:?\s*\|)+")
+
+
+@dataclass(frozen=True)
+class HarnessDecisionTable:
+    decision: list[str]
+    parents: list[str]
+    separator_ok: bool
+    columns_ok: bool
+
+
+def _skill_paths(docs: Docs) -> list[str]:
+    return sorted(path for path, _ in _skill_docs(docs))
+
+
+def _harness_doc_paths(docs: Docs) -> list[str]:
+    """B8 の検査対象: 全 SKILL.md と AGENTS.md 正本。"""
+    paths = set(_skill_paths(docs))
+    if AGENTS in docs:
+        paths.add(AGENTS)
+    return sorted(paths)
+
+
+def _harness_section(text: str) -> str | None:
+    """`ハーネス` で始まる見出しの節をちょうど 1 つ返す。0 件・2 件以上は None。"""
+    matches = list(HARNESS_HEADING.finditer(text))
+    if len(matches) != 1:
+        return None
+    return _section_body(text, matches[0].group(0))
+
+
+def _parent_column_index(header: list[str], decision_col: int) -> int:
+    """親指定列。`親` / `種別` があればそれ、無ければ判定列。"""
+    parent_col = next(
+        (i for i, name in enumerate(header) if "親" in name or "種別" in name),
+        None,
+    )
+    return decision_col if parent_col is None else parent_col
+
+
+def _parse_harness_decision_table(section: str) -> HarnessDecisionTable | None:
+    """ハーネス節内の最初の判定表を返す。見つからなければ None。
+
+    dig はハーネス表と工程表を同じ節に持つため、節全体ではなく表単位で切る。
+    setup / repo-loop は先頭列が `親` で判定列が 2 列目なので、列名で選ぶ。
+    """
+    lines = section.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("|"):
+            continue
+        header = _cells(line)
+        decision_col = next(
+            (i for i, name in enumerate(header) if "判定" in name or "条件" in name),
+            None,
+        )
+        if decision_col is None or index + 1 >= len(lines):
+            continue
+        separator = lines[index + 1]
+        separator_ok = TABLE_SEPARATOR.fullmatch(separator.strip()) is not None
+        parent_col = _parent_column_index(header, decision_col)
+        expected_cols = len(header)
+        columns_ok = len(_cells(separator)) == expected_cols
+        decision: list[str] = []
+        parents: list[str] = []
+        for row in lines[index + 2 :]:
+            if not row.startswith("|"):
+                break
+            cells = _cells(row)
+            if len(cells) != expected_cols:
+                columns_ok = False
+            decision.append(cells[decision_col] if len(cells) > decision_col else "")
+            parents.append(cells[parent_col] if len(cells) > parent_col else "")
+        return HarnessDecisionTable(
+            decision=decision,
+            parents=parents,
+            separator_ok=separator_ok,
+            columns_ok=columns_ok,
+        )
+    return None
+
+
+def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
+    """判定表が取れた文書の判定列を返す。レジストリ完全性 meta-test 用。
+
+    UNCHECKED_HARNESS_DOCS も含めて探索する。除外してから比べると互いに素検査が
+    構造上つねに真になり空洞化する。check 本体の skip とは分離する。
+    """
+    found: dict[str, list[str]] = {}
+    for path in _harness_doc_paths(docs):
+        section = _harness_section(docs.get(path, ""))
+        if section is None:
+            continue
+        table = _parse_harness_decision_table(section)
+        if table is not None:
+            found[path] = table.decision
+    return found
+
+
+def _backtick_identifiers(cell: str) -> frozenset[str]:
+    """セル内の backtick で囲まれた識別子だけを集める。
+
+    dig の 2 行目は否定形として AskUserQuestion を裸で含む。裸トークンを拾うと
+    集合が壊れ、dig だけが落ちる。囲まれたものだけを識別子とする。
+    """
+    return frozenset(BACKTICK_IDENTIFIER.findall(cell))
+
+
+def _has_identifier(text: str, identifier: str) -> bool:
+    """完全な識別子だけを単語境界で検出する。
+
+    premises.json の value_patterns と同じ前後読みを使う。部分文字列一致だと
+    LegacyAskUserQuestion のように前後に文字が付いた別識別子でもヒットする。
+    """
+    return (
+        re.search(
+            rf"(?<![A-Za-z0-9_]){re.escape(identifier)}(?![A-Za-z0-9_])",
+            text,
+        )
+        is not None
+    )
+
+
+def _shaped_identifiers(cell: str) -> frozenset[str]:
+    """識別子らしい形のトークンを backtick の有無を問わずすべて集める。"""
+    return frozenset(IDENTIFIER_SHAPE.findall(cell))
+
+
+def _bare_decision_unknowns(cell: str) -> frozenset[str]:
+    """判定セルで backtick 外に現れた、許可リスト外の識別子。
+
+    期待集合の比較は backtick 必須のまま（dig の裸 AskUserQuestion を判定キーに
+    しないため）。その穴を塞ぐため、形で拾った裸トークンのうち許可リスト外を拒否する。
+    """
+    return frozenset(
+        _shaped_identifiers(cell)
+        - _backtick_identifiers(cell)
+        - DECISION_ALLOWED_BARE_IDS
+    )
+
+
+def check_harness_decision_table_is_exact(docs: Docs) -> list[str]:
+    """ハーネス判定表の節・区切り行・行数・判定列・親指定を固定する。
+
+    位置関係（節冒頭の禁止文の有無）では成立しない。ハーネス節の見出しが
+    3 形式に分かれ、しかも `request_user_input` が節冒頭の禁止文に現れる文書が
+    複数あるため、判定表のセルを直接見る。質問列は自然言語寄りで収束しないため見ない。
+    """
+    problems: list[str] = []
+
+    for path in _harness_doc_paths(docs):
+        if path in UNCHECKED_HARNESS_DOCS:
+            continue
+        section = _harness_section(docs.get(path, ""))
+        if section is None:
+            problems.append(f"{path}: ハーネス節がちょうど 1 つでない")
+            continue
+        table = _parse_harness_decision_table(section)
+        if table is None:
+            problems.append(f"{path}: ハーネス判定表がない")
+            continue
+        if not table.separator_ok:
+            problems.append(f"{path}: 判定表の区切り行が不正")
+            continue
+        if not table.columns_ok:
+            problems.append(f"{path}: 判定表の列数が不一致")
+            continue
+        cells = table.decision
+        if len(cells) != 3:
+            problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
+            continue
+        for index, (cell, expected) in enumerate(
+            zip(cells, EXPECTED_DECISION_IDS, strict=True), start=1
+        ):
+            actual = _backtick_identifiers(cell)
+            if actual != expected:
+                problems.append(
+                    f"{path}: 判定セル {index} の識別子集合が {sorted(expected)} "
+                    f"でない: {sorted(actual)} ({cell})"
+                )
+            bare_unknown = _bare_decision_unknowns(cell)
+            if bare_unknown:
+                problems.append(
+                    f"{path}: 判定セル {index} に backtick なしの識別子がある: "
+                    f"{sorted(bare_unknown)} ({cell})"
+                )
+        for index, cell in enumerate(cells, start=1):
+            if _has_identifier(cell, "request_user_input"):
+                problems.append(
+                    f"{path}: 判定セル {index} に request_user_input がある: {cell}"
+                )
+        # 親指定は列を限定して見る。行全体だと catch-up の別列「外部 Codex」で誤検出する。
+        parents = table.parents
+        if len(parents) != 3:
+            problems.append(f"{path}: 親指定列のデータ行が 3 行でない: {parents}")
+        else:
+            expectations = (
+                (True, False, "Claude"),
+                (False, True, "Codex"),
+                (False, False, "フォールバック"),
+            )
+            for index, (want_claude, want_codex, label) in enumerate(
+                expectations, start=1
+            ):
+                cell = parents[index - 1]
+                has_claude = "Claude" in cell
+                has_codex = "Codex" in cell
+                if has_claude != want_claude or has_codex != want_codex:
+                    problems.append(
+                        f"{path}: 親指定セル {index} ({label}) が不正: {cell}"
+                    )
+
+    return problems
+
+
+def targets_harness_decision_table_is_exact(docs: Docs) -> int:
+    return sum(
+        1 for path in _harness_doc_paths(docs) if path not in UNCHECKED_HARNESS_DOCS
+    )
+
+
+def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
+    """判定セルへ request_user_input を挿入する。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` / `request_user_input` が使える Claude 親 |",
+    )
+
+
+def mutate_harness_injects_spawn_agent_into_first_row(docs: Docs) -> Docs:
+    """1 行目の判定セルへ spawn_agent を混入させる。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` または `spawn_agent` が使える Claude 親 |",
+    )
+
+
+def mutate_harness_injects_extra_decision_id_into_first_row(docs: Docs) -> Docs:
+    """1 行目の判定セルへ別識別子を追加する。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` または `BrowserTool` が使える Claude 親 |",
+    )
+
+
+def mutate_harness_injects_bare_unknown_into_decision_cell(docs: Docs) -> Docs:
+    """判定セルへ裸の別識別子を足す。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` または BrowserTool が使える Claude 親 |",
+    )
+
+
+def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
+    """3 行目のフォールバックへ識別子参照を持ち込む。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| 判定不能 | 選択肢付き自由文 |",
+        "| `BrowserTool` が利用可能な Browser 親 | 選択肢付き自由文 |",
+    )
+
+
+def mutate_harness_swaps_decision_rows(docs: Docs) -> Docs:
+    """1 行目と 2 行目の判定セルを入れ替える。"""
+    return _swap_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| それがなく `spawn_agent` が使える Codex 親 |",
+    )
+
+
+def mutate_harness_drops_decision_row(docs: Docs) -> Docs:
+    """データ行を 1 行削除する。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| 判定不能 | 選択肢付き自由文 |\n",
+        "",
+    )
+
+
+def mutate_harness_drops_section_heading(docs: Docs) -> Docs:
+    """ハーネス節の見出しごと削除する。"""
+    return _replace_once(docs, HANDOFF, "## ハーネス・進捗\n\n", "")
+
+
+def mutate_harness_injects_request_user_input_into_agents_decision_cell(
+    docs: Docs,
+) -> Docs:
+    """AGENTS.md 正本の判定セルへ request_user_input を混入させる。"""
+    return _replace_once(
+        docs,
+        AGENTS,
+        "| Claude 親 | `AskUserQuestion` が使える |",
+        "| Claude 親 | `AskUserQuestion` / `request_user_input` が使える |",
+    )
+
+
+def mutate_harness_swaps_agents_parent_label_on_codex_row(docs: Docs) -> Docs:
+    """AGENTS.md の 2 行目の種別を Codex 親 → Claude 親へ差し替える。"""
+    return _replace_once(
+        docs,
+        AGENTS,
+        "| Codex 親 | 上記がなく `spawn_agent` が使える |",
+        "| Claude 親 | 上記がなく `spawn_agent` が使える |",
+    )
+
+
+def mutate_harness_replaces_separator_with_data_row(docs: Docs) -> Docs:
+    """判定表の区切り行を普通のデータ行に差し替える。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "|---|---|",
+        "| a | b |",
+    )
+
+
+def mutate_harness_truncates_agents_data_row(docs: Docs) -> Docs:
+    """AGENTS.md の 1 行目を判定セルの後で切り詰める。"""
+    return _replace_once(
+        docs,
+        AGENTS,
+        "| Claude 親 | `AskUserQuestion` が使える | `AskUserQuestion` | "
+        "`EnterPlanMode` で入り `ExitPlanMode`。利用不能時だけ計画全文への明示承認 |",
+        "| Claude 親 | `AskUserQuestion` が使える |",
+    )
+
+
+def mutate_harness_injects_decision_table_into_unchecked_doc(docs: Docs) -> Docs:
+    """未検査文書のハーネス節へ判定表を注入する（レジストリ meta-test 用）。"""
+    return _replace_once(
+        docs,
+        GOAL_PROMPT,
+        "## ハーネス判定\n\n",
+        "## ハーネス判定\n\n"
+        "| 判定 | 質問 |\n"
+        "|---|---|\n"
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |\n"
+        "| それがなく `spawn_agent` が使える Codex 親 | plan mode |\n"
+        "| 判定不能 | 自由文 |\n\n",
+    )
+
+
 CHECKS: dict[str, Check] = {
     "stdin_closed": Check(
         run=check_stdin_closed,
@@ -1718,6 +2102,26 @@ CHECKS: dict[str, Check] = {
         category="B5",
         why="3 スキルへ散った修正ループ停止条件のドリフトを防ぐ",
     ),
+    "harness_decision_table_is_exact": Check(
+        run=check_harness_decision_table_is_exact,
+        mutate=mutate_harness_injects_request_user_input_into_cell,
+        extra_mutations=(
+            mutate_harness_injects_spawn_agent_into_first_row,
+            mutate_harness_injects_extra_decision_id_into_first_row,
+            mutate_harness_injects_bare_unknown_into_decision_cell,
+            mutate_harness_injects_capability_into_fallback_row,
+            mutate_harness_swaps_decision_rows,
+            mutate_harness_drops_decision_row,
+            mutate_harness_drops_section_heading,
+            mutate_harness_injects_request_user_input_into_agents_decision_cell,
+            mutate_harness_swaps_agents_parent_label_on_codex_row,
+            mutate_harness_replaces_separator_with_data_row,
+            mutate_harness_truncates_agents_data_row,
+        ),
+        targets=targets_harness_decision_table_is_exact,
+        category="B8",
+        why="ハーネス判定表の節・行数・列数・判定列・親指定の退行を防ぐ",
+    ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
         mutate=mutate_commit_before_independent_review,
@@ -1753,6 +2157,7 @@ EXPECTED_CATEGORIES = {
     "B3",
     "B4",
     "B5",
+    "B8",
     "C1",
     "C2",
     "C3",
@@ -1827,4 +2232,37 @@ def test_step_numbering_registry_covers_all_targets():
         "レジストリが TARGET_PATHS を覆っていない: "
         f"missing={sorted(set(TARGET_PATHS) - (numbered | unnumbered))}, "
         f"extra={sorted((numbered | unnumbered) - set(TARGET_PATHS))}"
+    )
+
+
+def test_harness_registry_covers_all_skills():
+    """判定表が取れた文書と UNCHECKED_HARNESS_DOCS の和が検査対象全体と一致する。
+
+    新しいスキルや正本側のハーネス表を足したときに登録漏れが fail になり、
+    未検査側への振り分け忘れを防ぐ。対象は全 SKILL.md + AGENTS.md。
+    互いに素の検査は、未検査文書も含めて探索した結果で行う
+    （除外してから比べると構造上つねに真になる）。
+    """
+    harness_paths = set(_harness_doc_paths(REAL_DOCS))
+    table_docs = set(_docs_with_decision_tables(REAL_DOCS))
+    unchecked = set(UNCHECKED_HARNESS_DOCS)
+    assert table_docs.isdisjoint(unchecked), (
+        f"判定表と未検査レジストリが重複: {sorted(table_docs & unchecked)}"
+    )
+    assert table_docs | unchecked == harness_paths, (
+        "ハーネスレジストリが検査対象を覆っていない: "
+        f"missing={sorted(harness_paths - (table_docs | unchecked))}, "
+        f"extra={sorted((table_docs | unchecked) - harness_paths)}"
+    )
+
+
+def test_harness_registry_rejects_table_in_unchecked_docs():
+    """未検査登録のまま判定表を持つと互いに素検査が落ちる。"""
+    mutated = mutate_harness_injects_decision_table_into_unchecked_doc(REAL_DOCS)
+    assert mutated != REAL_DOCS
+    table_docs = set(_docs_with_decision_tables(mutated))
+    unchecked = set(UNCHECKED_HARNESS_DOCS)
+    assert not table_docs.isdisjoint(unchecked), (
+        "未検査文書へ判定表を注入しても重複が検出されない: "
+        f"table={sorted(table_docs)}, unchecked={sorted(unchecked)}"
     )
