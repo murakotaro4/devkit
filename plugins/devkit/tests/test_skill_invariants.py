@@ -786,6 +786,195 @@ def mutate_frontmatter_name_matches_directory(docs: Docs) -> Docs:
     return _replace_once(docs, path, 'name: "backlog"', 'name: "wrong-name"')
 
 
+# step 番号の有無は文書自身から導かない。番号と宣言を同時に消すと「番号なし」に
+# 化けて検査対象から外れるため、対象モードは外から明示する。
+NUMBERED_STEP_DOCS = frozenset(
+    {
+        "plugins/devkit/skills/dig/SKILL.md",
+        "plugins/devkit/skills/catch-up/SKILL.md",
+        "plugins/devkit/skills/commit-push/SKILL.md",
+        "plugins/devkit/skills/memory-review/SKILL.md",
+        "plugins/devkit/skills/backlog/SKILL.md",
+        "plugins/devkit/skills/refactor/SKILL.md",
+        "plugins/devkit/skills/handoff/SKILL.md",
+    }
+)
+UNNUMBERED_STEP_DOCS = frozenset(
+    {
+        "AGENTS.md",
+        "plugins/devkit/skills/setup/SKILL.md",
+        "plugins/devkit/skills/goal-prompt/SKILL.md",
+        "plugins/devkit/skills/improve-skill/SKILL.md",
+        "plugins/devkit/skills/repo-loop/SKILL.md",
+    }
+)
+NUMBERED_HEADING = re.compile(r"^(#{2,6}) (\d+)\. ", re.MULTILINE)
+STEP_RANGE = re.compile(r"step (\d+)-(\d+)")
+
+
+def _numbered_heading_groups(docs: Docs) -> dict[tuple[str, int], list[int]]:
+    """(path, 見出しレベル) -> 文書順の番号列。
+
+    fenced code block 内の見出し風テキストは手順ではないので除外する。
+    レベル別に分けることで、memory-review のレポート雛形 (`## 1.`〜) と
+    工程見出し (`### 1.`〜) が混ざって欠番扱いになるのを防ぐ。
+    """
+    groups: dict[tuple[str, int], list[int]] = {}
+    for path, text in docs.items():
+        body = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        for match in NUMBERED_HEADING.finditer(body):
+            level = len(match.group(1))
+            groups.setdefault((path, level), []).append(int(match.group(2)))
+    return groups
+
+
+def _step_range_declarations(docs: Docs) -> list[tuple[str, int, int]]:
+    return [
+        (path, int(match.group(1)), int(match.group(2)))
+        for path, text in docs.items()
+        for match in STEP_RANGE.finditer(text)
+    ]
+
+
+def check_step_numbering_and_declared_range(docs: Docs) -> list[str]:
+    """numbered ### 見出しは 1..N 連番で、宣言範囲もその N に収める。
+
+    検査対象かどうかはレジストリで決める。文書内容から導くと、番号と宣言を
+    同時に消したときに unnumbered へ化けて素通りする。
+    """
+    problems: list[str] = []
+    groups = _numbered_heading_groups(docs)
+    declarations = _step_range_declarations(docs)
+    decls_by_path: dict[str, list[tuple[int, int]]] = {}
+    for path, start, end in declarations:
+        decls_by_path.setdefault(path, []).append((start, end))
+
+    # 性質 1: 各 (path, レベル) グループは文書順で厳密に 1..N。
+    # 集合だけ合っていても順序が違えば fail にする。
+    for (path, level), numbers in sorted(groups.items()):
+        expected = list(range(1, len(numbers) + 1))
+        if numbers != expected:
+            problems.append(
+                f"{path}: 見出しレベル {level} の番号が "
+                f"1..{len(numbers)} の連番でない: {numbers}"
+            )
+
+    # 性質 2: numbered 文書は ### グループと完全範囲 step 1-N を持つ。
+    for path in sorted(NUMBERED_STEP_DOCS):
+        if path not in docs:
+            problems.append(f"{path}: 対象文書が存在しない")
+            continue
+        h3 = groups.get((path, 3))
+        if not h3:
+            problems.append(f"{path}: numbered ### 見出しがない")
+            continue
+        n = max(h3)
+        if not any(start == 1 and end == n for start, end in decls_by_path.get(path, [])):
+            problems.append(f"{path}: 完全範囲の step 1-{n} 宣言がない")
+
+    # 性質 3: 全 step A-B は 1 <= A <= B <= N。部分範囲 (例: dig の 6-9) は正当。
+    # 性質 2 だけでは上限超過や A>B を検出できないため、独立に検査する。
+    for path, start, end in declarations:
+        h3 = groups.get((path, 3))
+        if not h3:
+            continue
+        n = max(h3)
+        if not (1 <= start <= end <= n):
+            problems.append(f"{path}: step {start}-{end} が 1..{n} の範囲外")
+
+    # 性質 4: unnumbered 文書は numbered ### も step 宣言も持たない。
+    for path in sorted(UNNUMBERED_STEP_DOCS):
+        if path not in docs:
+            problems.append(f"{path}: 対象文書が存在しない")
+            continue
+        if groups.get((path, 3)):
+            problems.append(f"{path}: unnumbered 文書に numbered ### 見出しがある")
+        if decls_by_path.get(path):
+            problems.append(f"{path}: unnumbered 文書に step A-B 宣言がある")
+
+    return problems
+
+
+def targets_step_numbering_and_declared_range(docs: Docs) -> int:
+    return (
+        len(_numbered_heading_groups(docs))
+        + len(_step_range_declarations(docs))
+        + len(NUMBERED_STEP_DOCS)
+        + len(UNNUMBERED_STEP_DOCS)
+    )
+
+
+def mutate_step_numbering_gap_and_duplicate(docs: Docs) -> Docs:
+    """欠番と重複を同時に作る。"""
+    return _replace_once(
+        docs,
+        DIG,
+        "### 4. 計画レビュー",
+        "### 5. 計画レビュー",
+    )
+
+
+def mutate_step_numbering_drops_heading_number(docs: Docs) -> Docs:
+    """見出しから番号だけが消える。"""
+    return _replace_once(
+        docs,
+        DIG,
+        "### 3. backend 選択",
+        "### backend 選択",
+    )
+
+
+def mutate_step_numbering_swaps_order(docs: Docs) -> Docs:
+    """見出し番号の文書順が逆転する。"""
+    return _swap_once(
+        docs,
+        "plugins/devkit/skills/backlog/SKILL.md",
+        "### 1. スコープ確認",
+        "### 2. 情報源スキャン",
+    )
+
+
+def mutate_step_numbering_stale_full_range(docs: Docs) -> Docs:
+    """完全範囲宣言だけが古くなる。"""
+    return _replace_once(
+        docs,
+        "plugins/devkit/skills/catch-up/SKILL.md",
+        "step 1-8",
+        "step 1-7",
+    )
+
+
+def mutate_step_numbering_injects_declaration_into_unnumbered(docs: Docs) -> Docs:
+    """unnumbered 文書へ step 宣言が残る / 混入する。"""
+    return _replace_once(
+        docs,
+        "plugins/devkit/skills/repo-loop/SKILL.md",
+        "非対話実行では質問しない。",
+        "非対話実行では質問しない。step 1-5 を参照。",
+    )
+
+
+def mutate_step_numbering_strips_all_numbers_and_declarations(docs: Docs) -> Docs:
+    """番号と宣言を同時に消す。内容から対象を導くと素通りするため、レジストリ必須。"""
+    mutated = _copy(docs)
+    text = mutated[DIG]
+    stripped = re.sub(r"^### \d+\. ", "### ", text, flags=re.MULTILINE)
+    stripped = re.sub(r"step \d+-\d+", "step", stripped)
+    assert stripped != text, f"mutation が空振りした: {DIG}"
+    mutated[DIG] = stripped
+    return mutated
+
+
+def mutate_step_numbering_declaration_exceeds_max(docs: Docs) -> Docs:
+    """宣言の上限だけが N を超える。完全範囲 step 1-9 は残るので性質 3 専用。"""
+    return _replace_once(docs, DIG, "step 6-9", "step 6-10")
+
+
+def mutate_step_numbering_declaration_reversed(docs: Docs) -> Docs:
+    """宣言の A>B。完全範囲 step 1-9 は残るので性質 3 専用。"""
+    return _replace_once(docs, DIG, "step 6-9", "step 9-6")
+
+
 ENUM_TABLES: dict[tuple[str, ...], set[str]] = {
     ("未知", "影響", "扱い"): {"質問する", "仮定で進める", "確定済み"},
     ("trigger", "対話", "主な証拠", "branch 名"): {"manual", "schedule", "event"},
@@ -1121,6 +1310,22 @@ CHECKS: dict[str, Check] = {
         category="B1",
         why="skill identity と配布 directory のずれを防ぐ",
     ),
+    "step_numbering_and_declared_range": Check(
+        run=check_step_numbering_and_declared_range,
+        mutate=mutate_step_numbering_gap_and_duplicate,
+        extra_mutations=(
+            mutate_step_numbering_drops_heading_number,
+            mutate_step_numbering_swaps_order,
+            mutate_step_numbering_stale_full_range,
+            mutate_step_numbering_injects_declaration_into_unnumbered,
+            mutate_step_numbering_strips_all_numbers_and_declarations,
+            mutate_step_numbering_declaration_exceeds_max,
+            mutate_step_numbering_declaration_reversed,
+        ),
+        targets=targets_step_numbering_and_declared_range,
+        category="B2",
+        why="step 見出しの欠番・重複・宣言範囲の逸脱を防ぐ",
+    ),
     "enum_table_cells": Check(
         run=check_enum_table_cells,
         mutate=mutate_enum_table_cells,
@@ -1159,6 +1364,7 @@ EXPECTED_CATEGORIES = {
     "A6",
     "A7",
     "B1",
+    "B2",
     "B3",
     "C1",
     "C2",
@@ -1217,3 +1423,21 @@ def test_every_invariant_inspects_at_least_one_target():
         if check.targets(REAL_DOCS) < 1
     }
     assert not empty, f"検査対象がゼロの check: {empty}"
+
+
+def test_step_numbering_registry_covers_all_targets():
+    """番号付き / 番号なしのレジストリが TARGET_PATHS を漏れなく分割する。
+
+    新しいスキルを足したときに登録漏れが fail になり、レジストリが黙って
+    古くなる経路を塞ぐ。互いに素であることも要求し、両集合への二重登録を防ぐ。
+    """
+    numbered = set(NUMBERED_STEP_DOCS)
+    unnumbered = set(UNNUMBERED_STEP_DOCS)
+    assert numbered.isdisjoint(unnumbered), (
+        f"レジストリが重複: {sorted(numbered & unnumbered)}"
+    )
+    assert numbered | unnumbered == set(TARGET_PATHS), (
+        "レジストリが TARGET_PATHS を覆っていない: "
+        f"missing={sorted(set(TARGET_PATHS) - (numbered | unnumbered))}, "
+        f"extra={sorted((numbered | unnumbered) - set(TARGET_PATHS))}"
+    )
