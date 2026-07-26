@@ -1634,6 +1634,15 @@ EXPECTED_DECISION_IDS = (
     frozenset({"spawn_agent"}),
     frozenset(),
 )
+# Markdown 表の区切り行。ヘッダ直後がこれでないと表として描画されない。
+TABLE_SEPARATOR = re.compile(r"\|(?:\s*:?-{2,}:?\s*\|)+")
+
+
+@dataclass(frozen=True)
+class HarnessDecisionTable:
+    decision: list[str]
+    parents: list[str]
+    separator_ok: bool
 
 
 def _skill_paths(docs: Docs) -> list[str]:
@@ -1656,8 +1665,17 @@ def _harness_section(text: str) -> str | None:
     return _section_body(text, matches[0].group(0))
 
 
-def _harness_decision_cells(section: str) -> list[str] | None:
-    """ハーネス節内の最初の判定表から判定列セルを返す。
+def _parent_column_index(header: list[str], decision_col: int) -> int:
+    """親指定列。`親` / `種別` があればそれ、無ければ判定列。"""
+    parent_col = next(
+        (i for i, name in enumerate(header) if "親" in name or "種別" in name),
+        None,
+    )
+    return decision_col if parent_col is None else parent_col
+
+
+def _parse_harness_decision_table(section: str) -> HarnessDecisionTable | None:
+    """ハーネス節内の最初の判定表を返す。見つからなければ None。
 
     dig はハーネス表と工程表を同じ節に持つため、節全体ではなく表単位で切る。
     setup / repo-loop は先頭列が `親` で判定列が 2 列目なので、列名で選ぶ。
@@ -1673,13 +1691,22 @@ def _harness_decision_cells(section: str) -> list[str] | None:
         )
         if decision_col is None or index + 1 >= len(lines):
             continue
+        separator = lines[index + 1]
+        separator_ok = TABLE_SEPARATOR.fullmatch(separator.strip()) is not None
+        parent_col = _parent_column_index(header, decision_col)
         decision: list[str] = []
+        parents: list[str] = []
         for row in lines[index + 2 :]:
             if not row.startswith("|"):
                 break
             cells = _cells(row)
             decision.append(cells[decision_col] if len(cells) > decision_col else "")
-        return decision
+            parents.append(cells[parent_col] if len(cells) > parent_col else "")
+        return HarnessDecisionTable(
+            decision=decision,
+            parents=parents,
+            separator_ok=separator_ok,
+        )
     return None
 
 
@@ -1692,9 +1719,9 @@ def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
         section = _harness_section(docs.get(path, ""))
         if section is None:
             continue
-        cells = _harness_decision_cells(section)
-        if cells is not None:
-            found[path] = cells
+        table = _parse_harness_decision_table(section)
+        if table is not None:
+            found[path] = table.decision
     return found
 
 
@@ -1741,7 +1768,7 @@ def _bare_decision_unknowns(cell: str) -> frozenset[str]:
 
 
 def check_harness_decision_table_is_exact(docs: Docs) -> list[str]:
-    """ハーネス判定表の節・行数・判定列識別子集合を固定する。
+    """ハーネス判定表の節・区切り行・行数・判定列・親指定を固定する。
 
     位置関係（節冒頭の禁止文の有無）では成立しない。ハーネス節の見出しが
     3 形式に分かれ、しかも `request_user_input` が節冒頭の禁止文に現れる文書が
@@ -1756,10 +1783,14 @@ def check_harness_decision_table_is_exact(docs: Docs) -> list[str]:
         if section is None:
             problems.append(f"{path}: ハーネス節がちょうど 1 つでない")
             continue
-        cells = _harness_decision_cells(section)
-        if cells is None:
+        table = _parse_harness_decision_table(section)
+        if table is None:
             problems.append(f"{path}: ハーネス判定表がない")
             continue
+        if not table.separator_ok:
+            problems.append(f"{path}: 判定表の区切り行が不正")
+            continue
+        cells = table.decision
         if len(cells) != 3:
             problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
             continue
@@ -1783,6 +1814,26 @@ def check_harness_decision_table_is_exact(docs: Docs) -> list[str]:
                 problems.append(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
+        # 親指定は列を限定して見る。行全体だと catch-up の別列「外部 Codex」で誤検出する。
+        parents = table.parents
+        if len(parents) != 3:
+            problems.append(f"{path}: 親指定列のデータ行が 3 行でない: {parents}")
+        else:
+            expectations = (
+                (True, False, "Claude"),
+                (False, True, "Codex"),
+                (False, False, "フォールバック"),
+            )
+            for index, (want_claude, want_codex, label) in enumerate(
+                expectations, start=1
+            ):
+                cell = parents[index - 1]
+                has_claude = "Claude" in cell
+                has_codex = "Codex" in cell
+                if has_claude != want_claude or has_codex != want_codex:
+                    problems.append(
+                        f"{path}: 親指定セル {index} ({label}) が不正: {cell}"
+                    )
 
     return problems
 
@@ -1877,6 +1928,26 @@ def mutate_harness_injects_request_user_input_into_agents_decision_cell(
         AGENTS,
         "| Claude 親 | `AskUserQuestion` が使える |",
         "| Claude 親 | `AskUserQuestion` / `request_user_input` が使える |",
+    )
+
+
+def mutate_harness_swaps_agents_parent_label_on_codex_row(docs: Docs) -> Docs:
+    """AGENTS.md の 2 行目の種別を Codex 親 → Claude 親へ差し替える。"""
+    return _replace_once(
+        docs,
+        AGENTS,
+        "| Codex 親 | 上記がなく `spawn_agent` が使える |",
+        "| Claude 親 | 上記がなく `spawn_agent` が使える |",
+    )
+
+
+def mutate_harness_replaces_separator_with_data_row(docs: Docs) -> Docs:
+    """判定表の区切り行を普通のデータ行に差し替える。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "|---|---|",
+        "| a | b |",
     )
 
 
@@ -2005,10 +2076,12 @@ CHECKS: dict[str, Check] = {
             mutate_harness_drops_decision_row,
             mutate_harness_drops_section_heading,
             mutate_harness_injects_request_user_input_into_agents_decision_cell,
+            mutate_harness_swaps_agents_parent_label_on_codex_row,
+            mutate_harness_replaces_separator_with_data_row,
         ),
         targets=targets_harness_decision_table_is_exact,
         category="B8",
-        why="ハーネス判定表の節・行数・判定列識別子集合の退行を防ぐ",
+        why="ハーネス判定表の節・行数・判定列・親指定の退行を防ぐ",
     ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
