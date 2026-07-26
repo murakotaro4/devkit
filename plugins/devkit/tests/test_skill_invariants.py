@@ -1035,6 +1035,112 @@ def mutate_enum_table_cells(docs: Docs) -> Docs:
     return _replace_once(docs, path, "| `manual` |", "| `unexpected` |")
 
 
+ROLE_TABLE_HEADER = ("役割", "既定")
+FALLBACK_TABLE_HEADER = ("親", "実装 lane", "レビュー lane（計画 / diff 共通）")
+BACKEND_SECTION = "### 3. backend 固定とフォールバック"
+CURSOR_MODEL = "cursor-grok-4.5-high"
+CODEX_MODEL = "gpt-5.6-sol"
+
+
+def _table_rows(body: str, header: tuple[str, ...]) -> list[list[str]]:
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("|"):
+            continue
+        if tuple(_cells(line)) != header:
+            continue
+        rows: list[list[str]] = []
+        for row in lines[index + 2 :]:
+            if not row.startswith("|"):
+                break
+            rows.append(_cells(row))
+        return rows
+    return []
+
+
+def _fixed_backend_rows(docs: Docs) -> tuple[list[list[str]], list[list[str]]]:
+    body = _section_body(docs.get(DIG, ""), BACKEND_SECTION)
+    return _table_rows(body, ROLE_TABLE_HEADER), _table_rows(body, FALLBACK_TABLE_HEADER)
+
+
+def check_fixed_backend_assignment(docs: Docs) -> list[str]:
+    """dig の backend 固定割り当てとフォールバック段数を検査する。
+
+    対象特定は節見出しと表ヘッダの構造で行い、モデル名を membership 判定に使わない。
+    """
+    body = _section_body(docs.get(DIG, ""), BACKEND_SECTION)
+    if not body:
+        return [f"{DIG}: {BACKEND_SECTION} がない"]
+
+    role_rows, fallback_rows = _fixed_backend_rows(docs)
+    problems: list[str] = []
+    by_role = {row[0]: row[1] for row in role_rows if len(row) >= 2}
+
+    for role in ("実装", "計画レビュー", "diff レビュー"):
+        if role not in by_role:
+            problems.append(f"{DIG}: 役割表に {role} 行がない")
+
+    impl = by_role.get("実装", "")
+    if CURSOR_MODEL not in impl:
+        problems.append(f"{DIG}: 実装の既定に {CURSOR_MODEL} がない")
+    if CODEX_MODEL in impl:
+        problems.append(f"{DIG}: 実装の既定に {CODEX_MODEL} が混入している")
+
+    for role in ("計画レビュー", "diff レビュー"):
+        cell = by_role.get(role, "")
+        if CODEX_MODEL not in cell:
+            problems.append(f"{DIG}: {role} の既定に {CODEX_MODEL} がない")
+        if CURSOR_MODEL in cell:
+            problems.append(f"{DIG}: {role} の既定に {CURSOR_MODEL} が混入している")
+
+    if not fallback_rows:
+        problems.append(f"{DIG}: フォールバック階段の表がない")
+    for row in fallback_rows:
+        if len(row) < 2:
+            problems.append(f"{DIG}: フォールバック表の行が不足: {row}")
+            continue
+        parent, impl_lane = row[0], row[1]
+        stages = [part.strip() for part in impl_lane.split("→") if part.strip()]
+        if "→" not in impl_lane or len(stages) < 2:
+            problems.append(
+                f"{DIG}: {parent} の実装 lane にフォールバック段が不足: {impl_lane}"
+            )
+    return problems
+
+
+def targets_fixed_backend_assignment(docs: Docs) -> int:
+    role_rows, fallback_rows = _fixed_backend_rows(docs)
+    return len(role_rows) + len(fallback_rows)
+
+
+def mutate_fixed_backend_assignment(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
+        f"| 実装 | cursor-agent `{CODEX_MODEL}` |",
+    )
+
+
+def mutate_fixed_backend_assignment_swaps_review(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        f"| 計画レビュー | codex `{CODEX_MODEL}` / medium |",
+        f"| 計画レビュー | cursor-agent `{CURSOR_MODEL}` |",
+    )
+
+
+def mutate_fixed_backend_assignment_drops_fallback(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        "| Claude 親 | cursor-agent → codex CLI → "
+        "`Agent(general-purpose, model=sonnet)` → 停止 |",
+        "| Claude 親 | cursor-agent |",
+    )
+
+
 def _docs_with_order_markers(
     docs: Docs, before: re.Pattern[str], after: re.Pattern[str]
 ) -> list[tuple[str, re.Match[str], re.Match[str]]]:
@@ -1333,6 +1439,17 @@ CHECKS: dict[str, Check] = {
         category="B3",
         why="workflow enum への未知値混入を防ぐ",
     ),
+    "fixed_backend_assignment": Check(
+        run=check_fixed_backend_assignment,
+        mutate=mutate_fixed_backend_assignment,
+        extra_mutations=(
+            mutate_fixed_backend_assignment_swaps_review,
+            mutate_fixed_backend_assignment_drops_fallback,
+        ),
+        targets=targets_fixed_backend_assignment,
+        category="B4",
+        why="backend の固定割り当てとフォールバック順序の退行を防ぐ",
+    ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
         mutate=mutate_commit_before_independent_review,
@@ -1366,6 +1483,7 @@ EXPECTED_CATEGORIES = {
     "B1",
     "B2",
     "B3",
+    "B4",
     "C1",
     "C2",
     "C3",

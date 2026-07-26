@@ -150,31 +150,36 @@ def test_approval_puts_summary_first():
     assert "第 1 層から提示" in approval
 
 
-def test_backend_selection_and_python_gate_contract():
-    backend = _section(_skill_text(), "### 3. backend 選択")
-    for option in (
-        "codex（既定）",
-        "cursor-agent",
-        "codex review（既定）",
-        "`spawn_agent` worker",
-        "`spawn_agent` explorer",
-    ):
-        assert option in backend
+def test_fixed_backend_assignment_and_python_gate_contract():
+    backend = _section(_skill_text(), "### 3. backend 固定とフォールバック")
+    assert "| 実装 | cursor-agent `cursor-grok-4.5-high` |" in backend
+    assert "| 計画レビュー | codex `gpt-5.6-sol` / medium |" in backend
+    assert "| diff レビュー | codex `gpt-5.6-sol` / medium |" in backend
+    assert "| Claude 親 |" in backend
+    assert "| Codex 親 |" in backend
+    assert "| 判定不能 |" in backend
     # 表示名ではなく Agent へ実際に渡す alias を書くこと。
     # 2026-07-25 の圧縮で alias が表示名へ置き換わり、委譲時に何を指定するか
     # 分からなくなっていた([P2])。
     assert "`Agent(general-purpose, model=sonnet)`" in backend
     assert "`Agent(general-purpose, model=opus)`" in backend
-    assert all(command in backend for command in ("command -v codex", "command -v cursor-agent", "command -v uv"))
-    assert "失敗した選択肢は除く" in backend
+    assert all(
+        command in backend
+        for command in ("command -v codex", "command -v cursor-agent", "command -v uv")
+    )
     assert "cursor-grok-4.5-high" in backend
+    assert "command -v cursor-agent` が失敗する" in backend
+    assert "cursor-agent create-chat" in backend
+    assert "rate limit" in backend
+    assert "報告なしに fallback しない" in backend
 
 
-def test_codex_parent_has_three_roles_without_effort_selection():
+def test_codex_parent_fallback_lanes_without_effort_selection():
     text = _skill_text()
-    backend = _section(text, "### 3. backend 選択")
-    assert "| Codex | 実装 |" in backend
-    assert "| Codex | 計画・diff レビュー |" in backend
+    backend = _section(text, "### 3. backend 固定とフォールバック")
+    assert "| Codex 親 |" in backend
+    assert "cursor-agent → `spawn_agent` worker → 親実装 → 停止" in backend
+    assert "`spawn_agent` explorer → 終端処理" in backend
     assert "model_reasoning_effort" not in backend
 
 
@@ -266,6 +271,8 @@ def test_cursor_and_worktree_delegation_contract():
     assert 'codex -a never exec -C "<worktree>"' in delegation
     assert '--workspace "<worktree>"' in delegation + repair
     assert "cursor-agent -p --resume" in delegation
+    assert "cursor-agent.log" in delegation
+    assert "set -o pipefail" in delegation
     # cursor command の形は stdin_closed / worktree_commands_pin_directory に統合。
     assert "sandbox なし" in text
     assert "commit 禁止" in delegation
@@ -289,9 +296,6 @@ def test_checkpoint_commit_precedes_independent_review():
     # レビューは worktree 内で実行する。通常 checkout で走らせると commit 済み
     # branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する。
     # 2026-07-25 の圧縮で「worktree 内で」の指定が消えていた([P1])。
-    # step 3 の skip 選択と矛盾しないこと。無条件にレビューを要求すると
-    # 提示した選択肢が無効になる(記事の「競合する指示」アンチパターン)。
-    # 2026-07-25 の圧縮で条件が消えていた([P2])。
     assert 'codex -a never exec -C "<worktree>"' in review
     # worktree 固定は test_skill_invariants.py::worktree_commands_pin_directory に統合。
 
