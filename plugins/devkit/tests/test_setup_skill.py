@@ -84,7 +84,7 @@ def test_harness_matrix_and_approval_boundary():
 
 def test_environment_prerequisite_matrix():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    section = text.split("### 2. 環境前提チェック", 1)[1].split("## 同期", 1)[0]
+    section = text.split("### 環境前提チェック", 1)[1].split("## 同期", 1)[0]
     for cmd in ("claude", "codex", "cursor-agent", "node", "uv"):
         assert f"`{cmd}`" in section
     assert "tmux" not in section
@@ -163,8 +163,8 @@ def test_compaction_env_values_are_literal_and_scoped():
 
 def test_windows_font_approval_and_failure_boundary():
     text = SKILL_PATH.read_text(encoding="utf-8")
-    section = text.split("### 9. ターミナルフォント適用(Windows のみ)", 1)[1].split(
-        "### 10. 検証とレポート", 1
+    section = text.split("### ターミナルフォント適用(Windows のみ)", 1)[1].split(
+        "### 検証とレポート", 1
     )[0]
     assert "UDEV Gothic NF" in text
     assert "setup_terminal_font.py" in section

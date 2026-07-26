@@ -27,7 +27,7 @@ $ARGUMENTS
 
 対象は `$ARGUMENTS`、なければ cwd の git root。テンプレートは `SKILL_DIR/../../templates/rules/agents-rules.md`。不足、非 git repo、または `plugins/devkit/.claude-plugin/plugin.json` がある DevKit repo 自身なら変更せず停止する。
 
-### 2. 環境前提チェック
+### 環境前提チェック
 
 `command -v` で `claude` / `codex` / `cursor-agent` / `node` / `uv` を確認し、OK / MISSING と影響を報告する。インストール自体は行わない。
 
@@ -81,7 +81,7 @@ Windows updater の PowerShell 責務は Claude Code native installer、Codex co
 
 通常の同期・prune に差分承認ゲートは置かない。承認が必要なのは statusline と Windows Terminal font だけ。
 
-### 8. statusline 適用
+### statusline 適用
 
 Claude 親かつ `node` がある場合だけ適用する。check と apply は別のシェル呼び出しになり変数が持ち越されないため、毎回 `SKILL_DIR` を代入する。
 
@@ -92,7 +92,7 @@ node "$SKILL_DIR/../../statusline/install.js" --check
 
 差分を提示し、選択肢付き質問で承認後に適用する。DevKit 管理済み / 未導入は `--check` を外した同形、他設定との競合は上書きを追加確認して末尾に `--force` を付けた同形を使う（いずれも `SKILL_DIR` の代入を含める）。Codex 親・判定不能・node 不在は理由付き skip。
 
-### 9. ターミナルフォント適用(Windows のみ)
+### ターミナルフォント適用(Windows のみ)
 
 非 Windows は skip。Windows は次を確認し、選択肢付き質問で承認後、同じコマンドから `--check` だけ外して適用する。
 
@@ -103,7 +103,7 @@ uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/setup_terminal_
 
 ダウンロード失敗、SHA-256 不一致、font 未登録、Windows Terminal 未検出は案内のみで setup 全体を止めない。font 未検出時は settings.json を書かない。
 
-### 10. 検証とレポート
+### 検証とレポート
 
 次の不変条件と各 JSON 結果を確認する。
 
