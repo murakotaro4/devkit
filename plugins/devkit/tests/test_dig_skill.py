@@ -269,6 +269,17 @@ def test_delegation_records_explicit_thread_id_and_resumes_it():
     assert "--last" not in text
 
 
+def test_repair_loop_converges_by_findings_not_fixed_rounds():
+    repair = _section(_skill_text(), "### 8. 修正ループ")
+    assert "指摘がゼロで終了する" in repair
+    assert "第 1 巡は最初の独立レビュー" in repair
+    assert "件数が前巡以上の状態が 2 巡連続した" in repair
+    assert "同一 finding" in repair
+    assert "文言一致ではない" in repair
+    assert "20 巡に達した" in repair
+    assert "5 周" not in repair
+
+
 def test_cursor_and_worktree_delegation_contract():
     text = _skill_text()
     delegation = _section(text, "### 6. worktree 作成と実装委譲")
