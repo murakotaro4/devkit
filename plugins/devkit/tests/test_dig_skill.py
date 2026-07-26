@@ -166,6 +166,7 @@ def test_fixed_backend_assignment_and_python_gate_contract():
     assert "cursor-grok-4.5-high" in backend
     assert "可用性判定の失敗" in backend
     assert "chat 作成が非ゼロ終了" in backend
+    assert "agent 起動前に失敗" in backend
     assert "thread_id を採れない" in backend
     assert "起動そのものに失敗" in backend
     assert "起動不能または応答不能" in backend

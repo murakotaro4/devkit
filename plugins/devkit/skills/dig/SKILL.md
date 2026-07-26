@@ -148,7 +148,7 @@ backend をユーザーに質問しない。ユーザーが明示指定した場
 3. レート制限: 非ゼロ終了かつジョブログが上記キーワードに一致
 
 段ごとの具体形:
-- cursor-agent: 可用性=`command -v cursor-agent`、起動失敗=chat 作成が非ゼロ終了または `CHAT_ID` が空、レート制限=ジョブログ判定
+- cursor-agent: 可用性=`command -v cursor-agent`、起動失敗=chat 作成が非ゼロ終了 / `CHAT_ID` 空、または実行呼び出しが agent 起動前に失敗（モデル利用不可・引数拒否など）、レート制限=ジョブログ判定
 - codex CLI: 可用性=`command -v codex`（実装 / resume はさらに `command -v uv`。レビューに `uv` 不要）、レート制限=ジョブログ判定。起動失敗は lane 別—実装 / resume: 非ゼロ終了し thread_id を採れない。レビュー: 起動そのものに失敗（実行不能・認証や設定不備で起動に至らない）。レビュー実行後の非ゼロは起動失敗にせず、降格せず停止して報告する
 - サブエージェント（`Agent(...)` / `spawn_agent`）: 起動不能または応答不能
 
