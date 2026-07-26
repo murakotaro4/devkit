@@ -78,13 +78,20 @@ def test_auto_calculated_stop_limits_contract():
     limits = _section(_skill_text(), "## 上限停止の自動算出")
     assert "毎回ユーザーへ聞かず" in limits
     for row in (
-        ("小規模", "12 ターンまたは 45 分", "2 周", "20 分"),
-        ("標準", "24 ターンまたは 120 分", "3 周", "30 分"),
-        ("大規模", "40 ターンまたは 240 分", "4 周", "45 分"),
+        "| 小規模 | 12 ターンまたは 45 分 | 20 巡 | 20 分 |",
+        "| 標準 | 24 ターンまたは 120 分 | 20 巡 | 30 分 |",
+        "| 大規模 | 40 ターンまたは 240 分 | 20 巡 | 45 分 |",
     ):
-        for phrase in row:
-            assert phrase in limits
+        assert row in limits
+    assert "件数が前巡以上" in limits
+    assert "同一 finding" in limits
+    assert "20 巡到達" in limits
     assert "複数 Goal への分割を提案" in limits
+
+
+def test_goal_body_includes_repair_loop_stop_conditions():
+    body = _section(_skill_text(), "## Goal 本文")
+    assert "修正ループ停止条件" in body
 
 
 def test_prohibited_actions_contract():

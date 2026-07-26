@@ -95,7 +95,8 @@ def test_outcomes_are_closed_enum_and_all_paths_record():
     text = _skill_text()
     assert re.search(r"\w+ -->\|候補なし\| R\[RECORD\]", text)
     assert "R --> S[DONE]" in text
-    assert "G -->|2回目も未解消| X" in text
+    assert "G -->|収束せず| X" in text
+    assert "F -->|2回失敗| X" in text
     assert "変更なしの正常系" in text
 
 

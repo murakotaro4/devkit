@@ -1285,6 +1285,154 @@ def _missing_order_markers(
 DIG = "plugins/devkit/skills/dig/SKILL.md"
 
 
+REPAIR_LOOP_BACKSTOP = 20
+REPAIR_LOOP_STREAK = 2
+REPAIR_LOOP_SURFACES = {
+    "plugins/devkit/skills/dig/SKILL.md": "### 8. 修正ループ",
+    "plugins/devkit/skills/goal-prompt/SKILL.md": "## 上限停止の自動算出",
+    "plugins/devkit/skills/repo-loop/SKILL.md": "### 独立レビュー",
+}
+REPAIR_LOOP_BACKSTOP_RE = re.compile(r"(\d+)\s*巡(?:に達した|到達)")
+REPAIR_LOOP_STREAK_RE = re.compile(r"(\d+)\s*巡連続")
+REPAIR_LOOP_ZERO_EXIT_RE = re.compile(r"(findings|指摘)\s*が\s*ゼロ")
+
+
+def _repair_loop_sections(docs: Docs) -> list[tuple[str, str, str]]:
+    """修正ループ停止条件を置く surface と節本文。
+
+    membership は節見出しの構造で決める。数値そのものを対象特定に使うと、
+    バックストップ値を変えた退行が検査対象から消えて素通りする。
+    """
+    sections: list[tuple[str, str, str]] = []
+    for path, heading in REPAIR_LOOP_SURFACES.items():
+        body = _section_body(docs.get(path, ""), heading)
+        sections.append((path, heading, body))
+    return sections
+
+
+def check_repair_loop_stop_conditions(docs: Docs) -> list[str]:
+    """3 スキルの修正ループ停止条件を揃える。
+
+    件数停滞・再出・バックストップに加え、連続しきい値とゼロ終了も検査する。
+    """
+    problems: list[str] = []
+    backstops: list[tuple[str, int]] = []
+    streaks: list[tuple[str, tuple[int, ...]]] = []
+    for path, heading, body in _repair_loop_sections(docs):
+        if not body:
+            problems.append(f"{path}: {heading} がない")
+            continue
+        if REPAIR_LOOP_ZERO_EXIT_RE.search(body) is None:
+            problems.append(f"{path}: findings/指摘ゼロ終了の条件がない")
+        if "前巡以上" not in body:
+            problems.append(f"{path}: 件数非改善の停止条件がない")
+        if "同一 finding" not in body or "再出" not in body:
+            problems.append(f"{path}: 同一 finding 再出の停止条件がない")
+        found_streaks = tuple(
+            int(match.group(1)) for match in REPAIR_LOOP_STREAK_RE.finditer(body)
+        )
+        if len(found_streaks) != 2:
+            problems.append(
+                f"{path}: 巡連続しきい値が 2 件でない: {found_streaks}"
+            )
+        elif any(value != REPAIR_LOOP_STREAK for value in found_streaks):
+            problems.append(
+                f"{path}: 巡連続しきい値が {REPAIR_LOOP_STREAK} でない: "
+                f"{found_streaks}"
+            )
+        else:
+            streaks.append((path, found_streaks))
+        match = REPAIR_LOOP_BACKSTOP_RE.search(body)
+        if match is None:
+            problems.append(f"{path}: バックストップ巡の停止条件がない")
+        else:
+            backstops.append((path, int(match.group(1))))
+
+    if len(streaks) == len(REPAIR_LOOP_SURFACES):
+        streak_sets = {values for _, values in streaks}
+        if len(streak_sets) != 1:
+            problems.append(
+                f"修正ループの巡連続しきい値が surface 間で不一致: {streaks}"
+            )
+
+    if len(backstops) == len(REPAIR_LOOP_SURFACES):
+        values = {value for _, value in backstops}
+        if len(values) != 1:
+            problems.append(
+                f"修正ループのバックストップが surface 間で不一致: {backstops}"
+            )
+        elif next(iter(values)) != REPAIR_LOOP_BACKSTOP:
+            problems.append(
+                f"修正ループのバックストップが {REPAIR_LOOP_BACKSTOP} でない: "
+                f"{backstops}"
+            )
+    return problems
+
+
+def targets_repair_loop_stop_conditions(docs: Docs) -> int:
+    del docs
+    return len(REPAIR_LOOP_SURFACES)
+
+
+def mutate_repair_loop_stop_conditions(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        "plugins/devkit/skills/dig/SKILL.md",
+        "件数が前巡以上の状態が 2 巡連続した / ",
+        "",
+    )
+
+
+def mutate_repair_loop_stop_conditions_drops_recurrence(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        "plugins/devkit/skills/goal-prompt/SKILL.md",
+        "同一 finding（ファイル・箇所・根本原因同一。文言一致ではない）が 2 巡連続で再出、",
+        "",
+    )
+
+
+def mutate_repair_loop_stop_conditions_shifts_backstop(docs: Docs) -> Docs:
+    mutated = docs
+    for path, old, new in (
+        (
+            "plugins/devkit/skills/dig/SKILL.md",
+            "20 巡に達した",
+            "21 巡に達した",
+        ),
+        (
+            "plugins/devkit/skills/goal-prompt/SKILL.md",
+            "20 巡到達",
+            "21 巡到達",
+        ),
+        (
+            "plugins/devkit/skills/repo-loop/SKILL.md",
+            "20 巡に達した",
+            "21 巡に達した",
+        ),
+    ):
+        mutated = _replace_once(mutated, path, old, new)
+    return mutated
+
+
+def mutate_repair_loop_stop_conditions_shifts_streak(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        "plugins/devkit/skills/repo-loop/SKILL.md",
+        "2 巡連続",
+        "3 巡連続",
+    )
+
+
+def mutate_repair_loop_stop_conditions_drops_zero_exit(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        "plugins/devkit/skills/goal-prompt/SKILL.md",
+        "findings がゼロで終了する。",
+        "",
+    )
+
+
 COMMIT_MARKER = re.compile(r"^#### 節目 commit$", re.MULTILINE)
 REVIEW_MARKER = re.compile(r"^### \d+\. 自レビューと独立 diff レビュー$", re.MULTILINE)
 
@@ -1557,6 +1705,19 @@ CHECKS: dict[str, Check] = {
         category="B4",
         why="backend の固定割り当てとフォールバック順序の退行を防ぐ",
     ),
+    "repair_loop_stop_conditions": Check(
+        run=check_repair_loop_stop_conditions,
+        mutate=mutate_repair_loop_stop_conditions,
+        extra_mutations=(
+            mutate_repair_loop_stop_conditions_drops_recurrence,
+            mutate_repair_loop_stop_conditions_shifts_backstop,
+            mutate_repair_loop_stop_conditions_shifts_streak,
+            mutate_repair_loop_stop_conditions_drops_zero_exit,
+        ),
+        targets=targets_repair_loop_stop_conditions,
+        category="B5",
+        why="3 スキルへ散った修正ループ停止条件のドリフトを防ぐ",
+    ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
         mutate=mutate_commit_before_independent_review,
@@ -1591,6 +1752,7 @@ EXPECTED_CATEGORIES = {
     "B2",
     "B3",
     "B4",
+    "B5",
     "C1",
     "C2",
     "C3",

@@ -80,8 +80,8 @@ flowchart TD
   F -->|成功| G[INDEPENDENT_REVIEW]
   F -->|2回失敗| X[PUBLISH_FAILURE]
   G -->|findings なし| H[PUBLISH_DRAFT_PR]
-  G -->|1回目の findings| E
-  G -->|2回目も未解消| X
+  G -->|findings| E
+  G -->|収束せず| X
   P --> R
   X --> R
   H --> R
@@ -114,7 +114,7 @@ flowchart TD
 - 通常 checkout には書き込まない。最新 `<remote>/<default>` から専用 worktree を作り、branch 衝突時は一意サフィックス、なお衝突すれば連番を付ける。他セッションの worktree・branch は変更しない。
 - worktree 作成後に evidence を最新 base 上で再検証し、解消済みなら実装せず `noop`。非 default branch の event でも untrusted な event 由来の ref を基点にせず、default branch 基点で解決できる課題だけ実装する。
 - baseline で既存 failure と今回の failure を分離する。selected_task / write_scope 外の「ついで修正」はしない。
-- VERIFY は trigger の再現、影響範囲の test / lint / typecheck / build、repo の full gate、diff 自レビューから必要十分な検証を選び、command・status・主要結果を記録する。実装・修正は合計 2 回まで。
+- VERIFY は trigger の再現、影響範囲の test / lint / typecheck / build、repo の full gate、diff 自レビューから必要十分な検証を選び、command・status・主要結果を記録する。VERIFY 失敗による再実装は 2 回まで。
 - commit 前の staged diff と push 前の commit 群に secret 検査を行う 2 層契約とする。導入済み scanner を優先し、なければ pattern grep。検出時は commit / push を中止し、値そのものを結果・Issue・PR に転記しない。
 
 ### 独立レビュー
@@ -127,7 +127,7 @@ flowchart TD
 codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base <remote>/<default> < /dev/null
 ```
 
-`review` は scope フラグと positional PROMPT を併用できないため、objective・selected_task・write_scope・検証結果を渡す場合は `review` を使わず、その要約を prompt に含めた通常の `codex -a never exec -C "<worktree>" --sandbox read-only` で追加レビューする（こちらも worktree 内で実行する）。利用不能なら独立サブエージェントを使う。findings は write_scope 内で修正・再検証する。独立レビュー手段がすべて不能で、対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格する。必須でない repo だけ、未実施を明記した Draft PR を許可する。
+`review` は scope フラグと positional PROMPT を併用できないため、objective・selected_task・write_scope・検証結果を渡す場合は `review` を使わず、その要約を prompt に含めた通常の `codex -a never exec -C "<worktree>" --sandbox read-only` で追加レビューする（こちらも worktree 内で実行する）。利用不能なら独立サブエージェントを使う。findings は write_scope 内で修正・再検証する。findings がゼロで終了する。第 1 巡は最初の独立レビュー。件数は重複除去後の actionable findings 総数（severity は区別しない）。次のいずれかで停止し outcome を `failed` とする: 件数が前巡以上の状態が 2 巡連続した / 同一 finding（同じファイル・箇所・根本原因。文言一致ではない）が 2 巡連続で再出した / 20 巡に達した。独立レビュー手段がすべて不能で、対象 repo がレビュー必須なら Draft PR を公開せず `proposal` へ降格する。必須でない repo だけ、未実施を明記した Draft PR を許可する。
 
 ### publish
 
@@ -143,7 +143,7 @@ codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="me
 | `draft_pr` | 実装・検証・レビュー後に Draft PR を作成 |
 | `proposal` | high risk、検証不能、scope 超過、レビュー不能、proposal-only |
 | `blocked` | 必須情報・権限・network・tool・base が不足 |
-| `failed` | 2 回の試行で検証・レビューを通せない |
+| `failed` | VERIFY の 2 回失敗、またはレビューが収束しない |
 
 RECORD は人間向け要約と次の JSON を出す。secret・token・private ThoughtDB 本文・長大 log は含めない。
 
