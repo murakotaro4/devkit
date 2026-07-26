@@ -1040,6 +1040,7 @@ FALLBACK_TABLE_HEADER = ("親", "実装 lane", "レビュー lane（計画 / dif
 BACKEND_SECTION = "### 3. backend 固定とフォールバック"
 CURSOR_MODEL = "cursor-grok-4.5-high"
 CODEX_MODEL = "gpt-5.6-sol"
+EXPECTED_ROLES = ("実装", "計画レビュー", "diff レビュー")
 EXPECTED_FALLBACK_LANES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "Claude 親": (
         (
@@ -1116,11 +1117,18 @@ def check_fixed_backend_assignment(docs: Docs) -> list[str]:
 
     role_rows, fallback_rows = _fixed_backend_rows(docs)
     problems: list[str] = []
-    by_role = {row[0]: row[1] for row in role_rows if len(row) >= 2}
-
-    for role in ("実装", "計画レビュー", "diff レビュー"):
-        if role not in by_role:
+    role_names = [row[0] for row in role_rows if row]
+    role_counts = {role: role_names.count(role) for role in set(role_names)}
+    for role in EXPECTED_ROLES:
+        count = role_counts.get(role, 0)
+        if count == 0:
             problems.append(f"{DIG}: 役割表に {role} 行がない")
+        elif count > 1:
+            problems.append(f"{DIG}: 役割表に {role} 行が重複している")
+    for role in sorted(set(role_names) - set(EXPECTED_ROLES)):
+        problems.append(f"{DIG}: 役割表に未知の役割行 {role}")
+
+    by_role = {row[0]: row[1] for row in role_rows if len(row) >= 2}
 
     impl = by_role.get("実装", "")
     if CURSOR_MODEL not in impl:
@@ -1204,6 +1212,16 @@ def mutate_fixed_backend_assignment_drops_review_lane(docs: Docs) -> Docs:
         DIG,
         "codex CLI → `Agent(general-purpose, model=opus)` → 終端処理",
         "codex CLI → 終端処理",
+    )
+
+
+def mutate_fixed_backend_assignment_duplicates_role(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
+        f"| 実装 | codex `{CODEX_MODEL}` / medium |\n"
+        f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
     )
 
 
@@ -1512,6 +1530,7 @@ CHECKS: dict[str, Check] = {
             mutate_fixed_backend_assignment_swaps_review,
             mutate_fixed_backend_assignment_drops_fallback,
             mutate_fixed_backend_assignment_drops_review_lane,
+            mutate_fixed_backend_assignment_duplicates_role,
         ),
         targets=targets_fixed_backend_assignment,
         category="B4",

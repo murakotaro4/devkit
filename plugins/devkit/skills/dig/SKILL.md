@@ -188,7 +188,7 @@ JOB_DIR=<記録済みパス> && uv run --no-project --python ">=3.10" python -c 
 cursor-agent はジョブごとに chatId を保存する。stdout / stderr は合流して JOB_DIR に保存し、ログ増分で進捗を示す。
 
 ```bash
-JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-job.XXXXXX") && CHAT_ID="$(cursor-agent create-chat < /dev/null | tr -d '\r\n')" && test -n "$CHAT_ID" && printf '%s\n' "$CHAT_ID" > "$JOB_DIR/chat-id.txt" && echo "JOB_DIR=$JOB_DIR"
+JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-job.XXXXXX") && set -o pipefail && CHAT_ID="$(cursor-agent create-chat < /dev/null | tr -d '\r\n')" && test -n "$CHAT_ID" && printf '%s\n' "$CHAT_ID" > "$JOB_DIR/chat-id.txt" && echo "JOB_DIR=$JOB_DIR"
 JOB_DIR=<記録済みパス> && set -o pipefail && cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null 2>&1 | tee "$JOB_DIR/cursor-agent.log"
 ```
 
