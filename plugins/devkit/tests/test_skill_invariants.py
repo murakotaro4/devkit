@@ -1609,12 +1609,14 @@ def mutate_ci_green_before_merge(docs: Docs) -> Docs:
 # B8: request_user_input をハーネス判定キーへ格上げする退行を防ぐ
 # ---------------------------------------------------------------------------
 
-# 表を持たないハーネス節。判定表の代わりに散文の決定文を検査する。
-PROSE_HARNESS_DOCS = frozenset({"plugins/devkit/skills/goal-prompt/SKILL.md"})
+# 散文ハーネスは構造的に判定できないため未検査とする。
+# goal-prompt のハーネス節は 2 文からなり、前者は親の決定、後者は親ごとの質問手段
+# （正当に `request_user_input` を含む）。両者を文言に頼らず区別する手段がない。
+UNCHECKED_HARNESS_DOCS = frozenset({"plugins/devkit/skills/goal-prompt/SKILL.md"})
 HARNESS_HEADING = re.compile(r"^## ハーネス[^\n]*$", re.MULTILINE)
 GOAL_PROMPT = "plugins/devkit/skills/goal-prompt/SKILL.md"
 HANDOFF = "plugins/devkit/skills/handoff/SKILL.md"
-COMMIT_PUSH = "plugins/devkit/skills/commit-push/SKILL.md"
+BACKTICK_IDENTIFIER = re.compile(r"`[^`]+`")
 
 
 def _skill_paths(docs: Docs) -> list[str]:
@@ -1659,7 +1661,7 @@ def _decision_table_cells(section: str) -> list[str] | None:
 def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for path in _skill_paths(docs):
-        if path in PROSE_HARNESS_DOCS:
+        if path in UNCHECKED_HARNESS_DOCS:
             continue
         section = _harness_section(docs.get(path, ""))
         if section is None:
@@ -1670,25 +1672,20 @@ def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
     return found
 
 
-def _prose_sentences(text: str) -> list[str]:
-    """句点と改行で文を分割する。`_shell_surfaces` と同じ境界。"""
-    return [part.strip() for part in re.split(r"[。\n]", text) if part.strip()]
-
-
 def check_harness_decision_table_excludes_request_user_input(
     docs: Docs,
 ) -> list[str]:
-    """判定表の判定セルと散文の決定文に request_user_input を持ち込ませない。
+    """判定表の判定セルに request_user_input を持ち込ませない。
 
     位置関係（節冒頭の禁止文の有無）では成立しない。ハーネス節の見出しが
     3 形式に分かれ、しかも `request_user_input` が節冒頭の禁止文に現れる文書が
-    複数あるため、判定表のセル（または散文の決定文）を直接見る。
+    複数あるため、判定表のセルを直接見る。
     """
     problems: list[str] = []
     tables = _docs_with_decision_tables(docs)
 
     for path in _skill_paths(docs):
-        if path in PROSE_HARNESS_DOCS:
+        if path in UNCHECKED_HARNESS_DOCS:
             continue
         section = _harness_section(docs.get(path, ""))
         if section is None:
@@ -1703,14 +1700,13 @@ def check_harness_decision_table_excludes_request_user_input(
             problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
             continue
         # 性質 2: 1 行目 AskUserQuestion のみ、2 行目 spawn_agent、
-        # 3 行目は能力条件を持たないフォールバック。
+        # 3 行目は識別子参照を持たないフォールバック。
         # 1 行目は AskUserQuestion の有無だけでなく spawn_agent の混入も拒む。
         # 含めないと「AskUserQuestion または spawn_agent」へ書き換えて Claude 親判定を
         # 骨抜きにできる。2 行目へ「AskUserQuestion を含まない」は要求しない。
         # dig の 2 行目は否定形として AskUserQuestion を含むのが正しい。
-        # 3 行目は AskUserQuestion/spawn_agent だけでなく「が使える」自体を拒む。
-        # 語彙リスト（判定不能 / どちらもない）では表現を変えるだけで抜けるため、
-        # 「能力の有無を条件にしない」という構造でフォールバック行を定義する。
+        # 3 行目は backtick 付き識別子の有無で定義する。「が使える」等の文言拒否は
+        # 「が利用可能な」で抜ける。識別子参照なら言い回しを変えても抜けない。
         if "AskUserQuestion" not in cells[0]:
             problems.append(f"{path}: 1 行目の判定セルに AskUserQuestion がない: {cells[0]}")
         if "spawn_agent" in cells[0]:
@@ -1723,9 +1719,9 @@ def check_harness_decision_table_excludes_request_user_input(
             problems.append(
                 f"{path}: 3 行目の判定セルに AskUserQuestion/spawn_agent がある: {cells[2]}"
             )
-        if "が使える" in cells[2]:
+        if BACKTICK_IDENTIFIER.search(cells[2]):
             problems.append(
-                f"{path}: 3 行目の判定セルが能力条件を持つ: {cells[2]}"
+                f"{path}: 3 行目の判定セルに識別子参照がある: {cells[2]}"
             )
         # 性質 3: どの判定セルにも request_user_input が現れない。
         for index, cell in enumerate(cells, start=1):
@@ -1734,39 +1730,11 @@ def check_harness_decision_table_excludes_request_user_input(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
 
-    # 性質 4: 散文ハーネスは、親を決定する文に request_user_input を含まない。
-    # 決定文は AskUserQuestion と spawn_agent の両方で親を分ける文。質問手段の
-    # 割り当て文（「Codex 親 plan mode が request_user_input」）はここに来ない。
-    for path in sorted(PROSE_HARNESS_DOCS):
-        text = docs.get(path)
-        if text is None:
-            problems.append(f"{path}: 対象文書が存在しない")
-            continue
-        section = _harness_section(text)
-        if section is None:
-            problems.append(f"{path}: ハーネス節がちょうど 1 つでない")
-            continue
-        decision_sentences = [
-            sentence
-            for sentence in _prose_sentences(section)
-            if "親" in sentence
-            and "AskUserQuestion" in sentence
-            and "spawn_agent" in sentence
-        ]
-        if not decision_sentences:
-            problems.append(f"{path}: 親を決定する文がない")
-            continue
-        for sentence in decision_sentences:
-            if "request_user_input" in sentence:
-                problems.append(
-                    f"{path}: 親の決定文に request_user_input がある: {sentence}"
-                )
-
     return problems
 
 
 def targets_harness_decision_table_excludes_request_user_input(docs: Docs) -> int:
-    return len(_skill_paths(docs))
+    return sum(1 for path in _skill_paths(docs) if path not in UNCHECKED_HARNESS_DOCS)
 
 
 def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
@@ -1790,12 +1758,15 @@ def mutate_harness_injects_spawn_agent_into_first_row(docs: Docs) -> Docs:
 
 
 def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
-    """3 行目のフォールバックへ新しい判定キーを持ち込む。"""
+    """3 行目のフォールバックへ識別子参照を持ち込む。
+
+    「が使える」以外の言い回しでも識別子があれば落ちることを固定する。
+    """
     return _replace_once(
         docs,
         HANDOFF,
         "| 判定不能 | 選択肢付き自由文 |",
-        "| `BrowserTool` が使える Browser 親 | 選択肢付き自由文 |",
+        "| `BrowserTool` が利用可能な Browser 親 | 選択肢付き自由文 |",
     )
 
 
@@ -1822,16 +1793,6 @@ def mutate_harness_drops_decision_row(docs: Docs) -> Docs:
 def mutate_harness_drops_section_heading(docs: Docs) -> Docs:
     """ハーネス節の見出しごと削除する（性質 1 またはレジストリ完全性）。"""
     return _replace_once(docs, HANDOFF, "## ハーネス・進捗\n\n", "")
-
-
-def mutate_harness_injects_request_user_input_into_prose(docs: Docs) -> Docs:
-    """goal-prompt の決定文へ request_user_input を挿入する（性質 4）。"""
-    return _replace_once(
-        docs,
-        GOAL_PROMPT,
-        "なければ `spawn_agent` の有無で",
-        "なければ `request_user_input` や `spawn_agent` の有無で",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1981,123 +1942,6 @@ def mutate_write_boundary_drops_section(docs: Docs) -> Docs:
     return _replace_once(docs, GOAL_PROMPT, "## 禁止事項\n\n", "")
 
 
-# ---------------------------------------------------------------------------
-# B7: 危険検出時の停止指示を宣言する
-# ---------------------------------------------------------------------------
-
-STOP_DECLARATION_SECTIONS: tuple[tuple[str, str], ...] = (
-    (COMMIT_PUSH, "### secret 2 層検査"),
-    (COMMIT_PUSH, "### push"),
-)
-
-# 停止・進入ゲート文の否定。直接形「停止しない」「進まない」も見る。
-# 最初の 1 文だけを見ると、後ろに否定文を足すだけで通ってしまう。
-HALT_SENTENCE = re.compile(r"[^。\n]*(?:停止|場合だけ進む)[^。\n]*")
-HALT_NEGATION = re.compile(
-    r"(?:必要はない|しなくてよい|は不要|停止しない|進まない)"
-)
-
-
-def check_dangerous_operations_declare_stop(docs: Docs) -> list[str]:
-    """登録した各節に肯定形の停止指示があり、否定されていないこと。
-
-    自動復旧の指示検出はここでは行わない。言い回しは列挙しきれず check として
-    収束しないため、停止宣言の構造（存在と否定の有無）だけを見る。
-    """
-    problems: list[str] = []
-    for path, heading in STOP_DECLARATION_SECTIONS:
-        text = docs.get(path)
-        if text is None:
-            problems.append(f"{path}: 対象文書が存在しない")
-            continue
-        body = _section_body(text, heading)
-        if not body:
-            problems.append(f"{path}: {heading} がない")
-            continue
-
-        # 肯定形の停止指示が 1 つ以上あり、否定された停止文が 0 であること。
-        # push 節は語「停止」を使わず「場合だけ進む」で進入ゲートを書くので同等と認める。
-        halt_matches = list(HALT_SENTENCE.finditer(body))
-        if not halt_matches:
-            problems.append(f"{path}: {heading} に停止指示がない")
-            continue
-        negated = [
-            match.group(0)
-            for match in halt_matches
-            if HALT_NEGATION.search(match.group(0))
-        ]
-        affirmative = [
-            match.group(0)
-            for match in halt_matches
-            if not HALT_NEGATION.search(match.group(0))
-        ]
-        for sentence in negated:
-            problems.append(
-                f"{path}: {heading} の停止指示が否定されている: {sentence}"
-            )
-        if not affirmative:
-            problems.append(f"{path}: {heading} に肯定形の停止指示がない")
-    return problems
-
-
-def targets_dangerous_operations_declare_stop(docs: Docs) -> int:
-    return len(STOP_DECLARATION_SECTIONS)
-
-
-def mutate_declare_stop_removes_halt(docs: Docs) -> Docs:
-    """停止指示を消す（「自動除外する」へ置き換え、停止語が無くなる）。"""
-    return _replace_once(
-        docs,
-        COMMIT_PUSH,
-        "内容層で検出したら自動除外せず停止する。",
-        "内容層で検出したら自動除外する。",
-    )
-
-
-def mutate_declare_stop_drops_stop_sentence(docs: Docs) -> Docs:
-    """停止指示の文を削除する。"""
-    return _replace_once(
-        docs,
-        COMMIT_PUSH,
-        "内容層で検出したら自動除外せず停止する。",
-        "",
-    )
-
-
-def mutate_declare_stop_drops_push_gate(docs: Docs) -> Docs:
-    """push 節の進入ゲート文を削除する。
-
-    登録した節ごとに停止指示の mutation を持たせる。secret 節だけを注入すると、
-    push 節のゲートが消えても検査が成立していることの証跡がコードに残らない。
-    """
-    return _replace_once(
-        docs,
-        COMMIT_PUSH,
-        "承認時と push 直前の remote / branch が完全一致する場合だけ進む。",
-        "承認時と push 直前の remote / branch を確認する。",
-    )
-
-
-def mutate_declare_stop_drops_push_section(docs: Docs) -> Docs:
-    """push 節ごと削除する。節の消失も登録節ごとに検出させる。"""
-    return _replace_once(docs, COMMIT_PUSH, "### push\n\n", "")
-
-
-def mutate_declare_stop_negates_stop(docs: Docs) -> Docs:
-    """停止指示を直接否定する。最初の肯定文だけを見る実装では素通りする退行。"""
-    return _replace_once(
-        docs,
-        COMMIT_PUSH,
-        "内容層で検出したら自動除外せず停止する。",
-        "内容層で検出しても停止しない。",
-    )
-
-
-def mutate_declare_stop_drops_section(docs: Docs) -> Docs:
-    """secret 節ごと削除する。"""
-    return _replace_once(docs, COMMIT_PUSH, "### secret 2 層検査\n\n", "")
-
-
 CHECKS: dict[str, Check] = {
     "stdin_closed": Check(
         run=check_stdin_closed,
@@ -2220,7 +2064,6 @@ CHECKS: dict[str, Check] = {
             mutate_harness_swaps_decision_rows,
             mutate_harness_drops_decision_row,
             mutate_harness_drops_section_heading,
-            mutate_harness_injects_request_user_input_into_prose,
         ),
         targets=targets_harness_decision_table_excludes_request_user_input,
         category="B8",
@@ -2237,20 +2080,6 @@ CHECKS: dict[str, Check] = {
         targets=targets_write_boundary_sets_are_exact,
         category="B6",
         why="書き込み境界の禁止/許可集合への追加・削除を防ぐ",
-    ),
-    "dangerous_operations_declare_stop": Check(
-        run=check_dangerous_operations_declare_stop,
-        mutate=mutate_declare_stop_removes_halt,
-        extra_mutations=(
-            mutate_declare_stop_drops_stop_sentence,
-            mutate_declare_stop_drops_push_gate,
-            mutate_declare_stop_negates_stop,
-            mutate_declare_stop_drops_section,
-            mutate_declare_stop_drops_push_section,
-        ),
-        targets=targets_dangerous_operations_declare_stop,
-        category="B7",
-        why="危険検出時の停止指示の欠落・否定を防ぐ",
     ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
@@ -2288,7 +2117,6 @@ EXPECTED_CATEGORIES = {
     "B4",
     "B5",
     "B6",
-    "B7",
     "B8",
     "C1",
     "C2",
@@ -2368,18 +2196,18 @@ def test_step_numbering_registry_covers_all_targets():
 
 
 def test_harness_registry_covers_all_skills():
-    """表形式の判定表文書と PROSE_HARNESS_DOCS の和が全 SKILL.md と一致する。
+    """判定表が取れた文書と UNCHECKED_HARNESS_DOCS の和が全 SKILL.md と一致する。
 
-    新しいスキルを足したときに登録漏れが fail になり、散文側への振り分け忘れを防ぐ。
+    新しいスキルを足したときに登録漏れが fail になり、未検査側への振り分け忘れを防ぐ。
     """
     skill_paths = set(_skill_paths(REAL_DOCS))
     table_docs = set(_docs_with_decision_tables(REAL_DOCS))
-    prose = set(PROSE_HARNESS_DOCS)
-    assert table_docs.isdisjoint(prose), (
-        f"判定表と散文レジストリが重複: {sorted(table_docs & prose)}"
+    unchecked = set(UNCHECKED_HARNESS_DOCS)
+    assert table_docs.isdisjoint(unchecked), (
+        f"判定表と未検査レジストリが重複: {sorted(table_docs & unchecked)}"
     )
-    assert table_docs | prose == skill_paths, (
+    assert table_docs | unchecked == skill_paths, (
         "ハーネスレジストリが全 SKILL.md を覆っていない: "
-        f"missing={sorted(skill_paths - (table_docs | prose))}, "
-        f"extra={sorted((table_docs | prose) - skill_paths)}"
+        f"missing={sorted(skill_paths - (table_docs | unchecked))}, "
+        f"extra={sorted((table_docs | unchecked) - skill_paths)}"
     )

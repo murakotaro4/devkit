@@ -80,6 +80,7 @@ def test_push_contract_uses_single_explicit_refspec():
     assert all(prohibited in section for prohibited in ("force push", "`--tags`", "複数 ref"))
     assert all(blocker in section for blocker in ("upstream 不在", "detached HEAD", "origin なし"))
     assert all(forbidden_recovery in section for forbidden_recovery in ("自動 rebase", "merge", "別 branch push"))
+    assert "承認時と push 直前の remote / branch が完全一致する場合だけ進む" in section
 
 
 def test_harness_contract_is_centralized():
