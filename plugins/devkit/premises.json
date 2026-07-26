@@ -420,7 +420,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_skill_invariants.py",
-          "count": 49
+          "count": 46
         }
       ]
     },

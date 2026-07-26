@@ -1616,7 +1616,7 @@ UNCHECKED_HARNESS_DOCS = frozenset({"plugins/devkit/skills/goal-prompt/SKILL.md"
 HARNESS_HEADING = re.compile(r"^## ハーネス[^\n]*$", re.MULTILINE)
 GOAL_PROMPT = "plugins/devkit/skills/goal-prompt/SKILL.md"
 HANDOFF = "plugins/devkit/skills/handoff/SKILL.md"
-BACKTICK_IDENTIFIER = re.compile(r"`[^`]+`")
+BACKTICK_IDENTIFIER = re.compile(r"`([^`]+)`")
 
 
 def _skill_paths(docs: Docs) -> list[str]:
@@ -1685,10 +1685,28 @@ def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
     return found
 
 
+def _backtick_identifiers(cell: str) -> frozenset[str]:
+    """セル内の backtick で囲まれた識別子だけを集める。
+
+    dig の 2 行目は否定形として AskUserQuestion を裸で含む。裸トークンを拾うと
+    集合が壊れ、dig だけが落ちる。囲まれたものだけを識別子とする。
+    """
+    return frozenset(BACKTICK_IDENTIFIER.findall(cell))
+
+
+# 判定列の行ごとの識別子集合。文言は文書ごとに揺れるが、構成は 10 本で一致する。
+EXPECTED_DECISION_IDS = (
+    frozenset({"AskUserQuestion"}),
+    frozenset({"spawn_agent"}),
+    frozenset(),
+)
+QUESTION_TOOL_IDS = ("AskUserQuestion", "spawn_agent", "request_user_input")
+
+
 def check_harness_decision_table_excludes_request_user_input(
     docs: Docs,
 ) -> list[str]:
-    """判定表の判定セル・質問セルの共通契約を検査する。
+    """判定表の判定セル・質問セルを識別子集合で固定する。
 
     位置関係（節冒頭の禁止文の有無）では成立しない。ハーネス節の見出しが
     3 形式に分かれ、しかも `request_user_input` が節冒頭の禁止文に現れる文書が
@@ -1712,46 +1730,48 @@ def check_harness_decision_table_excludes_request_user_input(
         if len(cells) != 3:
             problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
             continue
-        # 性質 2: 1 行目 AskUserQuestion のみ、2 行目 spawn_agent、
-        # 3 行目は識別子参照を持たないフォールバック。
-        # 1 行目は AskUserQuestion の有無だけでなく spawn_agent の混入も拒む。
-        # 含めないと「AskUserQuestion または spawn_agent」へ書き換えて Claude 親判定を
-        # 骨抜きにできる。2 行目へ「AskUserQuestion を含まない」は要求しない。
-        # dig の 2 行目は否定形として AskUserQuestion を含むのが正しい。
-        # 3 行目は backtick 付き識別子の有無で定義する。「が使える」等の文言拒否は
-        # 「が利用可能な」で抜ける。識別子参照なら言い回しを変えても抜けない。
-        if "AskUserQuestion" not in cells[0]:
-            problems.append(f"{path}: 1 行目の判定セルに AskUserQuestion がない: {cells[0]}")
-        if "spawn_agent" in cells[0]:
-            problems.append(
-                f"{path}: 1 行目の判定セルに spawn_agent がある: {cells[0]}"
-            )
-        if "spawn_agent" not in cells[1]:
-            problems.append(f"{path}: 2 行目の判定セルに spawn_agent がない: {cells[1]}")
-        if "AskUserQuestion" in cells[2] or "spawn_agent" in cells[2]:
-            problems.append(
-                f"{path}: 3 行目の判定セルに AskUserQuestion/spawn_agent がある: {cells[2]}"
-            )
-        if BACKTICK_IDENTIFIER.search(cells[2]):
-            problems.append(
-                f"{path}: 3 行目の判定セルに識別子参照がある: {cells[2]}"
-            )
-        # 性質 3: どの判定セルにも request_user_input が現れない。
+        # 性質 2: 判定列は行ごとの backtick 識別子集合で固定する。
+        # 文言（が使える / が利用可能な 等）は文書ごとに揺れるが、識別子構成は
+        # 10 本で一致する。揺れる部分ではなく揃っている部分を見る。
+        for index, (cell, expected) in enumerate(
+            zip(cells, EXPECTED_DECISION_IDS, strict=True), start=1
+        ):
+            actual = _backtick_identifiers(cell)
+            if actual != expected:
+                problems.append(
+                    f"{path}: 判定セル {index} の識別子集合が {sorted(expected)} "
+                    f"でない: {sorted(actual)} ({cell})"
+                )
+        # 性質 3: 判定セルに request_user_input を判定キーとして書かない。
+        # backtick 無しの混入も拒否する（集合等価は囲み付きだけを見るため）。
         for index, cell in enumerate(cells, start=1):
             if "request_user_input" in cell:
                 problems.append(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
-        # 性質 4: Claude 親行の質問セルは AskUserQuestion を使う。
-        # 2・3 行目は検査しない。plan mode / 通常 mode の分岐などハーネスごとの
-        # 正当な差異があり、共通契約として固定できるのは Claude 親の質問手段だけ。
+        # 性質 4: 質問列も 3 行すべて検査する。
+        # 3 行目の文言（選択肢付き自由文 / 選択肢 + 自由文 等）は文書ごとに揺れるため、
+        # 文言ではなくツール識別子を名指さないことでフォールバック行を定義する。
         if questions is None:
             problems.append(f"{path}: ハーネス表に質問列がない")
-        elif len(questions) < 1 or "AskUserQuestion" not in questions[0]:
-            actual = questions[0] if questions else "<missing>"
-            problems.append(
-                f"{path}: 1 行目の質問セルに AskUserQuestion がない: {actual}"
-            )
+        elif len(questions) != 3:
+            problems.append(f"{path}: 質問列のデータ行が 3 行でない: {questions}")
+        else:
+            if "AskUserQuestion" not in questions[0]:
+                problems.append(
+                    f"{path}: 1 行目の質問セルに AskUserQuestion がない: {questions[0]}"
+                )
+            if "request_user_input" not in questions[1]:
+                problems.append(
+                    f"{path}: 2 行目の質問セルに request_user_input がない: "
+                    f"{questions[1]}"
+                )
+            for tool in QUESTION_TOOL_IDS:
+                if tool in questions[2]:
+                    problems.append(
+                        f"{path}: 3 行目の質問セルに {tool} がある: {questions[2]}"
+                    )
+                    break
 
     return problems
 
@@ -1771,7 +1791,7 @@ def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
 
 
 def mutate_harness_injects_spawn_agent_into_first_row(docs: Docs) -> Docs:
-    """1 行目の判定セルへ spawn_agent を混入させる（性質 2 の排他）。"""
+    """1 行目の判定セルへ spawn_agent を混入させる（性質 2）。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -1780,11 +1800,18 @@ def mutate_harness_injects_spawn_agent_into_first_row(docs: Docs) -> Docs:
     )
 
 
-def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
-    """3 行目のフォールバックへ識別子参照を持ち込む。
+def mutate_harness_injects_extra_decision_id_into_first_row(docs: Docs) -> Docs:
+    """1 行目の判定セルへ別識別子を追加する（性質 2 の集合等価）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` または `BrowserTool` が使える Claude 親 |",
+    )
 
-    「が使える」以外の言い回しでも識別子があれば落ちることを固定する。
-    """
+
+def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
+    """3 行目のフォールバックへ識別子参照を持ち込む（性質 2）。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -1800,6 +1827,30 @@ def mutate_harness_drops_ask_user_question_from_claude_row(docs: Docs) -> Docs:
         HANDOFF,
         "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
         "| `AskUserQuestion` が使える Claude 親 | 選択肢付き自由文 |",
+    )
+
+
+def mutate_harness_drops_request_user_input_from_codex_row(docs: Docs) -> Docs:
+    """Codex 親行の質問セルから request_user_input を落とす（性質 4）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |",
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode、通常 mode は選択肢付き自由文 |",
+    )
+
+
+def mutate_harness_injects_request_user_input_into_fallback_question(
+    docs: Docs,
+) -> Docs:
+    """フォールバック行の質問セルへ request_user_input を混入させる（性質 4）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| 判定不能 | 選択肢付き自由文 |",
+        "| 判定不能 | `request_user_input` |",
     )
 
 
@@ -2093,8 +2144,11 @@ CHECKS: dict[str, Check] = {
         mutate=mutate_harness_injects_request_user_input_into_cell,
         extra_mutations=(
             mutate_harness_injects_spawn_agent_into_first_row,
+            mutate_harness_injects_extra_decision_id_into_first_row,
             mutate_harness_injects_capability_into_fallback_row,
             mutate_harness_drops_ask_user_question_from_claude_row,
+            mutate_harness_drops_request_user_input_from_codex_row,
+            mutate_harness_injects_request_user_input_into_fallback_question,
             mutate_harness_swaps_decision_rows,
             mutate_harness_drops_decision_row,
             mutate_harness_drops_section_heading,
