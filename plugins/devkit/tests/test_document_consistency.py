@@ -737,6 +737,7 @@ def test_codex_model_and_effort_contract_stays_in_sync():
             f"{doc_name} に世代追従(catch-up + premises.json)の記載がない"
         )
         assert "推薦既定" not in text, f"{doc_name} に旧モデル非固定契約が残っている"
+        assert "backend を選" not in text, f"{doc_name} に旧 backend 選択契約が残っている"
         concrete_efforts = set(
             re.findall(r'model_reasoning_effort="([^"<>]+)"', text)
         )

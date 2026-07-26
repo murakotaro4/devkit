@@ -176,6 +176,14 @@
       "last_verified": "2026-07-20",
       "occurrences": [
         {
+          "path": "AGENTS.md",
+          "count": 1
+        },
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
           "path": "plugins/devkit/skills/dig/SKILL.md",
           "count": 2
         },
@@ -185,7 +193,11 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 2
+          "count": 3
+        },
+        {
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 1
         }
       ]
     },
@@ -223,7 +235,7 @@
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 6
+          "count": 8
         },
         {
           "path": "plugins/devkit/skills/improve-skill/SKILL.md",
@@ -243,7 +255,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 1
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
@@ -251,7 +263,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_skill_invariants.py",
-          "count": 4
+          "count": 5
         }
       ]
     },
@@ -332,7 +344,7 @@
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 14
+          "count": 12
         },
         {
           "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
@@ -405,6 +417,10 @@
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
           "count": 6
+        },
+        {
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 7
         }
       ]
     },
@@ -697,6 +713,10 @@
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 4
         }
       ]
     }

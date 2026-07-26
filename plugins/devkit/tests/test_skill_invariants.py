@@ -919,8 +919,8 @@ def mutate_step_numbering_drops_heading_number(docs: Docs) -> Docs:
     return _replace_once(
         docs,
         DIG,
-        "### 3. backend 選択",
-        "### backend 選択",
+        "### 3. backend 固定とフォールバック",
+        "### backend 固定とフォールバック",
     )
 
 
@@ -1033,6 +1033,216 @@ def targets_enum_table_cells(docs: Docs) -> int:
 def mutate_enum_table_cells(docs: Docs) -> Docs:
     path = "plugins/devkit/skills/repo-loop/SKILL.md"
     return _replace_once(docs, path, "| `manual` |", "| `unexpected` |")
+
+
+ROLE_TABLE_HEADER = ("役割", "既定")
+FALLBACK_TABLE_HEADER = ("親", "実装 lane", "レビュー lane（計画 / diff 共通）")
+BACKEND_SECTION = "### 3. backend 固定とフォールバック"
+CURSOR_MODEL = "cursor-grok-4.5-high"
+CODEX_MODEL = "gpt-5.6-sol"
+EXPECTED_ROLES = ("実装", "計画レビュー", "diff レビュー")
+EXPECTED_FALLBACK_LANES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "Claude 親": (
+        (
+            "cursor-agent",
+            "codex CLI",
+            "`Agent(general-purpose, model=sonnet)`",
+            "停止",
+        ),
+        (
+            "codex CLI",
+            "`Agent(general-purpose, model=opus)`",
+            "終端処理",
+        ),
+    ),
+    "Codex 親": (
+        (
+            "cursor-agent",
+            "`spawn_agent` worker",
+            "親実装",
+            "停止",
+        ),
+        (
+            "`spawn_agent` explorer",
+            "終端処理",
+        ),
+    ),
+    "判定不能": (
+        (
+            "cursor-agent",
+            "codex CLI",
+            "停止",
+        ),
+        (
+            "codex CLI",
+            "終端処理",
+        ),
+    ),
+}
+
+
+def _table_rows(body: str, header: tuple[str, ...]) -> list[list[str]]:
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("|"):
+            continue
+        if tuple(_cells(line)) != header:
+            continue
+        rows: list[list[str]] = []
+        for row in lines[index + 2 :]:
+            if not row.startswith("|"):
+                break
+            rows.append(_cells(row))
+        return rows
+    return []
+
+
+def _lane_stages(cell: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in cell.split("→") if part.strip())
+
+
+def _fixed_backend_rows(docs: Docs) -> tuple[list[list[str]], list[list[str]]]:
+    body = _section_body(docs.get(DIG, ""), BACKEND_SECTION)
+    return _table_rows(body, ROLE_TABLE_HEADER), _table_rows(body, FALLBACK_TABLE_HEADER)
+
+
+def check_fixed_backend_assignment(docs: Docs) -> list[str]:
+    """dig の backend 固定割り当てとフォールバック順序を検査する。
+
+    対象特定は節見出しと表ヘッダの構造で行い、モデル名を membership 判定に使わない。
+    """
+    body = _section_body(docs.get(DIG, ""), BACKEND_SECTION)
+    if not body:
+        return [f"{DIG}: {BACKEND_SECTION} がない"]
+
+    role_rows, fallback_rows = _fixed_backend_rows(docs)
+    problems: list[str] = []
+    role_names = [row[0] for row in role_rows if row]
+    role_counts = {role: role_names.count(role) for role in set(role_names)}
+    for role in EXPECTED_ROLES:
+        count = role_counts.get(role, 0)
+        if count == 0:
+            problems.append(f"{DIG}: 役割表に {role} 行がない")
+        elif count > 1:
+            problems.append(f"{DIG}: 役割表に {role} 行が重複している")
+    for role in sorted(set(role_names) - set(EXPECTED_ROLES)):
+        problems.append(f"{DIG}: 役割表に未知の役割行 {role}")
+
+    by_role = {row[0]: row[1] for row in role_rows if len(row) >= 2}
+
+    impl = by_role.get("実装", "")
+    if CURSOR_MODEL not in impl:
+        problems.append(f"{DIG}: 実装の既定に {CURSOR_MODEL} がない")
+    if CODEX_MODEL in impl:
+        problems.append(f"{DIG}: 実装の既定に {CODEX_MODEL} が混入している")
+
+    for role in ("計画レビュー", "diff レビュー"):
+        cell = by_role.get(role, "")
+        if CODEX_MODEL not in cell:
+            problems.append(f"{DIG}: {role} の既定に {CODEX_MODEL} がない")
+        if CURSOR_MODEL in cell:
+            problems.append(f"{DIG}: {role} の既定に {CURSOR_MODEL} が混入している")
+
+    parent_names = [row[0] for row in fallback_rows if row]
+    parent_counts = {
+        parent: parent_names.count(parent) for parent in set(parent_names)
+    }
+    expected_parents = tuple(EXPECTED_FALLBACK_LANES)
+    for parent in expected_parents:
+        count = parent_counts.get(parent, 0)
+        if count == 0:
+            problems.append(f"{DIG}: フォールバック表に {parent} 行がない")
+        elif count > 1:
+            problems.append(f"{DIG}: フォールバック表に {parent} 行が重複している")
+    for parent in sorted(set(parent_names) - set(expected_parents)):
+        problems.append(f"{DIG}: フォールバック表に未知の親行 {parent}")
+
+    by_parent = {row[0]: row for row in fallback_rows if row}
+
+    for parent, (expected_impl, expected_review) in EXPECTED_FALLBACK_LANES.items():
+        row = by_parent.get(parent)
+        if row is None:
+            continue
+        if len(row) < 3:
+            problems.append(f"{DIG}: {parent} のフォールバック行が不足: {row}")
+            continue
+        actual_impl = _lane_stages(row[1])
+        actual_review = _lane_stages(row[2])
+        if actual_impl != expected_impl:
+            problems.append(
+                f"{DIG}: {parent} の実装 lane が期待と不一致: "
+                f"{actual_impl!r} != {expected_impl!r}"
+            )
+        if actual_review != expected_review:
+            problems.append(
+                f"{DIG}: {parent} のレビュー lane が期待と不一致: "
+                f"{actual_review!r} != {expected_review!r}"
+            )
+    return problems
+
+
+def targets_fixed_backend_assignment(docs: Docs) -> int:
+    role_rows, fallback_rows = _fixed_backend_rows(docs)
+    return len(role_rows) + len(fallback_rows)
+
+
+def mutate_fixed_backend_assignment(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
+        f"| 実装 | cursor-agent `{CODEX_MODEL}` |",
+    )
+
+
+def mutate_fixed_backend_assignment_swaps_review(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        f"| 計画レビュー | codex `{CODEX_MODEL}` / medium |",
+        f"| 計画レビュー | cursor-agent `{CURSOR_MODEL}` |",
+    )
+
+
+def mutate_fixed_backend_assignment_drops_fallback(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        "| Claude 親 | cursor-agent → codex CLI → "
+        "`Agent(general-purpose, model=sonnet)` → 停止 |",
+        "| Claude 親 | cursor-agent |",
+    )
+
+
+def mutate_fixed_backend_assignment_drops_review_lane(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        "codex CLI → `Agent(general-purpose, model=opus)` → 終端処理",
+        "codex CLI → 終端処理",
+    )
+
+
+def mutate_fixed_backend_assignment_duplicates_role(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
+        f"| 実装 | codex `{CODEX_MODEL}` / medium |\n"
+        f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
+    )
+
+
+def mutate_fixed_backend_assignment_duplicates_parent(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        "| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | "
+        "`spawn_agent` explorer → 終端処理 |",
+        "| Codex 親 | cursor-agent → 停止 | `spawn_agent` explorer → 終端処理 |\n"
+        "| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | "
+        "`spawn_agent` explorer → 終端処理 |",
+    )
 
 
 def _docs_with_order_markers(
@@ -1333,6 +1543,20 @@ CHECKS: dict[str, Check] = {
         category="B3",
         why="workflow enum への未知値混入を防ぐ",
     ),
+    "fixed_backend_assignment": Check(
+        run=check_fixed_backend_assignment,
+        mutate=mutate_fixed_backend_assignment,
+        extra_mutations=(
+            mutate_fixed_backend_assignment_swaps_review,
+            mutate_fixed_backend_assignment_drops_fallback,
+            mutate_fixed_backend_assignment_drops_review_lane,
+            mutate_fixed_backend_assignment_duplicates_role,
+            mutate_fixed_backend_assignment_duplicates_parent,
+        ),
+        targets=targets_fixed_backend_assignment,
+        category="B4",
+        why="backend の固定割り当てとフォールバック順序の退行を防ぐ",
+    ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
         mutate=mutate_commit_before_independent_review,
@@ -1366,6 +1590,7 @@ EXPECTED_CATEGORIES = {
     "B1",
     "B2",
     "B3",
+    "B4",
     "C1",
     "C2",
     "C3",

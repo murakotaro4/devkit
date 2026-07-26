@@ -124,7 +124,7 @@ dig に限り、カテゴリ 5〜7(backend 表 / 検証 / 独立レビュー状�
 codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>" < /dev/null
 ```
 
-- 計画レビュー・実装・diff レビューは同じモデル / effort とし、選択質問をしない。子 agent ごとの effort も選択しない
+- 実装の既定は cursor-agent `cursor-grok-4.5-high`。codex を使う工程（計画レビュー・diff レビュー、および実装のフォールバック時）は同じモデル / effort とする。backend の選択質問はせず、降格したときは必ず報告する。子 agent ごとの effort も選択しない
 - 非対話の codex / cursor-agent は stdin を `< /dev/null` で閉じる。世代追従は catch-up と `premises.json` で管理する
 
 ## Key Paths

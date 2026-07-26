@@ -25,15 +25,15 @@ $ARGUMENTS
 
 `request_user_input` はハーネス判定に使わない。step 1-5 は read-only のため plan mode と整合する。承認前に step 6 へ進まない。
 
-工程ごとの委譲差分は次の表を正本とし、各 step では再掲しない。
+工程ごとの委譲差分は次の表を正本とし、各 step では再掲しない。backend の固定とフォールバックは step 3 を正本とする。
 
-| 工程 | Claude 親 + codex | Claude 親 + Claude agent | Codex 親 | cursor-agent |
-|------|--------------------|--------------------------|------------|--------------|
-| 調査 | 適用なし | read-only の Agent | `spawn_agent` explorer | 適用なし |
-| 計画レビュー | read-only sandbox の非対話実行 | 計画全文を Agent へ | `spawn_agent` explorer | 適用なし |
-| 実装 | worktree-write の非対話実行 | 実装指示を Agent へ | `spawn_agent` worker | shell で worktree を指定 |
-| diff レビュー | `review --base` | diff と計画を Agent へ | `spawn_agent` explorer | 適用なし |
-| 修正 | 同じ thread_id で resume | 新しい Agent | 生存中 worker へ `send_input`、close 済みなら新規 worker | 同じ chatId で resume |
+| 工程 | 既定 |
+|------|------|
+| 調査 | 親 / read-only agent（Codex 親は `spawn_agent` explorer） |
+| 計画レビュー | codex CLI（フォールバックは step 3） |
+| 実装 | cursor-agent（既定。フォールバックは step 3） |
+| diff レビュー | codex CLI（フォールバックは step 3） |
+| 修正 | 同じ thread / chat で resume（降格後は新規ジョブ、step 8） |
 
 Claude 親の CLI 委譲は `run_in_background` と完了通知で回収する。Codex 親は `wait_agent` で黙って待たず進捗を提示し、指摘解消まで `close_agent` を遅らせる。実体の進捗は `git status` / `git diff` とジョブログで確認し、resume は進捗確認に使わない。
 
@@ -89,7 +89,7 @@ frontmatter に `allowed-tools` を置かず、利用可能なツールもこの
 2. 判断してほしい点（推奨付き、最大 3 件程度。なければ「なし」）
 3. 既定からの逸脱・採用した仮定（なければ「既定どおり」）
 4. 後戻りしにくい操作・外部影響
-5. 計画レビュー / 実装 / diff レビューの backend（不能なら「適用なし」）
+5. 計画レビュー / 実装 / diff レビューの固定 backend（降格時は降格先と理由。不能なら「適用なし」）
 6. green とする検証
 7. 独立レビュー状態（`実施済み(指摘 N 件反映)` / `skip(理由)` / `適用なし`）
 
@@ -99,10 +99,10 @@ frontmatter に `allowed-tools` を置かず、利用可能なツールもこの
 |------|------|---------|
 | 調査 | ✓ | 親 / agent |
 | 計画 | ✓ | 親 |
-| 計画レビュー | 実施済み(指摘 0 件反映) | 選択 backend |
+| 計画レビュー | 実施済み(指摘 0 件反映) | 固定 backend（降格時は降格先と理由） |
 | **承認** | **← 今ここ** | ユーザー |
-| 実装 | — | 選択 backend |
-| diff レビュー | — | 選択 backend |
+| 実装 | — | 固定 backend（降格時は降格先と理由） |
+| diff レビュー | — | 固定 backend（降格時は降格先と理由） |
 | 検証 | — | green 条件 |
 | 統合 | — | 計画した方法 |
 
@@ -112,27 +112,52 @@ frontmatter に `allowed-tools` を置かず、利用可能なツールもこの
 
 | タスク | 必須項目 |
 |--------|----------|
-| 実装 | write_scope、ファイル別変更、検証、非対象、ブランチ、統合方法、commit 案、3 backend |
+| 実装 | write_scope、ファイル別変更、検証、非対象、ブランチ、統合方法、commit 案、固定 backend と降格状態 |
 | 非実装 | read_scope、成功条件と検証、非対象と外部状態変更、実行形態。branch / commit / 統合 / 実装 backend は適用なし |
 
 統合は PR 提出 + CI green 確認 + merge が既定。origin なし、非 GitHub origin、または `gh` 不在なら計画時に直接統合へ決める。GitHub origin で API・認証・通信が失敗した場合は直接統合へ切り替えず停止する。PR 計画では repo 内 CI と GitHub 側設定を調べ、チェック 0 件の扱いと待機上限（既定 30 分）を明記する。
 
-### 3. backend 選択
+### 3. backend 固定とフォールバック
 
-承認前に適用する計画レビュー / 実装 / diff レビュー backend を選び、推奨を付ける。read-only への変更または goal-prompt 引き継ぎへの変更で要件が動いたら step 1 に戻り、「質問する」行をゼロにする。
+| 役割 | 既定 |
+|------|------|
+| 実装 | cursor-agent `cursor-grok-4.5-high` |
+| 計画レビュー | codex `gpt-5.6-sol` / medium |
+| diff レビュー | codex `gpt-5.6-sol` / medium |
 
-| 親 | 役割 | 選択肢 |
-|----|------|--------|
-| Claude | 実装 | codex（既定） / cursor-agent / Claude サブエージェント `Agent(general-purpose, model=sonnet)` |
-| Claude | 計画・diff レビュー | codex review（既定） / Claude サブエージェント `Agent(general-purpose, model=opus)` / skip（repo が独立レビュー必須なら不可） |
-| Codex | 実装 | `spawn_agent` worker / cursor-agent / 親実装 |
-| Codex | 計画・diff レビュー | `spawn_agent` explorer / skip（repo が独立レビュー必須なら不可） |
+backend をユーザーに質問しない。ユーザーが明示指定した場合だけ従い、明示指定はフォールバック禁止の固定指定として扱う（使えなければ降格せず停止して報告する）。
 
-Codex 親では `codex exec` の入れ子と `claude` CLI への逆委譲を選ばない。`command -v codex` / `command -v cursor-agent` が失敗した選択肢は除く。Claude 親の codex 実装は `command -v uv` も必須で、不足時は thread_id 抽出不能として実装選択肢だけを除く。cursor-agent は `cursor-grok-4.5-high` を明示する。利用不能な backend から別 backend へ黙って fallback しない。
+親種別ごとのフォールバック階段:
+
+| 親 | 実装 lane | レビュー lane（計画 / diff 共通） |
+|----|-----------|--------------------------------|
+| Claude 親 | cursor-agent → codex CLI → `Agent(general-purpose, model=sonnet)` → 停止 | codex CLI → `Agent(general-purpose, model=opus)` → 終端処理 |
+| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | `spawn_agent` explorer → 終端処理 |
+| 判定不能 | cursor-agent → codex CLI → 停止 | codex CLI → 終端処理 |
+
+- 上から順に、利用可能かつ降格条件に当たらない最初の段を使う。降格は前進のみ（有限段）。
+- Codex 親は `codex exec` 入れ子と `claude` CLI 逆委譲を禁じるため、実装階段から codex CLI 段を飛ばす。
+- 実装 lane の降格前に前段ジョブの終了を確認する。応答不能時も停止または終了確認してから次段を起こし、同一 worktree に 2 つの実装 actor を同時に走らせない。
+- 実装 lane が尽きたら停止して報告する（親が勝手に実装しない）。
+- レビュー lane 終端: 独立レビュー必須なら自動 skip せず停止。必須でない repo だけ未実施を明記して続行可。
+- 降格したら step 2 の工程表と完了報告へ「cursor-agent → codex（理由: rate limit）」の形で記す。**報告なしに fallback しない。**
+
+降格条件は全段共通の 3 分類。レート制限キーワード（大小文字無視）: `rate limit` / `rate_limit` / `ratelimit` / `quota` / `usage limit` / `too many requests` / `429`。
+
+1. 可用性判定の失敗
+2. 起動失敗
+3. レート制限: 非ゼロ終了かつログ末尾の CLI 終了時エラー出力（発話・tool 出力ではない）が上記キーワードに一致。曖昧ならレート制限に分類せず降格しない
+
+段ごとの具体形:
+- cursor-agent: 可用性=`command -v cursor-agent`、起動失敗=chat 作成が非ゼロ終了 / `CHAT_ID` 空、または実行呼び出しが agent 起動前に失敗（モデル利用不可・引数拒否など）、レート制限=条件 3
+- codex CLI: 可用性=`command -v codex`（実装 / resume はさらに `command -v uv`。レビューに `uv` 不要）、レート制限=条件 3。起動失敗は lane 別—実装 / resume: 非ゼロ終了し thread_id を採れない。レビュー: 起動そのものに失敗（実行不能・認証や設定不備で起動に至らない）。レビュー実行後の非ゼロは起動失敗にせず、降格せず停止して報告する
+- サブエージェント（`Agent(...)` / `spawn_agent`）: 起動不能または応答不能
+
+上記 3 分類に当たらない非ゼロ終了は降格しない。実装 lane は通常の実装失敗として step 8 の修正ループで処理し、レビュー lane は停止して報告する。
 
 ### 4. 計画レビュー
 
-選択 backend に計画全文を渡し、decision-complete 性・矛盾・見落としを審査する。指摘を反映してから承認へ進む。skip 選択時だけ省略する。
+計画レビュー backend に計画全文を渡し、decision-complete 性・矛盾・見落としを審査する。指摘を反映してから承認へ進む。レビュー lane の終端処理で未実施とした場合だけ省略する。
 
 codex の例:
 
@@ -142,7 +167,7 @@ codex -a never exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort
 
 ### 5. 計画承認
 
-レビュー済み計画（skip 時はその状態を明記）を第 1 層から提示し、明示承認を得る。工程表に計画レビュー / 実装 / diff レビューと、適用可能なモデル / effort を記す。承認後だけ plan mode を抜け、承認済み write_scope を有効にする。
+レビュー済み計画（未実施時はその状態を明記）を第 1 層から提示し、明示承認を得る。工程表に計画レビュー / 実装 / diff レビューの固定割り当てと降格状態を記す。承認後だけ plan mode を抜け、承認済み write_scope を有効にする。
 
 ### 6. worktree 作成と実装委譲
 
@@ -160,14 +185,14 @@ JOB_DIR=<記録済みパス> && set -o pipefail && codex -a never exec -C "<work
 JOB_DIR=<記録済みパス> && uv run --no-project --python ">=3.10" python -c 'import json,sys; ids=[event.get("thread_id") for line in open(sys.argv[1], encoding="utf-8") if line.strip() for event in [json.loads(line)] if event.get("type") == "thread.started"]; (len(ids) == 1 and isinstance(ids[0], str) and ids[0]) or sys.exit("expected exactly one non-empty thread.started thread_id"); print(ids[0])' "$JOB_DIR/codex-events.jsonl" > "$JOB_DIR/thread-id.txt" && test -s "$JOB_DIR/thread-id.txt"
 ```
 
-cursor-agent はジョブごとに chatId を保存する。
+cursor-agent はジョブごとに chatId を保存する。stdout / stderr は合流して JOB_DIR に保存し、ログ増分で進捗を示す。
 
 ```bash
-JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-job.XXXXXX") && CHAT_ID="$(cursor-agent create-chat < /dev/null | tr -d '\r\n')" && test -n "$CHAT_ID" && printf '%s\n' "$CHAT_ID" > "$JOB_DIR/chat-id.txt" && echo "JOB_DIR=$JOB_DIR"
-JOB_DIR=<記録済みパス> && cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null
+JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-job.XXXXXX") && set -o pipefail && CHAT_ID="$(cursor-agent create-chat < /dev/null | tr -d '\r\n')" && test -n "$CHAT_ID" && printf '%s\n' "$CHAT_ID" > "$JOB_DIR/chat-id.txt" && echo "JOB_DIR=$JOB_DIR"
+JOB_DIR=<記録済みパス> && set -o pipefail && cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null 2>&1 | tee "$JOB_DIR/cursor-agent.log"
 ```
 
-Codex 親で cursor-agent を使う場合だけ末尾に `> "$JOB_DIR/cursor-agent.log" 2>&1` を加え、ログ増分で進捗を示す。cursor-agent は sandbox なしで動くため write_scope と commit 禁止を指示する。すべての非対話 codex / cursor-agent コマンドで stdin を `< /dev/null` に閉じる。
+cursor-agent は sandbox なしで動くため write_scope と commit 禁止を指示する。すべての非対話 codex / cursor-agent コマンドで stdin を `< /dev/null` に閉じる。
 
 依存がなく write_scope が互いに素なジョブだけを並列化する。同一 worktree 内でも担当外変更と各ジョブ内のテスト実行を禁じ、親が統合後に一括検証する。
 
@@ -179,7 +204,7 @@ Codex 親で cursor-agent を使う場合だけ末尾に `> "$JOB_DIR/cursor-age
 
 **レビュー前に実装を作業 branch へ commit しておく。** `review --base` は commit 済み差分だけを対象とするため、未 commit のままだと空 diff を「指摘なし」と誤報し、必須の独立レビューが空振りする。
 
-親が基点からの diff 全文を計画と照合し、逸脱の理由・リスク・要確認点を判断する。プロジェクトのテスト・lint を実行する。step 3 で選択した diff レビュー backend にブランチ全体をレビューさせ、実装 worker と同一 agent は使わない。`skip` を選択した場合だけ省略する(repo が独立レビュー必須なら step 3 で skip は提示されない)。
+親が基点からの diff 全文を計画と照合し、逸脱の理由・リスク・要確認点を判断する。プロジェクトのテスト・lint を実行する。diff レビュー backend にブランチ全体をレビューさせ、実装 worker と同一 agent は使わない。レビュー lane が尽きた場合は step 3 の終端処理に従う（必須 repo は停止、必須でない repo だけ未実施を明記して続行）。
 
 codex review の例（origin なしは `--base <default>`）。**`-C "<worktree>"` で worktree を指定する**。通常 checkout で走らせると commit 済み branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する:
 
@@ -197,13 +222,15 @@ codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="me
 | cursor-agent | `--resume "$(cat "$JOB_DIR/chat-id.txt")"` + `"<指摘と修正指示>"` |
 | Codex 親 worker | 生存中は `send_input`、close 済みは新しい `spawn_agent` worker |
 
+修正ループ中に実装 backend が降格条件に当たった場合、step 3 の親別階段に従って次段へ降格する。chat / thread の文脈は引き継がず、現在の diff と未解消 findings を渡して新規ジョブを起こす。以後そのタスクで前段へ戻らない。
+
 codex の resume 完全形（非対話 stdin 契約の確認用）:
 
 ```bash
 JOB_DIR=<記録済みパス> && test -s "$JOB_DIR/thread-id.txt" && codex -a never -C "<worktree>" --sandbox workspace-write exec resume -m gpt-5.6-sol -c model_reasoning_effort="medium" "$(cat "$JOB_DIR/thread-id.txt")" "<指摘と修正指示>" < /dev/null
 ```
 
-cursor-agent は step 6 の完全形の最終引数だけ `"<指摘と修正指示>"` に替える。Codex 親では同じログリダイレクトを維持する。diff が計画と一致し、テストが green、指摘がゼロで終了する。3 周で収束しなければ停止して判断を求める。
+cursor-agent は step 6 の完全形の最終引数だけ `"<指摘と修正指示>"` に替える。同じログ保存形を維持し、ログ増分で進捗を示す。diff が計画と一致し、テストが green、指摘がゼロで終了する。5 周で収束しなければ停止して判断を求める。
 
 ### 9. 統合・後始末・完了報告
 
@@ -232,5 +259,5 @@ cleanup は統合確認後だけ行い、`git worktree remove <worktree>` → �
 ## 実装の注意
 
 - sandbox 緩和や write_scope 外の変更はユーザー確認を得る。
-- backend が使えなければ報告し、別選択肢または承認済みの親実装へ切り替える。
+- backend が使えなければ step 3 のフォールバック階段に従って降格し、必ず報告する。
 - 非 git repo は worktree / commit / 統合を適用せず、diff と結果を報告する。
