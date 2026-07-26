@@ -1613,7 +1613,11 @@ def mutate_ci_green_before_merge(docs: Docs) -> Docs:
 # goal-prompt のハーネス節は 2 文からなり、前者は親の決定、後者は親ごとの質問手段
 # （正当に `request_user_input` を含む）。両者を文言に頼らず区別する手段がない。
 UNCHECKED_HARNESS_DOCS = frozenset({"plugins/devkit/skills/goal-prompt/SKILL.md"})
-HARNESS_HEADING = re.compile(r"^## ハーネス[^\n]*$", re.MULTILINE)
+# レベルを問わず「ハーネス…」見出しを拾う。SKILL.md の 3 形式
+# (`## ハーネス判定` / `## ハーネス・進捗` / `## ハーネス判定と実行差分`) と
+# AGENTS.md 正本の `### ハーネス判定` を同じ規則で扱う。
+HARNESS_HEADING = re.compile(r"^#{2,6} ハーネス[^\n]*$", re.MULTILINE)
+AGENTS = "AGENTS.md"
 GOAL_PROMPT = "plugins/devkit/skills/goal-prompt/SKILL.md"
 HANDOFF = "plugins/devkit/skills/handoff/SKILL.md"
 BACKTICK_IDENTIFIER = re.compile(r"`([^`]+)`")
@@ -1623,8 +1627,16 @@ def _skill_paths(docs: Docs) -> list[str]:
     return sorted(path for path, _ in _skill_docs(docs))
 
 
+def _harness_doc_paths(docs: Docs) -> list[str]:
+    """B8 の検査対象: 全 SKILL.md と AGENTS.md 正本。"""
+    paths = set(_skill_paths(docs))
+    if AGENTS in docs:
+        paths.add(AGENTS)
+    return sorted(paths)
+
+
 def _harness_section(text: str) -> str | None:
-    """`## ハーネス` 前方一致の節をちょうど 1 つ返す。0 件・2 件以上は None。"""
+    """`ハーネス` で始まる見出しの節をちょうど 1 つ返す。0 件・2 件以上は None。"""
     matches = list(HARNESS_HEADING.finditer(text))
     if len(matches) != 1:
         return None
@@ -1673,7 +1685,7 @@ def _harness_table_columns(
 def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
     """判定列だけを返す。レジストリ完全性 meta-test 用。"""
     found: dict[str, list[str]] = {}
-    for path in _skill_paths(docs):
+    for path in _harness_doc_paths(docs):
         if path in UNCHECKED_HARNESS_DOCS:
             continue
         section = _harness_section(docs.get(path, ""))
@@ -1694,14 +1706,17 @@ def _backtick_identifiers(cell: str) -> frozenset[str]:
     return frozenset(BACKTICK_IDENTIFIER.findall(cell))
 
 
-# 判定列の行ごとの識別子集合。文言は文書ごとに揺れるが、構成は 10 本で一致する。
+# 判定列の行ごとの識別子集合。文言は文書ごとに揺れるが、構成は正本含め一致する。
 EXPECTED_DECISION_IDS = (
     frozenset({"AskUserQuestion"}),
     frozenset({"spawn_agent"}),
     frozenset(),
 )
-# 質問列の比較対象は harness の 3 ツールだけ。EnterPlanMode 等は承認手段なので含めない。
+# 質問セルに backtick 無しで現れる既知ツール。未知識別子は backtick 経由で拾う。
 HARNESS_QUESTION_TOOLS = ("AskUserQuestion", "spawn_agent", "request_user_input")
+# dig / AGENTS.md の質問・承認まわりに現れるが、承認手段であって質問手段ではない。
+# 質問セルの識別子集合から除外してよいのは、契約上の役割が質問ではないと分かっているものだけ。
+APPROVED_NON_QUESTION_IDS = frozenset({"EnterPlanMode", "ExitPlanMode"})
 EXPECTED_QUESTION_IDS = (
     frozenset({"AskUserQuestion"}),
     frozenset({"request_user_input"}),
@@ -1725,16 +1740,17 @@ def _has_identifier(text: str, identifier: str) -> bool:
 
 
 def _question_tool_ids(cell: str) -> frozenset[str]:
-    """質問セルから harness の 3 ツールを backtick 不問で集める。
+    """質問セルに現れる識別子を集め、承認済み非質問識別子だけを除く。
 
-    判定列と違い、質問セルは文書ごとに backtick の有無が揺れる
-    (裸の AskUserQuestion と `AskUserQuestion` が混在)。囲みを要求すると
-    片方の文書群だけが落ちる。3 ツール以外は比較対象にしない。
-    一致は `_has_identifier`（premises.json と同じ単語境界）で取る。
+    既知トークンだけを数えると、BrowserTool のような未知の追加が永遠に見えない。
+    「期待するものが在るか」ではなく「在るものが期待どおりか」を見る。
+    収集は backtick 識別子すべて + 裸の既知 3 ツール（質問セルは backtick の有無が揺れる）。
     """
-    return frozenset(
-        tool for tool in HARNESS_QUESTION_TOOLS if _has_identifier(cell, tool)
-    )
+    found = set(_backtick_identifiers(cell))
+    for tool in HARNESS_QUESTION_TOOLS:
+        if _has_identifier(cell, tool):
+            found.add(tool)
+    return frozenset(found - APPROVED_NON_QUESTION_IDS)
 
 
 def check_harness_decision_table_excludes_request_user_input(
@@ -1748,7 +1764,7 @@ def check_harness_decision_table_excludes_request_user_input(
     """
     problems: list[str] = []
 
-    for path in _skill_paths(docs):
+    for path in _harness_doc_paths(docs):
         if path in UNCHECKED_HARNESS_DOCS:
             continue
         section = _harness_section(docs.get(path, ""))
@@ -1766,7 +1782,7 @@ def check_harness_decision_table_excludes_request_user_input(
             continue
         # 性質 2: 判定列は行ごとの backtick 識別子集合で固定する。
         # 文言（が使える / が利用可能な 等）は文書ごとに揺れるが、識別子構成は
-        # 10 本で一致する。揺れる部分ではなく揃っている部分を見る。
+        # 正本含め一致する。揺れる部分ではなく揃っている部分を見る。
         for index, (cell, expected) in enumerate(
             zip(cells, EXPECTED_DECISION_IDS, strict=True), start=1
         ):
@@ -1785,7 +1801,8 @@ def check_harness_decision_table_excludes_request_user_input(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
         # 性質 4: 質問列も行ごとのツール識別子集合で固定する。
-        # 包含判定だと余計なツールを足す退行が通る。文言は揺れても識別子構成は揃う。
+        # 識別子をすべて集めてから承認済み非質問識別子だけを除く。
+        # 既知トークンだけを数えると未知の追加が永遠に見えない。
         if questions is None:
             problems.append(f"{path}: ハーネス表に質問列がない")
         elif len(questions) != 3:
@@ -1805,7 +1822,9 @@ def check_harness_decision_table_excludes_request_user_input(
 
 
 def targets_harness_decision_table_excludes_request_user_input(docs: Docs) -> int:
-    return sum(1 for path in _skill_paths(docs) if path not in UNCHECKED_HARNESS_DOCS)
+    return sum(
+        1 for path in _harness_doc_paths(docs) if path not in UNCHECKED_HARNESS_DOCS
+    )
 
 
 def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
@@ -1865,6 +1884,16 @@ def mutate_harness_adds_request_user_input_to_claude_question(docs: Docs) -> Doc
         HANDOFF,
         "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
         "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / request_user_input |",
+    )
+
+
+def mutate_harness_adds_unknown_tool_to_claude_question(docs: Docs) -> Docs:
+    """Claude 親行の質問セルへ未知ツールを足す（性質 4: 未知追加の検出）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / `BrowserTool` |",
     )
 
 
@@ -1939,6 +1968,18 @@ def mutate_harness_drops_decision_row(docs: Docs) -> Docs:
 def mutate_harness_drops_section_heading(docs: Docs) -> Docs:
     """ハーネス節の見出しごと削除する（性質 1 またはレジストリ完全性）。"""
     return _replace_once(docs, HANDOFF, "## ハーネス・進捗\n\n", "")
+
+
+def mutate_harness_injects_request_user_input_into_agents_decision_cell(
+    docs: Docs,
+) -> Docs:
+    """AGENTS.md 正本の判定セルへ request_user_input を混入させる（性質 3）。"""
+    return _replace_once(
+        docs,
+        AGENTS,
+        "| Claude 親 | `AskUserQuestion` が使える |",
+        "| Claude 親 | `AskUserQuestion` / `request_user_input` が使える |",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2210,6 +2251,7 @@ CHECKS: dict[str, Check] = {
             mutate_harness_injects_capability_into_fallback_row,
             mutate_harness_drops_ask_user_question_from_claude_row,
             mutate_harness_adds_request_user_input_to_claude_question,
+            mutate_harness_adds_unknown_tool_to_claude_question,
             mutate_harness_renames_ask_user_question_to_legacy_in_claude_question,
             mutate_harness_drops_request_user_input_from_codex_row,
             mutate_harness_adds_ask_user_question_to_codex_question,
@@ -2217,6 +2259,7 @@ CHECKS: dict[str, Check] = {
             mutate_harness_swaps_decision_rows,
             mutate_harness_drops_decision_row,
             mutate_harness_drops_section_heading,
+            mutate_harness_injects_request_user_input_into_agents_decision_cell,
         ),
         targets=targets_harness_decision_table_excludes_request_user_input,
         category="B8",
@@ -2349,18 +2392,19 @@ def test_step_numbering_registry_covers_all_targets():
 
 
 def test_harness_registry_covers_all_skills():
-    """判定表が取れた文書と UNCHECKED_HARNESS_DOCS の和が全 SKILL.md と一致する。
+    """判定表が取れた文書と UNCHECKED_HARNESS_DOCS の和が検査対象全体と一致する。
 
-    新しいスキルを足したときに登録漏れが fail になり、未検査側への振り分け忘れを防ぐ。
+    新しいスキルや正本側のハーネス表を足したときに登録漏れが fail になり、
+    未検査側への振り分け忘れを防ぐ。対象は全 SKILL.md + AGENTS.md。
     """
-    skill_paths = set(_skill_paths(REAL_DOCS))
+    harness_paths = set(_harness_doc_paths(REAL_DOCS))
     table_docs = set(_docs_with_decision_tables(REAL_DOCS))
     unchecked = set(UNCHECKED_HARNESS_DOCS)
     assert table_docs.isdisjoint(unchecked), (
         f"判定表と未検査レジストリが重複: {sorted(table_docs & unchecked)}"
     )
-    assert table_docs | unchecked == skill_paths, (
-        "ハーネスレジストリが全 SKILL.md を覆っていない: "
-        f"missing={sorted(skill_paths - (table_docs | unchecked))}, "
-        f"extra={sorted((table_docs | unchecked) - skill_paths)}"
+    assert table_docs | unchecked == harness_paths, (
+        "ハーネスレジストリが検査対象を覆っていない: "
+        f"missing={sorted(harness_paths - (table_docs | unchecked))}, "
+        f"extra={sorted((table_docs | unchecked) - harness_paths)}"
     )
