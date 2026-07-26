@@ -919,8 +919,8 @@ def mutate_step_numbering_drops_heading_number(docs: Docs) -> Docs:
     return _replace_once(
         docs,
         DIG,
-        "### 3. backend 選択",
-        "### backend 選択",
+        "### 3. backend 固定とフォールバック",
+        "### backend 固定とフォールバック",
     )
 
 
