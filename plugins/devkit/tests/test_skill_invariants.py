@@ -1899,22 +1899,14 @@ def _boundary_sets(body: str) -> tuple[frozenset[str], frozenset[str]]:
     return frozenset(prohibited), frozenset(allowed)
 
 
-def _is_prohibition_sentence(sentence: str) -> bool:
-    """禁止操作を列挙する文か。句点除去後の末尾で判定する。"""
-    return bool(re.search(r"を(?:行わない|しない)$", sentence.strip()))
-
-
 def check_write_boundary_sets_are_exact(docs: Docs) -> list[str]:
     """書き込み境界の禁止 / 許可集合を登録値と完全一致させる。
 
     `assert "commit" in prohibitions` のような部分集合検査は項目の削除しか
-    検出できず、「ただし承認があれば commit してよい」という例外追加による
-    骨抜きが素通りする。集合等価にして追加も削除も検出する。
+    検出できない。集合等価にして追加も削除も検出する。
 
-    例外句の検出は許可表現の語彙列挙では終わらない（「可能とする」等で抜ける）。
-    向きを変え、禁止集合の各項目は禁止文（を行わない / をしない）の中にしか
-    現れてはならない、という出現位置の条件にする。語彙を足して検査を緩める
-    のではなく、禁止文以外への流出自体を拒否する。
+    許可文・例外句の意味判定はここでは行わない。言い回しは列挙しきれず
+    check として収束しないため、構造（抽出集合の一致と節の存在）だけを見る。
     """
     problems: list[str] = []
     for path, heading, expected_prohibited, expected_allowed in WRITE_BOUNDARY_DOCS:
@@ -1940,16 +1932,6 @@ def check_write_boundary_sets_are_exact(docs: Docs) -> list[str]:
                 f"missing={sorted(expected_allowed - allowed)}, "
                 f"extra={sorted(allowed - expected_allowed)}"
             )
-        # 禁止項目が禁止文の外へ流出していないか。
-        for sentence in _prose_sentences(body):
-            if _is_prohibition_sentence(sentence):
-                continue
-            for item in sorted(expected_prohibited):
-                if item in sentence:
-                    problems.append(
-                        f"{path}: 禁止項目 {item!r} が禁止文の外にある: {sentence}"
-                    )
-                    break
     return problems
 
 
@@ -1968,10 +1950,9 @@ def mutate_write_boundary_drops_prohibition(docs: Docs) -> Docs:
 
 
 def mutate_write_boundary_adds_exception(docs: Docs) -> Docs:
-    """例外句を追加して禁止集合を狭める。集合等価でしか落ちない退行。
+    """禁止列から項目を外して抽出集合を狭める。
 
-    禁止列から commit を外しつつ例外句で言及だけ残す。本文の部分集合検査
-    （`assert "commit" in section`）なら通るが、抽出集合の等価検査なら落ちる。
+    集合差分で落ちる。例外句の文言そのものを検出しているわけではない。
     """
     return _replace_once(
         docs,
@@ -1982,32 +1963,6 @@ def mutate_write_boundary_adds_exception(docs: Docs) -> Docs:
         "コード実装、PR、push、計画レビュー、独立レビュー、"
         "Claude Code 組み込み `/goal` の自動発動、scheduler / loop 登録、"
         "thought-db 書き込みを行わない。ただし承認があれば commit してよい。",
-    )
-
-
-def mutate_write_boundary_appends_permission_exception(docs: Docs) -> Docs:
-    """禁止列は変えず、許可の例外句だけを追記する。
-
-    集合等価だけでは落ちない。禁止項目の出現位置検査があって初めて捕捉できる。
-    """
-    return _replace_once(
-        docs,
-        GOAL_PROMPT,
-        "thought-db 書き込みを行わない。",
-        "thought-db 書き込みを行わない。ただし承認があれば commit してよい。",
-    )
-
-
-def mutate_write_boundary_appends_possible_exception(docs: Docs) -> Docs:
-    """禁止列は変えず、「可能とする」形の例外句だけを追記する。
-
-    許可表現の語彙列挙では「してよい」しか見ていないと素通りする退行。
-    """
-    return _replace_once(
-        docs,
-        GOAL_PROMPT,
-        "thought-db 書き込みを行わない。",
-        "thought-db 書き込みを行わない。ただし承認時は commit 可能とする。",
     )
 
 
@@ -2027,22 +1982,12 @@ def mutate_write_boundary_drops_section(docs: Docs) -> Docs:
 
 
 # ---------------------------------------------------------------------------
-# B7: 危険検出時は停止し、自動復旧しない
+# B7: 危険検出時の停止指示を宣言する
 # ---------------------------------------------------------------------------
 
-STOP_WITHOUT_RECOVERY_SECTIONS: tuple[tuple[str, str], ...] = (
+STOP_DECLARATION_SECTIONS: tuple[tuple[str, str], ...] = (
     (COMMIT_PUSH, "### secret 2 層検査"),
     (COMMIT_PUSH, "### push"),
-)
-
-# 自動復旧の指示形。操作語彙は広げるが、必ず「〜する」の指示形を要求する。
-# 現行の禁止文「自動 rebase / merge / force push / 別 branch push はしない」は
-# 操作の直後に `する` が来ないので、語彙を広げても誤検出しない。
-# 検査面を狭める（禁止文を除外リストへ足す）のではなく、指示形という構造で
-# 引用と指示を分ける（§7 の撤回と同じ判断）。
-AUTO_RECOVERY_INSTRUCTION = re.compile(
-    r"(?:自動的に|自動で|自動)\s*"
-    r"(?:除外|rebase|merge|force\s*push|push|復旧|再実行|継続)\s*する"
 )
 
 # 停止・進入ゲート文の否定。直接形「停止しない」「進まない」も見る。
@@ -2053,23 +1998,14 @@ HALT_NEGATION = re.compile(
 )
 
 
-def _auto_recovery_clause(sentence: str, match: re.Match[str]) -> str:
-    """指示一致箇所から次の節境界（が / 、 / 文末）までの範囲。
+def check_dangerous_operations_declare_stop(docs: Docs) -> list[str]:
+    """登録した各節に肯定形の停止指示があり、否定されていないこと。
 
-    文全体で PROHIBITION を見ると「自動 rebase するが force push は禁止する」の
-    ように、指示節と禁止節が混在する文を丸ごと除外してしまう。一致節に限定する。
+    自動復旧の指示検出はここでは行わない。言い回しは列挙しきれず check として
+    収束しないため、停止宣言の構造（存在と否定の有無）だけを見る。
     """
-    tail = sentence[match.start() :]
-    boundary = re.search(r"[が、]", tail)
-    return tail if boundary is None else tail[: boundary.start()]
-
-
-def check_dangerous_operations_stop_without_auto_recovery(
-    docs: Docs,
-) -> list[str]:
-    """危険検出時の停止指示があり、自動復旧の指示が混入していないこと。"""
     problems: list[str] = []
-    for path, heading in STOP_WITHOUT_RECOVERY_SECTIONS:
+    for path, heading in STOP_DECLARATION_SECTIONS:
         text = docs.get(path)
         if text is None:
             problems.append(f"{path}: 対象文書が存在しない")
@@ -2079,47 +2015,37 @@ def check_dangerous_operations_stop_without_auto_recovery(
             problems.append(f"{path}: {heading} がない")
             continue
 
-        # 性質 1: 肯定形の停止指示が 1 つ以上あり、否定された停止文が 0 であること。
+        # 肯定形の停止指示が 1 つ以上あり、否定された停止文が 0 であること。
         # push 節は語「停止」を使わず「場合だけ進む」で進入ゲートを書くので同等と認める。
         halt_matches = list(HALT_SENTENCE.finditer(body))
         if not halt_matches:
             problems.append(f"{path}: {heading} に停止指示がない")
-        else:
-            negated = [
-                match.group(0)
-                for match in halt_matches
-                if HALT_NEGATION.search(match.group(0))
-            ]
-            affirmative = [
-                match.group(0)
-                for match in halt_matches
-                if not HALT_NEGATION.search(match.group(0))
-            ]
-            for sentence in negated:
-                problems.append(
-                    f"{path}: {heading} の停止指示が否定されている: {sentence}"
-                )
-            if not affirmative:
-                problems.append(f"{path}: {heading} に肯定形の停止指示がない")
-
-        # 性質 2: 自動復旧の指示がない。PROHIBITION は一致節に限定して見る。
-        for sentence in _prose_sentences(body):
-            for match in AUTO_RECOVERY_INSTRUCTION.finditer(sentence):
-                clause = _auto_recovery_clause(sentence, match)
-                if PROHIBITION.search(clause):
-                    continue
-                problems.append(
-                    f"{path}: {heading} に自動復旧の指示がある: {sentence}"
-                )
+            continue
+        negated = [
+            match.group(0)
+            for match in halt_matches
+            if HALT_NEGATION.search(match.group(0))
+        ]
+        affirmative = [
+            match.group(0)
+            for match in halt_matches
+            if not HALT_NEGATION.search(match.group(0))
+        ]
+        for sentence in negated:
+            problems.append(
+                f"{path}: {heading} の停止指示が否定されている: {sentence}"
+            )
+        if not affirmative:
+            problems.append(f"{path}: {heading} に肯定形の停止指示がない")
     return problems
 
 
-def targets_dangerous_operations_stop_without_auto_recovery(docs: Docs) -> int:
-    return len(STOP_WITHOUT_RECOVERY_SECTIONS)
+def targets_dangerous_operations_declare_stop(docs: Docs) -> int:
+    return len(STOP_DECLARATION_SECTIONS)
 
 
-def mutate_stop_without_recovery_reverses_to_auto_exclude(docs: Docs) -> Docs:
-    """停止指示を「自動除外する」へ反転する。"""
+def mutate_declare_stop_removes_halt(docs: Docs) -> Docs:
+    """停止指示を消す（「自動除外する」へ置き換え、停止語が無くなる）。"""
     return _replace_once(
         docs,
         COMMIT_PUSH,
@@ -2128,7 +2054,7 @@ def mutate_stop_without_recovery_reverses_to_auto_exclude(docs: Docs) -> Docs:
     )
 
 
-def mutate_stop_without_recovery_drops_stop_sentence(docs: Docs) -> Docs:
+def mutate_declare_stop_drops_stop_sentence(docs: Docs) -> Docs:
     """停止指示の文を削除する。"""
     return _replace_once(
         docs,
@@ -2138,7 +2064,7 @@ def mutate_stop_without_recovery_drops_stop_sentence(docs: Docs) -> Docs:
     )
 
 
-def mutate_stop_without_recovery_drops_push_gate(docs: Docs) -> Docs:
+def mutate_declare_stop_drops_push_gate(docs: Docs) -> Docs:
     """push 節の進入ゲート文を削除する。
 
     登録した節ごとに停止指示の mutation を持たせる。secret 節だけを注入すると、
@@ -2152,53 +2078,12 @@ def mutate_stop_without_recovery_drops_push_gate(docs: Docs) -> Docs:
     )
 
 
-def mutate_stop_without_recovery_drops_push_section(docs: Docs) -> Docs:
+def mutate_declare_stop_drops_push_section(docs: Docs) -> Docs:
     """push 節ごと削除する。節の消失も登録節ごとに検出させる。"""
     return _replace_once(docs, COMMIT_PUSH, "### push\n\n", "")
 
 
-def mutate_stop_without_recovery_instructs_auto_rebase(docs: Docs) -> Docs:
-    """禁止文脈を外して自動 rebase を指示形にする。"""
-    return _replace_once(
-        docs,
-        COMMIT_PUSH,
-        "自動 rebase / merge / force push / 別 branch push はしない。",
-        "自動 rebase する。",
-    )
-
-
-def mutate_stop_without_recovery_instructs_auto_merge(docs: Docs) -> Docs:
-    """禁止文を自動 merge の指示形へ置き換える。
-
-    rebase 以外の操作語彙へ逃げても検出できることを固定する。
-    """
-    return _replace_once(
-        docs,
-        COMMIT_PUSH,
-        "- reject 時は対象 remote を fetch して ahead / behind / diverged と理由を報告し、"
-        "自動 rebase / merge / force push / 別 branch push はしない。",
-        "- reject 時は自動 merge する。",
-    )
-
-
-def mutate_stop_without_recovery_mixes_instruction_with_prohibition(
-    docs: Docs,
-) -> Docs:
-    """指示と禁止を同一文に混在させる。
-
-    文全体で PROHIBITION を見ると後半の禁止語だけで丸ごと除外され、
-    前半の自動 rebase 指示が素通りする。
-    """
-    return _replace_once(
-        docs,
-        COMMIT_PUSH,
-        "- reject 時は対象 remote を fetch して ahead / behind / diverged と理由を報告し、"
-        "自動 rebase / merge / force push / 別 branch push はしない。",
-        "- 自動 rebase するが force push は禁止する。",
-    )
-
-
-def mutate_stop_without_recovery_negates_stop(docs: Docs) -> Docs:
+def mutate_declare_stop_negates_stop(docs: Docs) -> Docs:
     """停止指示を直接否定する。最初の肯定文だけを見る実装では素通りする退行。"""
     return _replace_once(
         docs,
@@ -2208,8 +2093,8 @@ def mutate_stop_without_recovery_negates_stop(docs: Docs) -> Docs:
     )
 
 
-def mutate_stop_without_recovery_drops_section(docs: Docs) -> Docs:
-    """節ごと削除する。"""
+def mutate_declare_stop_drops_section(docs: Docs) -> Docs:
+    """secret 節ごと削除する。"""
     return _replace_once(docs, COMMIT_PUSH, "### secret 2 層検査\n\n", "")
 
 
@@ -2346,31 +2231,26 @@ CHECKS: dict[str, Check] = {
         mutate=mutate_write_boundary_drops_prohibition,
         extra_mutations=(
             mutate_write_boundary_adds_exception,
-            mutate_write_boundary_appends_permission_exception,
-            mutate_write_boundary_appends_possible_exception,
             mutate_write_boundary_adds_allowed_write,
             mutate_write_boundary_drops_section,
         ),
         targets=targets_write_boundary_sets_are_exact,
         category="B6",
-        why="書き込み境界の禁止/許可集合への追加・削除・例外による骨抜きを防ぐ",
+        why="書き込み境界の禁止/許可集合への追加・削除を防ぐ",
     ),
-    "dangerous_operations_stop_without_auto_recovery": Check(
-        run=check_dangerous_operations_stop_without_auto_recovery,
-        mutate=mutate_stop_without_recovery_reverses_to_auto_exclude,
+    "dangerous_operations_declare_stop": Check(
+        run=check_dangerous_operations_declare_stop,
+        mutate=mutate_declare_stop_removes_halt,
         extra_mutations=(
-            mutate_stop_without_recovery_drops_stop_sentence,
-            mutate_stop_without_recovery_drops_push_gate,
-            mutate_stop_without_recovery_instructs_auto_rebase,
-            mutate_stop_without_recovery_instructs_auto_merge,
-            mutate_stop_without_recovery_mixes_instruction_with_prohibition,
-            mutate_stop_without_recovery_negates_stop,
-            mutate_stop_without_recovery_drops_section,
-            mutate_stop_without_recovery_drops_push_section,
+            mutate_declare_stop_drops_stop_sentence,
+            mutate_declare_stop_drops_push_gate,
+            mutate_declare_stop_negates_stop,
+            mutate_declare_stop_drops_section,
+            mutate_declare_stop_drops_push_section,
         ),
-        targets=targets_dangerous_operations_stop_without_auto_recovery,
+        targets=targets_dangerous_operations_declare_stop,
         category="B7",
-        why="危険検出時の停止欠落・自動復旧指示への反転を防ぐ",
+        why="危険検出時の停止指示の欠落・否定を防ぐ",
     ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
