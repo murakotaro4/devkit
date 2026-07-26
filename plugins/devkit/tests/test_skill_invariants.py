@@ -1700,7 +1700,23 @@ EXPECTED_DECISION_IDS = (
     frozenset({"spawn_agent"}),
     frozenset(),
 )
-QUESTION_TOOL_IDS = ("AskUserQuestion", "spawn_agent", "request_user_input")
+# 質問列の比較対象は harness の 3 ツールだけ。EnterPlanMode 等は承認手段なので含めない。
+HARNESS_QUESTION_TOOLS = ("AskUserQuestion", "spawn_agent", "request_user_input")
+EXPECTED_QUESTION_IDS = (
+    frozenset({"AskUserQuestion"}),
+    frozenset({"request_user_input"}),
+    frozenset(),
+)
+
+
+def _question_tool_ids(cell: str) -> frozenset[str]:
+    """質問セルから harness の 3 ツールを backtick 不問で集める。
+
+    判定列と違い、質問セルは文書ごとに backtick の有無が揺れる
+    (裸の AskUserQuestion と `AskUserQuestion` が混在)。囲みを要求すると
+    片方の文書群だけが落ちる。3 ツール以外は比較対象にしない。
+    """
+    return frozenset(tool for tool in HARNESS_QUESTION_TOOLS if tool in cell)
 
 
 def check_harness_decision_table_excludes_request_user_input(
@@ -1749,29 +1765,22 @@ def check_harness_decision_table_excludes_request_user_input(
                 problems.append(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
-        # 性質 4: 質問列も 3 行すべて検査する。
-        # 3 行目の文言（選択肢付き自由文 / 選択肢 + 自由文 等）は文書ごとに揺れるため、
-        # 文言ではなくツール識別子を名指さないことでフォールバック行を定義する。
+        # 性質 4: 質問列も行ごとのツール識別子集合で固定する。
+        # 包含判定だと余計なツールを足す退行が通る。文言は揺れても識別子構成は揃う。
         if questions is None:
             problems.append(f"{path}: ハーネス表に質問列がない")
         elif len(questions) != 3:
             problems.append(f"{path}: 質問列のデータ行が 3 行でない: {questions}")
         else:
-            if "AskUserQuestion" not in questions[0]:
-                problems.append(
-                    f"{path}: 1 行目の質問セルに AskUserQuestion がない: {questions[0]}"
-                )
-            if "request_user_input" not in questions[1]:
-                problems.append(
-                    f"{path}: 2 行目の質問セルに request_user_input がない: "
-                    f"{questions[1]}"
-                )
-            for tool in QUESTION_TOOL_IDS:
-                if tool in questions[2]:
+            for index, (cell, expected) in enumerate(
+                zip(questions, EXPECTED_QUESTION_IDS, strict=True), start=1
+            ):
+                actual = _question_tool_ids(cell)
+                if actual != expected:
                     problems.append(
-                        f"{path}: 3 行目の質問セルに {tool} がある: {questions[2]}"
+                        f"{path}: 質問セル {index} のツール集合が {sorted(expected)} "
+                        f"でない: {sorted(actual)} ({cell})"
                     )
-                    break
 
     return problems
 
@@ -1830,6 +1839,16 @@ def mutate_harness_drops_ask_user_question_from_claude_row(docs: Docs) -> Docs:
     )
 
 
+def mutate_harness_adds_request_user_input_to_claude_question(docs: Docs) -> Docs:
+    """Claude 親行の質問セルへ request_user_input を足す（性質 4 の集合等価）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / request_user_input |",
+    )
+
+
 def mutate_harness_drops_request_user_input_from_codex_row(docs: Docs) -> Docs:
     """Codex 親行の質問セルから request_user_input を落とす（性質 4）。"""
     return _replace_once(
@@ -1839,6 +1858,18 @@ def mutate_harness_drops_request_user_input_from_codex_row(docs: Docs) -> Docs:
         "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |",
         "| それがなく `spawn_agent` が使える Codex 親 | "
         "plan mode、通常 mode は選択肢付き自由文 |",
+    )
+
+
+def mutate_harness_adds_ask_user_question_to_codex_question(docs: Docs) -> Docs:
+    """Codex 親行の質問セルへ AskUserQuestion を足す（性質 4 の集合等価）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |",
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input` / AskUserQuestion、通常 mode は選択肢付き自由文 |",
     )
 
 
@@ -2147,7 +2178,9 @@ CHECKS: dict[str, Check] = {
             mutate_harness_injects_extra_decision_id_into_first_row,
             mutate_harness_injects_capability_into_fallback_row,
             mutate_harness_drops_ask_user_question_from_claude_row,
+            mutate_harness_adds_request_user_input_to_claude_question,
             mutate_harness_drops_request_user_input_from_codex_row,
+            mutate_harness_adds_ask_user_question_to_codex_question,
             mutate_harness_injects_request_user_input_into_fallback_question,
             mutate_harness_swaps_decision_rows,
             mutate_harness_drops_decision_row,

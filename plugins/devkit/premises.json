@@ -420,7 +420,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_skill_invariants.py",
-          "count": 46
+          "count": 58
         }
       ]
     },
@@ -452,6 +452,10 @@
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
           "count": 2
+        },
+        {
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 1
         }
       ]
     },
