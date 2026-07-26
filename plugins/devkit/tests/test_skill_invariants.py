@@ -1631,34 +1631,47 @@ def _harness_section(text: str) -> str | None:
     return _section_body(text, matches[0].group(0))
 
 
-def _decision_table_cells(section: str) -> list[str] | None:
-    """ハーネス節内で、ヘッダに `判定` または `条件` を含む最初の表の判定列。
+def _harness_table_columns(
+    section: str,
+) -> tuple[list[str], list[str] | None] | None:
+    """ハーネス節内の最初の判定表から判定列と質問列を返す。
 
     dig はハーネス表と工程表を同じ節に持つため、節全体ではなく表単位で切る。
     setup / repo-loop は先頭列が `親` で判定列が 2 列目なので、列名で選ぶ。
+    質問列はヘッダに `質問` を含む最初の列。無ければ第 2 要素が None。
     """
     lines = section.splitlines()
     for index, line in enumerate(lines):
         if not line.startswith("|"):
             continue
         header = _cells(line)
-        column = next(
+        decision_col = next(
             (i for i, name in enumerate(header) if "判定" in name or "条件" in name),
             None,
         )
-        if column is None or index + 1 >= len(lines):
+        if decision_col is None or index + 1 >= len(lines):
             continue
-        rows: list[str] = []
+        question_col = next(
+            (i for i, name in enumerate(header) if "質問" in name),
+            None,
+        )
+        decision: list[str] = []
+        question: list[str] | None = [] if question_col is not None else None
         for row in lines[index + 2 :]:
             if not row.startswith("|"):
                 break
             cells = _cells(row)
-            rows.append(cells[column] if len(cells) > column else "")
-        return rows
+            decision.append(cells[decision_col] if len(cells) > decision_col else "")
+            if question is not None and question_col is not None:
+                question.append(
+                    cells[question_col] if len(cells) > question_col else ""
+                )
+        return decision, question
     return None
 
 
 def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
+    """判定列だけを返す。レジストリ完全性 meta-test 用。"""
     found: dict[str, list[str]] = {}
     for path in _skill_paths(docs):
         if path in UNCHECKED_HARNESS_DOCS:
@@ -1666,23 +1679,22 @@ def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
         section = _harness_section(docs.get(path, ""))
         if section is None:
             continue
-        cells = _decision_table_cells(section)
-        if cells is not None:
-            found[path] = cells
+        columns = _harness_table_columns(section)
+        if columns is not None:
+            found[path] = columns[0]
     return found
 
 
 def check_harness_decision_table_excludes_request_user_input(
     docs: Docs,
 ) -> list[str]:
-    """判定表の判定セルに request_user_input を持ち込ませない。
+    """判定表の判定セル・質問セルの共通契約を検査する。
 
     位置関係（節冒頭の禁止文の有無）では成立しない。ハーネス節の見出しが
     3 形式に分かれ、しかも `request_user_input` が節冒頭の禁止文に現れる文書が
     複数あるため、判定表のセルを直接見る。
     """
     problems: list[str] = []
-    tables = _docs_with_decision_tables(docs)
 
     for path in _skill_paths(docs):
         if path in UNCHECKED_HARNESS_DOCS:
@@ -1691,10 +1703,11 @@ def check_harness_decision_table_excludes_request_user_input(
         if section is None:
             problems.append(f"{path}: ハーネス節がちょうど 1 つでない")
             continue
-        cells = tables.get(path)
-        if cells is None:
+        columns = _harness_table_columns(section)
+        if columns is None:
             problems.append(f"{path}: ハーネス判定表がない")
             continue
+        cells, questions = columns
         # 性質 1: データ行はちょうど 3 行。
         if len(cells) != 3:
             problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
@@ -1729,6 +1742,16 @@ def check_harness_decision_table_excludes_request_user_input(
                 problems.append(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
+        # 性質 4: Claude 親行の質問セルは AskUserQuestion を使う。
+        # 2・3 行目は検査しない。plan mode / 通常 mode の分岐などハーネスごとの
+        # 正当な差異があり、共通契約として固定できるのは Claude 親の質問手段だけ。
+        if questions is None:
+            problems.append(f"{path}: ハーネス表に質問列がない")
+        elif len(questions) < 1 or "AskUserQuestion" not in questions[0]:
+            actual = questions[0] if questions else "<missing>"
+            problems.append(
+                f"{path}: 1 行目の質問セルに AskUserQuestion がない: {actual}"
+            )
 
     return problems
 
@@ -1767,6 +1790,16 @@ def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
         HANDOFF,
         "| 判定不能 | 選択肢付き自由文 |",
         "| `BrowserTool` が利用可能な Browser 親 | 選択肢付き自由文 |",
+    )
+
+
+def mutate_harness_drops_ask_user_question_from_claude_row(docs: Docs) -> Docs:
+    """Claude 親行の質問セルから AskUserQuestion を外す（性質 4）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
+        "| `AskUserQuestion` が使える Claude 親 | 選択肢付き自由文 |",
     )
 
 
@@ -2061,6 +2094,7 @@ CHECKS: dict[str, Check] = {
         extra_mutations=(
             mutate_harness_injects_spawn_agent_into_first_row,
             mutate_harness_injects_capability_into_fallback_row,
+            mutate_harness_drops_ask_user_question_from_claude_row,
             mutate_harness_swaps_decision_rows,
             mutate_harness_drops_decision_row,
             mutate_harness_drops_section_heading,
