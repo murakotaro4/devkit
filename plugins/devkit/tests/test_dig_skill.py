@@ -171,6 +171,7 @@ def test_fixed_backend_assignment_and_python_gate_contract():
     assert "起動そのものに失敗" in backend
     assert "起動不能または応答不能" in backend
     assert "rate limit" in backend
+    assert "曖昧ならレート制限に分類せず降格しない" in backend
     assert "報告なしに fallback しない" in backend
     assert "レビュー lane は停止して報告する" in backend
     assert all(
