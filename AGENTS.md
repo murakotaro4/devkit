@@ -61,6 +61,7 @@ goal-prompt は Goal プロンプトの保存と `/goal` 起動文の出力だ�
 - この repo では、ファイル変更を伴うタスクごとに必ず独立したサブエージェント review を 1 回以上実施する
 - review で指摘が出た場合は修正後に再 review を回し、追加 findings がなくなるまで繰り返す
 - 品質ルールは prose より決定論的ツールを優先し、lint / format / validation / test で強制する。バグや逸脱が出たら、同じ失敗を次回自動検出できる check を追加する
+- 配布ドキュメントのサイズは gate ではなく計測値として扱う。`report_doc_size.py` が `cc2cd36` 基点の baseline 比を verify で出す
 
 ## スキル採用基準
 

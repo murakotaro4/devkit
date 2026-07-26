@@ -102,7 +102,13 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 5. detect-secrets baseline 照合
 6. pytest
 
-`verify-full` は `verify-fast` に `check_plugin_version_bump.py` を加えます。
+checks の外側で最後に `report_doc_size.py` が走る（終了コードは無視する）。
+
+`verify-full` は `verify-fast` に `check_plugin_version_bump.py` を加え、同様に checks の外側で最後に `report_doc_size.py` を走らせます。
+
+### report_doc_size.py
+
+配布ドキュメントのサイズ計測レポートです。**gate ではなく計測レポート**であり、サイズの増減では失敗しません。基点は `cc2cd36`（2026-07-25 の圧縮 + 独立レビュー収束点）の baseline 比を、増加率降順で出力します。`CHECKS_FAST` / `CHECKS_FULL` には入れず、`verify-fast` / `verify-full` の checks 実行後に必ず走らせて終了コードを無視します。
 
 ### check_utf8_bom.py
 

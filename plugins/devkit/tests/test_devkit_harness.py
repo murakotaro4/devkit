@@ -101,3 +101,25 @@ def test_secret_snapshot_omits_staged_deletions(tmp_path, monkeypatch):
 
 def test_secret_snapshot_path_normalization_maps_worktree_alias_to_repo_path():
     assert devkit_harness.repo_path_from_secret_snapshot_path(".devkit-worktree/a/b.txt") == "a/b.txt"
+
+
+def test_doc_size_report_is_not_in_gate_lists():
+    for checks in (devkit_harness.CHECKS_FAST, devkit_harness.CHECKS_FULL):
+        assert not any(
+            "report_doc_size.py" in part for command in checks for part in command
+        )
+
+
+def test_doc_size_report_nonzero_exit_does_not_change_main_result(monkeypatch):
+    def fake_run(cmd, cwd=None, **kwargs):  # noqa: ANN001
+        if any("report_doc_size.py" in str(part) for part in cmd):
+            return subprocess.CompletedProcess(cmd, 3)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(devkit_harness.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        devkit_harness.sys,
+        "argv",
+        ["devkit_harness.py", "verify-fast"],
+    )
+    assert devkit_harness.main() == 0

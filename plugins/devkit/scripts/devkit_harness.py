@@ -181,6 +181,9 @@ CHECKS_FULL: list[list[str]] = CHECKS_FAST + [
     [sys.executable, script("check_plugin_version_bump.py")],
 ]
 
+# gate リストの外。checks の後に必ず走らせ、終了コードは無視する。
+DOC_SIZE_REPORT: list[str] = [sys.executable, script("report_doc_size.py")]
+
 
 def run_steps(steps: list[list[str]]) -> int:
     for cmd in steps:
@@ -188,6 +191,11 @@ def run_steps(steps: list[list[str]]) -> int:
         if result.returncode != 0:
             return result.returncode
     return 0
+
+
+def run_doc_size_report() -> None:
+    """サイズ計測レポート。終了コードは呼び出し側の結果に影響させない。"""
+    subprocess.run(DOC_SIZE_REPORT, cwd=REPO_ROOT)
 
 
 def main() -> int:
@@ -198,8 +206,11 @@ def main() -> int:
     if args.command == "verify-secrets":
         return run_detect_secrets_check()
     if args.command == "verify-fast":
-        return run_steps(CHECKS_FAST)
-    return run_steps(CHECKS_FULL)
+        code = run_steps(CHECKS_FAST)
+    else:
+        code = run_steps(CHECKS_FULL)
+    run_doc_size_report()
+    return code
 
 
 if __name__ == "__main__":
