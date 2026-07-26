@@ -1143,13 +1143,21 @@ def check_fixed_backend_assignment(docs: Docs) -> list[str]:
         if CURSOR_MODEL in cell:
             problems.append(f"{DIG}: {role} の既定に {CURSOR_MODEL} が混入している")
 
-    by_parent = {row[0]: row for row in fallback_rows if row}
-    expected_parents = set(EXPECTED_FALLBACK_LANES)
-    actual_parents = set(by_parent)
-    for parent in sorted(expected_parents - actual_parents):
-        problems.append(f"{DIG}: フォールバック表に {parent} 行がない")
-    for parent in sorted(actual_parents - expected_parents):
+    parent_names = [row[0] for row in fallback_rows if row]
+    parent_counts = {
+        parent: parent_names.count(parent) for parent in set(parent_names)
+    }
+    expected_parents = tuple(EXPECTED_FALLBACK_LANES)
+    for parent in expected_parents:
+        count = parent_counts.get(parent, 0)
+        if count == 0:
+            problems.append(f"{DIG}: フォールバック表に {parent} 行がない")
+        elif count > 1:
+            problems.append(f"{DIG}: フォールバック表に {parent} 行が重複している")
+    for parent in sorted(set(parent_names) - set(expected_parents)):
         problems.append(f"{DIG}: フォールバック表に未知の親行 {parent}")
+
+    by_parent = {row[0]: row for row in fallback_rows if row}
 
     for parent, (expected_impl, expected_review) in EXPECTED_FALLBACK_LANES.items():
         row = by_parent.get(parent)
@@ -1222,6 +1230,18 @@ def mutate_fixed_backend_assignment_duplicates_role(docs: Docs) -> Docs:
         f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
         f"| 実装 | codex `{CODEX_MODEL}` / medium |\n"
         f"| 実装 | cursor-agent `{CURSOR_MODEL}` |",
+    )
+
+
+def mutate_fixed_backend_assignment_duplicates_parent(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        "| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | "
+        "`spawn_agent` explorer → 終端処理 |",
+        "| Codex 親 | cursor-agent → 停止 | `spawn_agent` explorer → 終端処理 |\n"
+        "| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | "
+        "`spawn_agent` explorer → 終端処理 |",
     )
 
 
@@ -1531,6 +1551,7 @@ CHECKS: dict[str, Check] = {
             mutate_fixed_backend_assignment_drops_fallback,
             mutate_fixed_backend_assignment_drops_review_lane,
             mutate_fixed_backend_assignment_duplicates_role,
+            mutate_fixed_backend_assignment_duplicates_parent,
         ),
         targets=targets_fixed_backend_assignment,
         category="B4",

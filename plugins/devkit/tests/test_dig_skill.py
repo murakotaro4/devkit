@@ -167,9 +167,11 @@ def test_fixed_backend_assignment_and_python_gate_contract():
     assert "可用性判定の失敗" in backend
     assert "chat 作成が非ゼロ終了" in backend
     assert "thread_id を採れない" in backend
+    assert "起動そのものに失敗" in backend
     assert "起動不能または応答不能" in backend
     assert "rate limit" in backend
     assert "報告なしに fallback しない" in backend
+    assert "レビュー lane は停止して報告する" in backend
     assert all(
         command in backend
         for command in ("command -v codex", "command -v cursor-agent", "command -v uv")

@@ -135,12 +135,11 @@ backend をユーザーに質問しない。ユーザーが明示指定した場
 | Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | `spawn_agent` explorer → 終端処理 |
 | 判定不能 | cursor-agent → codex CLI → 停止 | codex CLI → 終端処理 |
 
-- 上から順に、利用可能かつ降格条件に当たらない最初の段を使う。
-- Codex 親は `codex exec` の入れ子と `claude` CLI への逆委譲の禁止を維持するため、実装階段から codex CLI 段を飛ばす。
-- 降格は前進のみで逆戻りしない。段数が有限なので無限降格しない。
+- 上から順に、利用可能かつ降格条件に当たらない最初の段を使う。降格は前進のみ（有限段）。
+- Codex 親は `codex exec` 入れ子と `claude` CLI 逆委譲を禁じるため、実装階段から codex CLI 段を飛ばす。
 - 実装 lane が尽きたら停止して報告する（親が勝手に実装しない）。
-- レビュー lane の終端処理: repo が独立レビュー必須なら自動 skip せず停止して報告する。必須でない repo だけ、未実施を明記して続行してよい。
-- 降格したら step 2 の工程表 backend 欄と完了報告へ「cursor-agent → codex（理由: rate limit）」の形で必ず記す。**報告なしに fallback しない。**
+- レビュー lane 終端: 独立レビュー必須なら自動 skip せず停止。必須でない repo だけ未実施を明記して続行可。
+- 降格したら step 2 の工程表と完了報告へ「cursor-agent → codex（理由: rate limit）」の形で記す。**報告なしに fallback しない。**
 
 降格条件は全段共通の 3 分類。レート制限キーワード（大小文字無視）: `rate limit` / `rate_limit` / `ratelimit` / `quota` / `usage limit` / `too many requests` / `429`。
 
@@ -150,10 +149,10 @@ backend をユーザーに質問しない。ユーザーが明示指定した場
 
 段ごとの具体形:
 - cursor-agent: 可用性=`command -v cursor-agent`、起動失敗=chat 作成が非ゼロ終了または `CHAT_ID` が空、レート制限=ジョブログ判定
-- codex CLI: 可用性=`command -v codex`（実装 / resume はさらに `command -v uv`。レビュー lane に `uv` 不要）、起動失敗=codex 実行が非ゼロ終了し thread_id を採れない、レート制限=ジョブログ判定
+- codex CLI: 可用性=`command -v codex`（実装 / resume はさらに `command -v uv`。レビューに `uv` 不要）、レート制限=ジョブログ判定。起動失敗は lane 別—実装 / resume: 非ゼロ終了し thread_id を採れない。レビュー: 起動そのものに失敗（実行不能・認証や設定不備で起動に至らない）。レビュー実行後の非ゼロは起動失敗にせず、降格せず停止して報告する
 - サブエージェント（`Agent(...)` / `spawn_agent`）: 起動不能または応答不能
 
-上記 3 分類に当たらない非ゼロ終了は通常の実装失敗として扱い、降格せず step 8 の修正ループで処理する。
+上記 3 分類に当たらない非ゼロ終了は降格しない。実装 lane は通常の実装失敗として step 8 の修正ループで処理し、レビュー lane は停止して報告する。
 
 ### 4. 計画レビュー
 
