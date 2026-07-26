@@ -1606,7 +1606,7 @@ def mutate_ci_green_before_merge(docs: Docs) -> Docs:
 
 
 # ---------------------------------------------------------------------------
-# B8: request_user_input をハーネス判定キーへ格上げする退行を防ぐ
+# B8: ハーネス判定表の構造を固定する
 # ---------------------------------------------------------------------------
 
 # 散文ハーネスは構造的に判定できないため未検査とする。
@@ -1618,9 +1618,22 @@ UNCHECKED_HARNESS_DOCS = frozenset({"plugins/devkit/skills/goal-prompt/SKILL.md"
 # AGENTS.md 正本の `### ハーネス判定` を同じ規則で扱う。
 HARNESS_HEADING = re.compile(r"^#{2,6} ハーネス[^\n]*$", re.MULTILINE)
 AGENTS = "AGENTS.md"
-GOAL_PROMPT = "plugins/devkit/skills/goal-prompt/SKILL.md"
 HANDOFF = "plugins/devkit/skills/handoff/SKILL.md"
 BACKTICK_IDENTIFIER = re.compile(r"`([^`]+)`")
+# CamelCase または snake_case。判定セルの backtick 外未知識別子検出に使う。
+IDENTIFIER_SHAPE = re.compile(
+    r"(?<![A-Za-z0-9_])(?=[A-Za-z_]*[A-Z_])[A-Za-z][A-Za-z0-9_]*(?![A-Za-z0-9_])"
+)
+# 判定列のセル文言に現れる役割ラベル。判定キーではない。
+DECISION_PROSE_LABELS = frozenset({"Claude", "Codex"})
+# dig の否定句として判定セルに裸で現れる。判定キーは backtick 側だけを見る。
+DECISION_ALLOWED_BARE_IDS = frozenset({"AskUserQuestion"}) | DECISION_PROSE_LABELS
+# 判定列の行ごとの backtick 識別子集合。文言は揺れるが構成は正本含め一致する。
+EXPECTED_DECISION_IDS = (
+    frozenset({"AskUserQuestion"}),
+    frozenset({"spawn_agent"}),
+    frozenset(),
+)
 
 
 def _skill_paths(docs: Docs) -> list[str]:
@@ -1643,14 +1656,11 @@ def _harness_section(text: str) -> str | None:
     return _section_body(text, matches[0].group(0))
 
 
-def _harness_table_columns(
-    section: str,
-) -> tuple[list[str], list[str] | None] | None:
-    """ハーネス節内の最初の判定表から判定列と質問列を返す。
+def _harness_decision_cells(section: str) -> list[str] | None:
+    """ハーネス節内の最初の判定表から判定列セルを返す。
 
     dig はハーネス表と工程表を同じ節に持つため、節全体ではなく表単位で切る。
     setup / repo-loop は先頭列が `親` で判定列が 2 列目なので、列名で選ぶ。
-    質問列はヘッダに `質問` を含む最初の列。無ければ第 2 要素が None。
     """
     lines = section.splitlines()
     for index, line in enumerate(lines):
@@ -1663,22 +1673,13 @@ def _harness_table_columns(
         )
         if decision_col is None or index + 1 >= len(lines):
             continue
-        question_col = next(
-            (i for i, name in enumerate(header) if "質問" in name),
-            None,
-        )
         decision: list[str] = []
-        question: list[str] | None = [] if question_col is not None else None
         for row in lines[index + 2 :]:
             if not row.startswith("|"):
                 break
             cells = _cells(row)
             decision.append(cells[decision_col] if len(cells) > decision_col else "")
-            if question is not None and question_col is not None:
-                question.append(
-                    cells[question_col] if len(cells) > question_col else ""
-                )
-        return decision, question
+        return decision
     return None
 
 
@@ -1691,9 +1692,9 @@ def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
         section = _harness_section(docs.get(path, ""))
         if section is None:
             continue
-        columns = _harness_table_columns(section)
-        if columns is not None:
-            found[path] = columns[0]
+        cells = _harness_decision_cells(section)
+        if cells is not None:
+            found[path] = cells
     return found
 
 
@@ -1704,31 +1705,6 @@ def _backtick_identifiers(cell: str) -> frozenset[str]:
     集合が壊れ、dig だけが落ちる。囲まれたものだけを識別子とする。
     """
     return frozenset(BACKTICK_IDENTIFIER.findall(cell))
-
-
-# CamelCase または snake_case の ASCII トークン。plan / mode 等の普通の英単語は拾わない。
-IDENTIFIER_SHAPE = re.compile(
-    r"(?<![A-Za-z0-9_])(?=[A-Za-z_]*[A-Z_])[A-Za-z][A-Za-z0-9_]*(?![A-Za-z0-9_])"
-)
-# 判定列のセル文言に現れる役割ラベル。判定キーではない。
-DECISION_PROSE_LABELS = frozenset({"Claude", "Codex"})
-# dig の否定句として判定セルに裸で現れる。判定キーは backtick 側だけを見る。
-DECISION_ALLOWED_BARE_IDS = frozenset({"AskUserQuestion"}) | DECISION_PROSE_LABELS
-
-# 判定列の行ごとの識別子集合。文言は文書ごとに揺れるが、構成は正本含め一致する。
-EXPECTED_DECISION_IDS = (
-    frozenset({"AskUserQuestion"}),
-    frozenset({"spawn_agent"}),
-    frozenset(),
-)
-# dig の質問セルに現れるが、承認手段であって質問手段ではない。
-# 質問セルの識別子集合から除外してよいのは、契約上の役割が質問ではないと分かっているものだけ。
-APPROVED_NON_QUESTION_IDS = frozenset({"EnterPlanMode", "ExitPlanMode"})
-EXPECTED_QUESTION_IDS = (
-    frozenset({"AskUserQuestion"}),
-    frozenset({"request_user_input"}),
-    frozenset(),
-)
 
 
 def _has_identifier(text: str, identifier: str) -> bool:
@@ -1747,20 +1723,12 @@ def _has_identifier(text: str, identifier: str) -> bool:
 
 
 def _shaped_identifiers(cell: str) -> frozenset[str]:
-    """識別子らしい形のトークンを backtick の有無を問わずすべて集める。
-
-    既知名で拾うと未知の追加が永遠に見えない。収集は形だけに依存する。
-    """
+    """識別子らしい形のトークンを backtick の有無を問わずすべて集める。"""
     return frozenset(IDENTIFIER_SHAPE.findall(cell))
 
 
-def _question_tool_ids(cell: str) -> frozenset[str]:
-    """質問セルの識別子を形で集め、承認済み非質問識別子だけを除く。"""
-    return frozenset(_shaped_identifiers(cell) - APPROVED_NON_QUESTION_IDS)
-
-
 def _bare_decision_unknowns(cell: str) -> frozenset[str]:
-    """判定セルで backtick 外に現れた、役割ラベル以外の識別子。
+    """判定セルで backtick 外に現れた、許可リスト外の識別子。
 
     期待集合の比較は backtick 必須のまま（dig の裸 AskUserQuestion を判定キーに
     しないため）。その穴を塞ぐため、形で拾った裸トークンのうち許可リスト外を拒否する。
@@ -1772,14 +1740,12 @@ def _bare_decision_unknowns(cell: str) -> frozenset[str]:
     )
 
 
-def check_harness_decision_table_excludes_request_user_input(
-    docs: Docs,
-) -> list[str]:
-    """判定表の判定セル・質問セルを識別子集合で固定する。
+def check_harness_decision_table_is_exact(docs: Docs) -> list[str]:
+    """ハーネス判定表の節・行数・判定列識別子集合を固定する。
 
     位置関係（節冒頭の禁止文の有無）では成立しない。ハーネス節の見出しが
     3 形式に分かれ、しかも `request_user_input` が節冒頭の禁止文に現れる文書が
-    複数あるため、判定表のセルを直接見る。
+    複数あるため、判定表のセルを直接見る。質問列は自然言語寄りで収束しないため見ない。
     """
     problems: list[str] = []
 
@@ -1790,20 +1756,13 @@ def check_harness_decision_table_excludes_request_user_input(
         if section is None:
             problems.append(f"{path}: ハーネス節がちょうど 1 つでない")
             continue
-        columns = _harness_table_columns(section)
-        if columns is None:
+        cells = _harness_decision_cells(section)
+        if cells is None:
             problems.append(f"{path}: ハーネス判定表がない")
             continue
-        cells, questions = columns
-        # 性質 1: データ行はちょうど 3 行。
         if len(cells) != 3:
             problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
             continue
-        # 性質 2: 判定列は行ごとの backtick 識別子集合で固定する。
-        # 文言（が使える / が利用可能な 等）は文書ごとに揺れるが、識別子構成は
-        # 正本含め一致する。揺れる部分ではなく揃っている部分を見る。
-        # dig の 2 行目は裸の AskUserQuestion を否定句として含むため、期待集合は
-        # backtick 必須のままにする。裸の未知識別子は性質 2b で別途拒否する。
         for index, (cell, expected) in enumerate(
             zip(cells, EXPECTED_DECISION_IDS, strict=True), start=1
         ):
@@ -1819,43 +1778,23 @@ def check_harness_decision_table_excludes_request_user_input(
                     f"{path}: 判定セル {index} に backtick なしの識別子がある: "
                     f"{sorted(bare_unknown)} ({cell})"
                 )
-        # 性質 3: 判定セルに request_user_input を判定キーとして書かない。
-        # backtick 無しの混入も拒否する（集合等価は囲み付きだけを見るため）。
-        # 検出は `_has_identifier` で行い、legacy_request_user_input 等の部分一致を避ける。
         for index, cell in enumerate(cells, start=1):
             if _has_identifier(cell, "request_user_input"):
                 problems.append(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
-        # 性質 4: 質問列は形 (CamelCase / snake_case) で識別子をすべて集め、
-        # 承認済み非質問識別子だけを除いて期待集合と比較する。
-        # 収集を既知名に依存させない（依存すると未知の追加が見えない）。
-        if questions is None:
-            problems.append(f"{path}: ハーネス表に質問列がない")
-        elif len(questions) != 3:
-            problems.append(f"{path}: 質問列のデータ行が 3 行でない: {questions}")
-        else:
-            for index, (cell, expected) in enumerate(
-                zip(questions, EXPECTED_QUESTION_IDS, strict=True), start=1
-            ):
-                actual = _question_tool_ids(cell)
-                if actual != expected:
-                    problems.append(
-                        f"{path}: 質問セル {index} のツール集合が {sorted(expected)} "
-                        f"でない: {sorted(actual)} ({cell})"
-                    )
 
     return problems
 
 
-def targets_harness_decision_table_excludes_request_user_input(docs: Docs) -> int:
+def targets_harness_decision_table_is_exact(docs: Docs) -> int:
     return sum(
         1 for path in _harness_doc_paths(docs) if path not in UNCHECKED_HARNESS_DOCS
     )
 
 
 def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
-    """判定セルへ request_user_input を挿入する（性質 3）。"""
+    """判定セルへ request_user_input を挿入する。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -1865,7 +1804,7 @@ def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
 
 
 def mutate_harness_injects_spawn_agent_into_first_row(docs: Docs) -> Docs:
-    """1 行目の判定セルへ spawn_agent を混入させる（性質 2）。"""
+    """1 行目の判定セルへ spawn_agent を混入させる。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -1875,7 +1814,7 @@ def mutate_harness_injects_spawn_agent_into_first_row(docs: Docs) -> Docs:
 
 
 def mutate_harness_injects_extra_decision_id_into_first_row(docs: Docs) -> Docs:
-    """1 行目の判定セルへ別識別子を追加する（性質 2 の集合等価）。"""
+    """1 行目の判定セルへ別識別子を追加する。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -1885,7 +1824,7 @@ def mutate_harness_injects_extra_decision_id_into_first_row(docs: Docs) -> Docs:
 
 
 def mutate_harness_injects_bare_unknown_into_decision_cell(docs: Docs) -> Docs:
-    """判定セルへ裸の別識別子を足す（性質 2b: backtick 外の未知）。"""
+    """判定セルへ裸の別識別子を足す。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -1895,7 +1834,7 @@ def mutate_harness_injects_bare_unknown_into_decision_cell(docs: Docs) -> Docs:
 
 
 def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
-    """3 行目のフォールバックへ識別子参照を持ち込む（性質 2）。"""
+    """3 行目のフォールバックへ識別子参照を持ち込む。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -1904,96 +1843,8 @@ def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
     )
 
 
-def mutate_harness_drops_ask_user_question_from_claude_row(docs: Docs) -> Docs:
-    """Claude 親行の質問セルから AskUserQuestion を外す（性質 4）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
-        "| `AskUserQuestion` が使える Claude 親 | 選択肢付き自由文 |",
-    )
-
-
-def mutate_harness_adds_request_user_input_to_claude_question(docs: Docs) -> Docs:
-    """Claude 親行の質問セルへ request_user_input を足す（性質 4 の集合等価）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / request_user_input |",
-    )
-
-
-def mutate_harness_adds_unknown_tool_to_claude_question(docs: Docs) -> Docs:
-    """Claude 親行の質問セルへ未知ツールを足す（性質 4: backtick 付き未知追加）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / `BrowserTool` |",
-    )
-
-
-def mutate_harness_adds_bare_unknown_tool_to_claude_question(docs: Docs) -> Docs:
-    """Claude 親行の質問セルへ裸の未知ツールを足す（性質 4: 形ベース収集）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / BrowserTool |",
-    )
-
-
-def mutate_harness_renames_ask_user_question_to_legacy_in_claude_question(
-    docs: Docs,
-) -> Docs:
-    """Claude 親行の質問セルを LegacyAskUserQuestion へ改名する（性質 4 の単語境界）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
-        "| `AskUserQuestion` が使える Claude 親 | LegacyAskUserQuestion |",
-    )
-
-
-def mutate_harness_drops_request_user_input_from_codex_row(docs: Docs) -> Docs:
-    """Codex 親行の質問セルから request_user_input を落とす（性質 4）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| それがなく `spawn_agent` が使える Codex 親 | "
-        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |",
-        "| それがなく `spawn_agent` が使える Codex 親 | "
-        "plan mode、通常 mode は選択肢付き自由文 |",
-    )
-
-
-def mutate_harness_adds_ask_user_question_to_codex_question(docs: Docs) -> Docs:
-    """Codex 親行の質問セルへ AskUserQuestion を足す（性質 4 の集合等価）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| それがなく `spawn_agent` が使える Codex 親 | "
-        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |",
-        "| それがなく `spawn_agent` が使える Codex 親 | "
-        "plan mode は `request_user_input` / AskUserQuestion、通常 mode は選択肢付き自由文 |",
-    )
-
-
-def mutate_harness_injects_request_user_input_into_fallback_question(
-    docs: Docs,
-) -> Docs:
-    """フォールバック行の質問セルへ request_user_input を混入させる（性質 4）。"""
-    return _replace_once(
-        docs,
-        HANDOFF,
-        "| 判定不能 | 選択肢付き自由文 |",
-        "| 判定不能 | `request_user_input` |",
-    )
-
-
 def mutate_harness_swaps_decision_rows(docs: Docs) -> Docs:
-    """1 行目と 2 行目の判定セルを入れ替える（性質 2）。"""
+    """1 行目と 2 行目の判定セルを入れ替える。"""
     return _swap_once(
         docs,
         HANDOFF,
@@ -2003,7 +1854,7 @@ def mutate_harness_swaps_decision_rows(docs: Docs) -> Docs:
 
 
 def mutate_harness_drops_decision_row(docs: Docs) -> Docs:
-    """データ行を 1 行削除する（性質 1）。"""
+    """データ行を 1 行削除する。"""
     return _replace_once(
         docs,
         HANDOFF,
@@ -2013,167 +1864,20 @@ def mutate_harness_drops_decision_row(docs: Docs) -> Docs:
 
 
 def mutate_harness_drops_section_heading(docs: Docs) -> Docs:
-    """ハーネス節の見出しごと削除する（性質 1 またはレジストリ完全性）。"""
+    """ハーネス節の見出しごと削除する。"""
     return _replace_once(docs, HANDOFF, "## ハーネス・進捗\n\n", "")
 
 
 def mutate_harness_injects_request_user_input_into_agents_decision_cell(
     docs: Docs,
 ) -> Docs:
-    """AGENTS.md 正本の判定セルへ request_user_input を混入させる（性質 3）。"""
+    """AGENTS.md 正本の判定セルへ request_user_input を混入させる。"""
     return _replace_once(
         docs,
         AGENTS,
         "| Claude 親 | `AskUserQuestion` が使える |",
         "| Claude 親 | `AskUserQuestion` / `request_user_input` が使える |",
     )
-
-
-# ---------------------------------------------------------------------------
-# B6: 書き込み境界の禁止 / 許可集合を集合等価で固定する
-# ---------------------------------------------------------------------------
-
-def _split_boundary_items(text: str) -> frozenset[str]:
-    """読点・中黒・` / ` で分割して集合化する。"""
-    items: list[str] = []
-    for part in text.split("、"):
-        for mid in part.split("・"):
-            for piece in mid.split(" / "):
-                cleaned = piece.strip().strip("。")
-                if cleaned:
-                    items.append(cleaned)
-    return frozenset(items)
-
-
-# (path, 節見出し, 禁止操作の期待集合, 許可書き込みの期待集合)
-# 期待集合は実本文を分割規則で起こした値。実装に合わせて緩めない。
-WRITE_BOUNDARY_DOCS: tuple[tuple[str, str, frozenset[str], frozenset[str]], ...] = (
-    (
-        GOAL_PROMPT,
-        "## 禁止事項",
-        frozenset(
-            {
-                "コード実装",
-                "PR",
-                "commit",
-                "push",
-                "計画レビュー",
-                "独立レビュー",
-                "Claude Code 組み込み `/goal` の自動発動",
-                "scheduler",
-                "loop 登録",
-                "thought-db 書き込み",
-            }
-        ),
-        frozenset({"Goal ファイルと専用 `.gitignore` の作成"}),
-    ),
-    (
-        HANDOFF,
-        "## 書き込み契約",
-        frozenset({"既存ファイルの編集", "削除", "commit", "push"}),
-        frozenset({"handoff と必要な専用 `.gitignore` の新規 Write"}),
-    ),
-)
-
-
-def _boundary_sets(body: str) -> tuple[frozenset[str], frozenset[str]]:
-    """節から禁止操作集合と許可書き込み集合を取り出す。"""
-    prohibited: set[str] = set()
-    allowed: set[str] = set()
-    for match in re.finditer(r"([^。\n]*を(?:行わない|しない)。)", body):
-        sentence = match.group(1)
-        content = re.sub(r"を(?:行わない|しない)。$", "", sentence)
-        # 「X以外は行わず、Yをしない」は Y だけが禁止集合。
-        if "以外は行わず" in content:
-            content = content.split("以外は行わず", 1)[1].lstrip("、")
-        content = re.sub(r"^[-*]\s*", "", content.strip())
-        prohibited |= _split_boundary_items(content)
-    for match in re.finditer(r"([^。\n]*)以外は(?:変更しない|行わず)", body):
-        prefix = re.sub(r"^[-*]\s*", "", match.group(1).strip())
-        allowed |= _split_boundary_items(prefix)
-    return frozenset(prohibited), frozenset(allowed)
-
-
-def check_write_boundary_sets_are_exact(docs: Docs) -> list[str]:
-    """書き込み境界の禁止 / 許可集合を登録値と完全一致させる。
-
-    `assert "commit" in prohibitions` のような部分集合検査は項目の削除しか
-    検出できない。集合等価にして追加も削除も検出する。
-
-    許可文・例外句の意味判定はここでは行わない。言い回しは列挙しきれず
-    check として収束しないため、構造（抽出集合の一致と節の存在）だけを見る。
-    """
-    problems: list[str] = []
-    for path, heading, expected_prohibited, expected_allowed in WRITE_BOUNDARY_DOCS:
-        text = docs.get(path)
-        if text is None:
-            problems.append(f"{path}: 対象文書が存在しない")
-            continue
-        body = _section_body(text, heading)
-        if not body:
-            # 節ごと消える退行を見逃さない。
-            problems.append(f"{path}: {heading} がない")
-            continue
-        prohibited, allowed = _boundary_sets(body)
-        if prohibited != expected_prohibited:
-            problems.append(
-                f"{path}: 禁止操作集合が期待と違う: "
-                f"missing={sorted(expected_prohibited - prohibited)}, "
-                f"extra={sorted(prohibited - expected_prohibited)}"
-            )
-        if allowed != expected_allowed:
-            problems.append(
-                f"{path}: 許可書き込み集合が期待と違う: "
-                f"missing={sorted(expected_allowed - allowed)}, "
-                f"extra={sorted(allowed - expected_allowed)}"
-            )
-    return problems
-
-
-def targets_write_boundary_sets_are_exact(docs: Docs) -> int:
-    return len(WRITE_BOUNDARY_DOCS)
-
-
-def mutate_write_boundary_drops_prohibition(docs: Docs) -> Docs:
-    """禁止項目を 1 つ削除する。"""
-    return _replace_once(
-        docs,
-        GOAL_PROMPT,
-        "コード実装、PR、commit、push、",
-        "コード実装、PR、push、",
-    )
-
-
-def mutate_write_boundary_adds_exception(docs: Docs) -> Docs:
-    """禁止列から項目を外して抽出集合を狭める。
-
-    集合差分で落ちる。例外句の文言そのものを検出しているわけではない。
-    """
-    return _replace_once(
-        docs,
-        GOAL_PROMPT,
-        "コード実装、PR、commit、push、計画レビュー、独立レビュー、"
-        "Claude Code 組み込み `/goal` の自動発動、scheduler / loop 登録、"
-        "thought-db 書き込みを行わない。",
-        "コード実装、PR、push、計画レビュー、独立レビュー、"
-        "Claude Code 組み込み `/goal` の自動発動、scheduler / loop 登録、"
-        "thought-db 書き込みを行わない。ただし承認があれば commit してよい。",
-    )
-
-
-def mutate_write_boundary_adds_allowed_write(docs: Docs) -> Docs:
-    """許可書き込み集合へ 1 つ追加する。"""
-    return _replace_once(
-        docs,
-        GOAL_PROMPT,
-        "Goal ファイルと専用 `.gitignore` の作成以外は変更しない。",
-        "Goal ファイルと専用 `.gitignore` の作成、premises.json の更新以外は変更しない。",
-    )
-
-
-def mutate_write_boundary_drops_section(docs: Docs) -> Docs:
-    """節ごと削除する。"""
-    return _replace_once(docs, GOAL_PROMPT, "## 禁止事項\n\n", "")
 
 
 CHECKS: dict[str, Check] = {
@@ -2289,42 +1993,22 @@ CHECKS: dict[str, Check] = {
         category="B5",
         why="3 スキルへ散った修正ループ停止条件のドリフトを防ぐ",
     ),
-    "harness_decision_table_excludes_request_user_input": Check(
-        run=check_harness_decision_table_excludes_request_user_input,
+    "harness_decision_table_is_exact": Check(
+        run=check_harness_decision_table_is_exact,
         mutate=mutate_harness_injects_request_user_input_into_cell,
         extra_mutations=(
             mutate_harness_injects_spawn_agent_into_first_row,
             mutate_harness_injects_extra_decision_id_into_first_row,
             mutate_harness_injects_bare_unknown_into_decision_cell,
             mutate_harness_injects_capability_into_fallback_row,
-            mutate_harness_drops_ask_user_question_from_claude_row,
-            mutate_harness_adds_request_user_input_to_claude_question,
-            mutate_harness_adds_unknown_tool_to_claude_question,
-            mutate_harness_adds_bare_unknown_tool_to_claude_question,
-            mutate_harness_renames_ask_user_question_to_legacy_in_claude_question,
-            mutate_harness_drops_request_user_input_from_codex_row,
-            mutate_harness_adds_ask_user_question_to_codex_question,
-            mutate_harness_injects_request_user_input_into_fallback_question,
             mutate_harness_swaps_decision_rows,
             mutate_harness_drops_decision_row,
             mutate_harness_drops_section_heading,
             mutate_harness_injects_request_user_input_into_agents_decision_cell,
         ),
-        targets=targets_harness_decision_table_excludes_request_user_input,
+        targets=targets_harness_decision_table_is_exact,
         category="B8",
-        why="request_user_input をハーネス判定キーへ格上げする退行を防ぐ",
-    ),
-    "write_boundary_sets_are_exact": Check(
-        run=check_write_boundary_sets_are_exact,
-        mutate=mutate_write_boundary_drops_prohibition,
-        extra_mutations=(
-            mutate_write_boundary_adds_exception,
-            mutate_write_boundary_adds_allowed_write,
-            mutate_write_boundary_drops_section,
-        ),
-        targets=targets_write_boundary_sets_are_exact,
-        category="B6",
-        why="書き込み境界の禁止/許可集合への追加・削除を防ぐ",
+        why="ハーネス判定表の節・行数・判定列識別子集合の退行を防ぐ",
     ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
@@ -2361,7 +2045,6 @@ EXPECTED_CATEGORIES = {
     "B3",
     "B4",
     "B5",
-    "B6",
     "B8",
     "C1",
     "C2",

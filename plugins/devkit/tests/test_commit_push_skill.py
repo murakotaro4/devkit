@@ -86,4 +86,6 @@ def test_push_contract_uses_single_explicit_refspec():
 def test_harness_contract_is_centralized():
     text = _skill_text()
     section = text[text.index("## ハーネス判定") : text.index("## 安全契約")]
-    assert all(tool in section for tool in ("TaskCreate", "TaskUpdate"))
+    assert all(tool in section for tool in ("AskUserQuestion", "spawn_agent", "request_user_input", "TaskCreate", "TaskUpdate"))
+    assert "判定キーに使わない" in section
+    assert text.count("## ハーネス判定") == 1

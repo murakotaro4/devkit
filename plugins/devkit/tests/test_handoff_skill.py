@@ -59,6 +59,12 @@ def test_skill_frontmatter_contract():
 def test_harness_and_task_list_contract():
     text = _skill_text()
     harness = text[text.index("## ハーネス・進捗") : text.index("## 書き込み契約")]
+    assert "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |" in harness
+    assert (
+        "| それがなく `spawn_agent` が使える Codex 親 | "
+        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |"
+    ) in harness
+    assert "`request_user_input` は判定キーにしない" in harness
     assert "step 1-4" in harness
 
 
@@ -68,6 +74,7 @@ def test_write_contract_limits_writes_and_execution():
     assert ".claude/handoff/YYYY-MM-DD-<slug>.md" in text
     assert "同名は上書きせず" in text
     assert "連番" in text
+    assert "commit、push" in text
     assert "repo の `.gitignore` と `.git/info/exclude` も変更しない" in text
 
 

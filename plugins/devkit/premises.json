@@ -388,7 +388,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_commit_push_skill.py",
-          "count": 2
+          "count": 5
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
@@ -400,7 +400,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_handoff_skill.py",
-          "count": 2
+          "count": 7
         },
         {
           "path": "plugins/devkit/tests/test_memory_review_skill.py",
@@ -420,7 +420,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_skill_invariants.py",
-          "count": 73
+          "count": 34
         }
       ]
     },
@@ -451,10 +451,6 @@
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 2
-        },
-        {
-          "path": "plugins/devkit/tests/test_skill_invariants.py",
           "count": 2
         }
       ]
