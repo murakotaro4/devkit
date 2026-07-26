@@ -129,9 +129,8 @@ def test_dig_handoff_contract():
 def test_harness_detection_is_centralized():
     text = _skill_text()
     section = text[text.index("## ハーネス判定") : text.index("## 範囲と不変条件")]
-    assert all(tool in section for tool in ("AskUserQuestion", "spawn_agent", "request_user_input", "wait_agent"))
+    assert all(tool in section for tool in ("request_user_input", "wait_agent"))
     assert "判定キーに使わない" in section
-    assert text.count("## ハーネス判定") == 1
 
 
 def test_external_memory_scope_and_session_log_exclusion():

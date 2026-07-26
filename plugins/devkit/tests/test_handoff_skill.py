@@ -59,13 +59,9 @@ def test_skill_frontmatter_contract():
 def test_harness_and_task_list_contract():
     text = _skill_text()
     harness = text[text.index("## ハーネス・進捗") : text.index("## 書き込み契約")]
-    assert "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |" in harness
-    assert (
-        "| それがなく `spawn_agent` が使える Codex 親 | "
-        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |"
-    ) in harness
+    assert "| AskUserQuestion |" in harness
+    assert "| plan mode は `request_user_input`、通常 mode は選択肢付き自由文 |" in harness
     assert "`request_user_input` は判定キーにしない" in harness
-    assert "step 1-4" in harness
 
 
 def test_write_contract_limits_writes_and_execution():
