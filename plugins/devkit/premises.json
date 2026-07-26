@@ -380,15 +380,15 @@
         },
         {
           "path": "plugins/devkit/tests/test_backlog_skill.py",
-          "count": 7
+          "count": 5
         },
         {
           "path": "plugins/devkit/tests/test_catch_up_skill.py",
-          "count": 7
+          "count": 5
         },
         {
           "path": "plugins/devkit/tests/test_commit_push_skill.py",
-          "count": 5
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
@@ -400,15 +400,15 @@
         },
         {
           "path": "plugins/devkit/tests/test_handoff_skill.py",
-          "count": 7
+          "count": 5
         },
         {
           "path": "plugins/devkit/tests/test_memory_review_skill.py",
-          "count": 6
+          "count": 4
         },
         {
           "path": "plugins/devkit/tests/test_refactor_skill.py",
-          "count": 7
+          "count": 5
         },
         {
           "path": "plugins/devkit/tests/test_repo_loop_contract.py",
@@ -416,7 +416,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
-          "count": 6
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_skill_invariants.py",

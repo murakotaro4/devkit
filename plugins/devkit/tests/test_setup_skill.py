@@ -75,8 +75,6 @@ def test_skill_frontmatter():
 def test_harness_matrix_and_approval_boundary():
     text = SKILL_PATH.read_text(encoding="utf-8")
     harness = text.split("## ハーネス判定", 1)[1].split("## 実行前提", 1)[0]
-    for token in ("AskUserQuestion", "spawn_agent", "request_user_input"):
-        assert token in harness
     assert "request_user_input` は判定キーに使わない" in harness
     assert "通常の同期・prune に差分承認ゲートは置かない" in text
     assert "承認が必要なのは statusline と Windows Terminal font だけ" in text

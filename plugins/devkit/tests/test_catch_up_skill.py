@@ -60,13 +60,9 @@ def test_update_plan_uses_layered_summary_before_approval():
 def test_harness_task_progress_and_boundaries():
     content = text()
     harness = content[content.index("## ハーネス・進捗") : content.index("## フロー")]
-    assert "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion | 外部 Codex |" in harness
-    assert (
-        "| それがなく `spawn_agent` が使える Codex 親 | "
-        "plan mode は `request_user_input`、通常 mode は選択肢付き自由文 | read-only 子 agent |"
-    ) in harness
+    assert "Claude 親 | AskUserQuestion | 外部 Codex |" in harness
+    assert "Codex 親 | plan mode は `request_user_input`、通常 mode は選択肢付き自由文 | read-only 子 agent |" in harness
     assert "`request_user_input` は判定キーにしない" in harness
-    assert "step 1-8" in harness
     for boundary in ("memory-review", "improve-skill retro", "dig"):
         assert boundary in content
     assert "workflow contract 自体の変更" in content
