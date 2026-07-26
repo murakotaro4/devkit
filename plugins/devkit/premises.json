@@ -344,7 +344,7 @@
         },
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 11
+          "count": 12
         },
         {
           "path": "plugins/devkit/skills/goal-prompt/SKILL.md",
@@ -417,6 +417,10 @@
         {
           "path": "plugins/devkit/tests/test_setup_skill.py",
           "count": 6
+        },
+        {
+          "path": "plugins/devkit/tests/test_skill_invariants.py",
+          "count": 2
         }
       ]
     },
@@ -558,11 +562,11 @@
       "occurrences": [
         {
           "path": "plugins/devkit/skills/dig/SKILL.md",
-          "count": 4
+          "count": 3
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
-          "count": 3
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_document_consistency.py",
@@ -712,7 +716,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_skill_invariants.py",
-          "count": 1
+          "count": 4
         }
       ]
     }

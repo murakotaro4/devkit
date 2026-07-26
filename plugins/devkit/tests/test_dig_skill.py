@@ -163,15 +163,17 @@ def test_fixed_backend_assignment_and_python_gate_contract():
     # 分からなくなっていた([P2])。
     assert "`Agent(general-purpose, model=sonnet)`" in backend
     assert "`Agent(general-purpose, model=opus)`" in backend
+    assert "cursor-grok-4.5-high" in backend
+    assert "可用性判定の失敗" in backend
+    assert "chat 作成が非ゼロ終了" in backend
+    assert "thread_id を採れない" in backend
+    assert "起動不能または応答不能" in backend
+    assert "rate limit" in backend
+    assert "報告なしに fallback しない" in backend
     assert all(
         command in backend
         for command in ("command -v codex", "command -v cursor-agent", "command -v uv")
     )
-    assert "cursor-grok-4.5-high" in backend
-    assert "command -v cursor-agent` が失敗する" in backend
-    assert "cursor-agent create-chat" in backend
-    assert "rate limit" in backend
-    assert "報告なしに fallback しない" in backend
 
 
 def test_codex_parent_fallback_lanes_without_effort_selection():

@@ -1040,6 +1040,44 @@ FALLBACK_TABLE_HEADER = ("親", "実装 lane", "レビュー lane（計画 / dif
 BACKEND_SECTION = "### 3. backend 固定とフォールバック"
 CURSOR_MODEL = "cursor-grok-4.5-high"
 CODEX_MODEL = "gpt-5.6-sol"
+EXPECTED_FALLBACK_LANES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "Claude 親": (
+        (
+            "cursor-agent",
+            "codex CLI",
+            "`Agent(general-purpose, model=sonnet)`",
+            "停止",
+        ),
+        (
+            "codex CLI",
+            "`Agent(general-purpose, model=opus)`",
+            "終端処理",
+        ),
+    ),
+    "Codex 親": (
+        (
+            "cursor-agent",
+            "`spawn_agent` worker",
+            "親実装",
+            "停止",
+        ),
+        (
+            "`spawn_agent` explorer",
+            "終端処理",
+        ),
+    ),
+    "判定不能": (
+        (
+            "cursor-agent",
+            "codex CLI",
+            "停止",
+        ),
+        (
+            "codex CLI",
+            "終端処理",
+        ),
+    ),
+}
 
 
 def _table_rows(body: str, header: tuple[str, ...]) -> list[list[str]]:
@@ -1058,13 +1096,17 @@ def _table_rows(body: str, header: tuple[str, ...]) -> list[list[str]]:
     return []
 
 
+def _lane_stages(cell: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in cell.split("→") if part.strip())
+
+
 def _fixed_backend_rows(docs: Docs) -> tuple[list[list[str]], list[list[str]]]:
     body = _section_body(docs.get(DIG, ""), BACKEND_SECTION)
     return _table_rows(body, ROLE_TABLE_HEADER), _table_rows(body, FALLBACK_TABLE_HEADER)
 
 
 def check_fixed_backend_assignment(docs: Docs) -> list[str]:
-    """dig の backend 固定割り当てとフォールバック段数を検査する。
+    """dig の backend 固定割り当てとフォールバック順序を検査する。
 
     対象特定は節見出しと表ヘッダの構造で行い、モデル名を membership 判定に使わない。
     """
@@ -1093,17 +1135,32 @@ def check_fixed_backend_assignment(docs: Docs) -> list[str]:
         if CURSOR_MODEL in cell:
             problems.append(f"{DIG}: {role} の既定に {CURSOR_MODEL} が混入している")
 
-    if not fallback_rows:
-        problems.append(f"{DIG}: フォールバック階段の表がない")
-    for row in fallback_rows:
-        if len(row) < 2:
-            problems.append(f"{DIG}: フォールバック表の行が不足: {row}")
+    by_parent = {row[0]: row for row in fallback_rows if row}
+    expected_parents = set(EXPECTED_FALLBACK_LANES)
+    actual_parents = set(by_parent)
+    for parent in sorted(expected_parents - actual_parents):
+        problems.append(f"{DIG}: フォールバック表に {parent} 行がない")
+    for parent in sorted(actual_parents - expected_parents):
+        problems.append(f"{DIG}: フォールバック表に未知の親行 {parent}")
+
+    for parent, (expected_impl, expected_review) in EXPECTED_FALLBACK_LANES.items():
+        row = by_parent.get(parent)
+        if row is None:
             continue
-        parent, impl_lane = row[0], row[1]
-        stages = [part.strip() for part in impl_lane.split("→") if part.strip()]
-        if "→" not in impl_lane or len(stages) < 2:
+        if len(row) < 3:
+            problems.append(f"{DIG}: {parent} のフォールバック行が不足: {row}")
+            continue
+        actual_impl = _lane_stages(row[1])
+        actual_review = _lane_stages(row[2])
+        if actual_impl != expected_impl:
             problems.append(
-                f"{DIG}: {parent} の実装 lane にフォールバック段が不足: {impl_lane}"
+                f"{DIG}: {parent} の実装 lane が期待と不一致: "
+                f"{actual_impl!r} != {expected_impl!r}"
+            )
+        if actual_review != expected_review:
+            problems.append(
+                f"{DIG}: {parent} のレビュー lane が期待と不一致: "
+                f"{actual_review!r} != {expected_review!r}"
             )
     return problems
 
@@ -1138,6 +1195,15 @@ def mutate_fixed_backend_assignment_drops_fallback(docs: Docs) -> Docs:
         "| Claude 親 | cursor-agent → codex CLI → "
         "`Agent(general-purpose, model=sonnet)` → 停止 |",
         "| Claude 親 | cursor-agent |",
+    )
+
+
+def mutate_fixed_backend_assignment_drops_review_lane(docs: Docs) -> Docs:
+    return _replace_once(
+        docs,
+        DIG,
+        "codex CLI → `Agent(general-purpose, model=opus)` → 終端処理",
+        "codex CLI → 終端処理",
     )
 
 
@@ -1445,6 +1511,7 @@ CHECKS: dict[str, Check] = {
         extra_mutations=(
             mutate_fixed_backend_assignment_swaps_review,
             mutate_fixed_backend_assignment_drops_fallback,
+            mutate_fixed_backend_assignment_drops_review_lane,
         ),
         targets=targets_fixed_backend_assignment,
         category="B4",

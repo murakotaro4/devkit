@@ -25,15 +25,15 @@ $ARGUMENTS
 
 `request_user_input` はハーネス判定に使わない。step 1-5 は read-only のため plan mode と整合する。承認前に step 6 へ進まない。
 
-工程ごとの委譲差分は次の表を正本とし、各 step では再掲しない。backend の固定割り当てとフォールバックは step 3 を正本とする。
+工程ごとの委譲差分は次の表を正本とし、各 step では再掲しない。backend の固定とフォールバックは step 3 を正本とする。
 
-| 工程 | 既定 | 補足 |
-|------|------|------|
-| 調査 | 親 / read-only agent | Codex 親は `spawn_agent` explorer |
-| 計画レビュー | codex CLI | フォールバックは step 3 |
-| 実装 | cursor-agent（既定） | フォールバックは step 3 |
-| diff レビュー | codex CLI | フォールバックは step 3 |
-| 修正 | 同じ thread / chat で resume | 降格後は新規ジョブ（step 8） |
+| 工程 | 既定 |
+|------|------|
+| 調査 | 親 / read-only agent（Codex 親は `spawn_agent` explorer） |
+| 計画レビュー | codex CLI（フォールバックは step 3） |
+| 実装 | cursor-agent（既定。フォールバックは step 3） |
+| diff レビュー | codex CLI（フォールバックは step 3） |
+| 修正 | 同じ thread / chat で resume（降格後は新規ジョブ、step 8） |
 
 Claude 親の CLI 委譲は `run_in_background` と完了通知で回収する。Codex 親は `wait_agent` で黙って待たず進捗を提示し、指摘解消まで `close_agent` を遅らせる。実体の進捗は `git status` / `git diff` とジョブログで確認し、resume は進捗確認に使わない。
 
@@ -140,16 +140,20 @@ backend をユーザーに質問しない。ユーザーが明示指定した場
 - 降格は前進のみで逆戻りしない。段数が有限なので無限降格しない。
 - 実装 lane が尽きたら停止して報告する（親が勝手に実装しない）。
 - レビュー lane の終端処理: repo が独立レビュー必須なら自動 skip せず停止して報告する。必須でない repo だけ、未実施を明記して続行してよい。
-- 可用性判定: cursor-agent は `command -v cursor-agent`、codex CLI は `command -v codex`。codex の実装 / resume lane はさらに `command -v uv` を要する（thread_id 抽出のため）。レビュー lane に `uv` は要求しない。
 - 降格したら step 2 の工程表 backend 欄と完了報告へ「cursor-agent → codex（理由: rate limit）」の形で必ず記す。**報告なしに fallback しない。**
 
-実装 lane の cursor-agent 段の降格条件は次の 3 つだけ。
+降格条件は全段共通の 3 分類。レート制限キーワード（大小文字無視）: `rate limit` / `rate_limit` / `ratelimit` / `quota` / `usage limit` / `too many requests` / `429`。
 
-1. `command -v cursor-agent` が失敗する
-2. 起動失敗: `cursor-agent create-chat` が非ゼロ終了、または `CHAT_ID` が空
-3. レート制限: ジョブが非ゼロ終了し、かつジョブログが大小文字無視で `rate limit` / `rate_limit` / `ratelimit` / `quota` / `usage limit` / `too many requests` / `429` のいずれかに一致する
+1. 可用性判定の失敗
+2. 起動失敗
+3. レート制限: 非ゼロ終了かつジョブログが上記キーワードに一致
 
-上記に当たらない非ゼロ終了は通常の実装失敗として扱い、降格せず step 8 の修正ループで処理する。
+段ごとの具体形:
+- cursor-agent: 可用性=`command -v cursor-agent`、起動失敗=chat 作成が非ゼロ終了または `CHAT_ID` が空、レート制限=ジョブログ判定
+- codex CLI: 可用性=`command -v codex`（実装 / resume はさらに `command -v uv`。レビュー lane に `uv` 不要）、起動失敗=codex 実行が非ゼロ終了し thread_id を採れない、レート制限=ジョブログ判定
+- サブエージェント（`Agent(...)` / `spawn_agent`）: 起動不能または応答不能
+
+上記 3 分類に当たらない非ゼロ終了は通常の実装失敗として扱い、降格せず step 8 の修正ループで処理する。
 
 ### 4. 計画レビュー
 
@@ -218,7 +222,7 @@ codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="me
 | cursor-agent | `--resume "$(cat "$JOB_DIR/chat-id.txt")"` + `"<指摘と修正指示>"` |
 | Codex 親 worker | 生存中は `send_input`、close 済みは新しい `spawn_agent` worker |
 
-修正ループ中に実装 backend が降格条件に当たった場合、cursor-agent の chat 文脈は引き継がず、現在の diff と未解消 findings を渡して codex で新規ジョブを起こす。以後そのタスクで cursor-agent へ戻らない。
+修正ループ中に実装 backend が降格条件に当たった場合、step 3 の親別階段に従って次段へ降格する。chat / thread の文脈は引き継がず、現在の diff と未解消 findings を渡して新規ジョブを起こす。以後そのタスクで前段へ戻らない。
 
 codex の resume 完全形（非対話 stdin 契約の確認用）:
 
