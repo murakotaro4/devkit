@@ -1709,14 +1709,32 @@ EXPECTED_QUESTION_IDS = (
 )
 
 
+def _has_identifier(text: str, identifier: str) -> bool:
+    """完全な識別子だけを単語境界で検出する。
+
+    premises.json の value_patterns と同じ前後読みを使う。部分文字列一致だと
+    LegacyAskUserQuestion のように前後に文字が付いた別識別子でもヒットする。
+    """
+    return (
+        re.search(
+            rf"(?<![A-Za-z0-9_]){re.escape(identifier)}(?![A-Za-z0-9_])",
+            text,
+        )
+        is not None
+    )
+
+
 def _question_tool_ids(cell: str) -> frozenset[str]:
     """質問セルから harness の 3 ツールを backtick 不問で集める。
 
     判定列と違い、質問セルは文書ごとに backtick の有無が揺れる
     (裸の AskUserQuestion と `AskUserQuestion` が混在)。囲みを要求すると
     片方の文書群だけが落ちる。3 ツール以外は比較対象にしない。
+    一致は `_has_identifier`（premises.json と同じ単語境界）で取る。
     """
-    return frozenset(tool for tool in HARNESS_QUESTION_TOOLS if tool in cell)
+    return frozenset(
+        tool for tool in HARNESS_QUESTION_TOOLS if _has_identifier(cell, tool)
+    )
 
 
 def check_harness_decision_table_excludes_request_user_input(
@@ -1760,8 +1778,9 @@ def check_harness_decision_table_excludes_request_user_input(
                 )
         # 性質 3: 判定セルに request_user_input を判定キーとして書かない。
         # backtick 無しの混入も拒否する（集合等価は囲み付きだけを見るため）。
+        # 検出は `_has_identifier` で行い、legacy_request_user_input 等の部分一致を避ける。
         for index, cell in enumerate(cells, start=1):
-            if "request_user_input" in cell:
+            if _has_identifier(cell, "request_user_input"):
                 problems.append(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
@@ -1846,6 +1865,18 @@ def mutate_harness_adds_request_user_input_to_claude_question(docs: Docs) -> Doc
         HANDOFF,
         "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
         "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / request_user_input |",
+    )
+
+
+def mutate_harness_renames_ask_user_question_to_legacy_in_claude_question(
+    docs: Docs,
+) -> Docs:
+    """Claude 親行の質問セルを LegacyAskUserQuestion へ改名する（性質 4 の単語境界）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
+        "| `AskUserQuestion` が使える Claude 親 | LegacyAskUserQuestion |",
     )
 
 
@@ -2179,6 +2210,7 @@ CHECKS: dict[str, Check] = {
             mutate_harness_injects_capability_into_fallback_row,
             mutate_harness_drops_ask_user_question_from_claude_row,
             mutate_harness_adds_request_user_input_to_claude_question,
+            mutate_harness_renames_ask_user_question_to_legacy_in_claude_question,
             mutate_harness_drops_request_user_input_from_codex_row,
             mutate_harness_adds_ask_user_question_to_codex_question,
             mutate_harness_injects_request_user_input_into_fallback_question,
