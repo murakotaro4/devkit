@@ -1702,9 +1702,17 @@ def check_harness_decision_table_excludes_request_user_input(
         if len(cells) != 3:
             problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
             continue
-        # 性質 2: 1 行目 AskUserQuestion、2 行目 spawn_agent、3 行目はどちらもなし。
+        # 性質 2: 1 行目 AskUserQuestion のみ、2 行目 spawn_agent、3 行目はどちらもなし。
+        # 1 行目は AskUserQuestion の有無だけでなく spawn_agent の混入も拒む。
+        # 含めないと「AskUserQuestion または spawn_agent」へ書き換えて Claude 親判定を
+        # 骨抜きにできる。2 行目へ「AskUserQuestion を含まない」は要求しない。
+        # dig の 2 行目は否定形として AskUserQuestion を含むのが正しい。
         if "AskUserQuestion" not in cells[0]:
             problems.append(f"{path}: 1 行目の判定セルに AskUserQuestion がない: {cells[0]}")
+        if "spawn_agent" in cells[0]:
+            problems.append(
+                f"{path}: 1 行目の判定セルに spawn_agent がある: {cells[0]}"
+            )
         if "spawn_agent" not in cells[1]:
             problems.append(f"{path}: 2 行目の判定セルに spawn_agent がない: {cells[1]}")
         if "AskUserQuestion" in cells[2] or "spawn_agent" in cells[2]:
@@ -1760,6 +1768,16 @@ def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
         HANDOFF,
         "| `AskUserQuestion` が使える Claude 親 |",
         "| `AskUserQuestion` / `request_user_input` が使える Claude 親 |",
+    )
+
+
+def mutate_harness_injects_spawn_agent_into_first_row(docs: Docs) -> Docs:
+    """1 行目の判定セルへ spawn_agent を混入させる（性質 2 の排他）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` または `spawn_agent` が使える Claude 親 |",
     )
 
 
@@ -1863,12 +1881,22 @@ def _boundary_sets(body: str) -> tuple[frozenset[str], frozenset[str]]:
     return frozenset(prohibited), frozenset(allowed)
 
 
+# 禁止項目を例外で許可する肯定表現。集合等価だけでは、禁止列を残したまま
+# 「ただし〜してよい」を追記する骨抜きが検出できない。
+BOUNDARY_PERMISSION = re.compile(
+    r"(?:してよい|してもよい|許可する|例外とする|差し支えない)"
+)
+
+
 def check_write_boundary_sets_are_exact(docs: Docs) -> list[str]:
     """書き込み境界の禁止 / 許可集合を登録値と完全一致させる。
 
     `assert "commit" in prohibitions` のような部分集合検査は項目の削除しか
     検出できず、「ただし承認があれば commit してよい」という例外追加による
     骨抜きが素通りする。集合等価にして追加も削除も検出する。
+
+    さらに、禁止列をいじらず例外句だけを足す退行も弾く。禁止集合の項目を
+    含み、かつ許可表現を持つ文があれば、集合が一致していても違反とする。
     """
     problems: list[str] = []
     for path, heading, expected_prohibited, expected_allowed in WRITE_BOUNDARY_DOCS:
@@ -1894,6 +1922,17 @@ def check_write_boundary_sets_are_exact(docs: Docs) -> list[str]:
                 f"missing={sorted(expected_allowed - allowed)}, "
                 f"extra={sorted(allowed - expected_allowed)}"
             )
+        # 禁止列が一致したままでの例外句追加を検出する。
+        for sentence in _prose_sentences(body):
+            if not BOUNDARY_PERMISSION.search(sentence):
+                continue
+            for item in sorted(expected_prohibited):
+                if item in sentence:
+                    problems.append(
+                        f"{path}: 禁止項目 {item!r} を許可する例外文がある: "
+                        f"{sentence}"
+                    )
+                    break
     return problems
 
 
@@ -1929,6 +1968,19 @@ def mutate_write_boundary_adds_exception(docs: Docs) -> Docs:
     )
 
 
+def mutate_write_boundary_appends_permission_exception(docs: Docs) -> Docs:
+    """禁止列は変えず、許可の例外句だけを追記する。
+
+    集合等価だけでは落ちない。例外文検出があって初めて捕捉できる退行。
+    """
+    return _replace_once(
+        docs,
+        GOAL_PROMPT,
+        "thought-db 書き込みを行わない。",
+        "thought-db 書き込みを行わない。ただし承認があれば commit してよい。",
+    )
+
+
 def mutate_write_boundary_adds_allowed_write(docs: Docs) -> Docs:
     """許可書き込み集合へ 1 つ追加する。"""
     return _replace_once(
@@ -1953,12 +2005,22 @@ STOP_WITHOUT_RECOVERY_SECTIONS: tuple[tuple[str, str], ...] = (
     (COMMIT_PUSH, "### push"),
 )
 
-# 自動復旧の指示形。禁止文中の引用は PROHIBITION で除外する。
-# 「自動除外せず」「自動 rebase ... はしない」は指示形（〜する / 自動的に）に
-# 一致しない。除外条件を足して誤検出を消すのではなく、指示形だけを見る向きに
-# することで実文書の禁止文脈を通す（§7 の撤回と同じ判断）。
+# 自動復旧の指示形。操作語彙は広げるが、必ず「〜する」の指示形を要求する。
+# 現行の禁止文「自動 rebase / merge / force push / 別 branch push はしない」は
+# 操作の直後に `する` が来ないので、語彙を広げても誤検出しない。
+# 検査面を狭める（禁止文を除外リストへ足す）のではなく、指示形という構造で
+# 引用と指示を分ける（§7 の撤回と同じ判断）。PROHIBITION は「使わない」形の
+# 引用を除外する保険として残す。
 AUTO_RECOVERY_INSTRUCTION = re.compile(
-    r"自動除外する|自動\s*rebase\s*する|自動的に"
+    r"(?:自動的に|自動で|自動)\s*"
+    r"(?:除外|rebase|merge|force\s*push|push|復旧|再実行|継続)\s*する"
+)
+
+# 停止・進入ゲート文の否定。直接形「停止しない」「進まない」も見る。
+# 最初の 1 文だけを見ると、後ろに否定文を足すだけで通ってしまう。
+HALT_SENTENCE = re.compile(r"[^。\n]*(?:停止|場合だけ進む)[^。\n]*")
+HALT_NEGATION = re.compile(
+    r"(?:必要はない|しなくてよい|は不要|停止しない|進まない)"
 )
 
 
@@ -1977,15 +2039,28 @@ def check_dangerous_operations_stop_without_auto_recovery(
             problems.append(f"{path}: {heading} がない")
             continue
 
-        # 性質 1: 肯定形の停止指示。push 節は語「停止」を使わず
-        # 「場合だけ進む」で進入ゲートを書くので、同等の停止として認める。
-        halt = re.search(r"[^。\n]*(?:停止|場合だけ進む)[^。\n]*", body)
-        if halt is None:
+        # 性質 1: 肯定形の停止指示が 1 つ以上あり、否定された停止文が 0 であること。
+        # push 節は語「停止」を使わず「場合だけ進む」で進入ゲートを書くので同等と認める。
+        halt_matches = list(HALT_SENTENCE.finditer(body))
+        if not halt_matches:
             problems.append(f"{path}: {heading} に停止指示がない")
-        elif re.search(r"(?:必要はない|しなくてよい|は不要)", halt.group(0)):
-            problems.append(
-                f"{path}: {heading} の停止指示が否定されている: {halt.group(0)}"
-            )
+        else:
+            negated = [
+                match.group(0)
+                for match in halt_matches
+                if HALT_NEGATION.search(match.group(0))
+            ]
+            affirmative = [
+                match.group(0)
+                for match in halt_matches
+                if not HALT_NEGATION.search(match.group(0))
+            ]
+            for sentence in negated:
+                problems.append(
+                    f"{path}: {heading} の停止指示が否定されている: {sentence}"
+                )
+            if not affirmative:
+                problems.append(f"{path}: {heading} に肯定形の停止指示がない")
 
         # 性質 2: 自動復旧の指示がない。PROHIBITION に当たる文は引用として除外。
         for sentence in _prose_sentences(body):
@@ -2049,6 +2124,30 @@ def mutate_stop_without_recovery_instructs_auto_rebase(docs: Docs) -> Docs:
         COMMIT_PUSH,
         "自動 rebase / merge / force push / 別 branch push はしない。",
         "自動 rebase する。",
+    )
+
+
+def mutate_stop_without_recovery_instructs_auto_merge(docs: Docs) -> Docs:
+    """禁止文を自動 merge の指示形へ置き換える。
+
+    rebase 以外の操作語彙へ逃げても検出できることを固定する。
+    """
+    return _replace_once(
+        docs,
+        COMMIT_PUSH,
+        "- reject 時は対象 remote を fetch して ahead / behind / diverged と理由を報告し、"
+        "自動 rebase / merge / force push / 別 branch push はしない。",
+        "- reject 時は自動 merge する。",
+    )
+
+
+def mutate_stop_without_recovery_negates_stop(docs: Docs) -> Docs:
+    """停止指示を直接否定する。最初の肯定文だけを見る実装では素通りする退行。"""
+    return _replace_once(
+        docs,
+        COMMIT_PUSH,
+        "内容層で検出したら自動除外せず停止する。",
+        "内容層で検出しても停止しない。",
     )
 
 
@@ -2174,6 +2273,7 @@ CHECKS: dict[str, Check] = {
         run=check_harness_decision_table_excludes_request_user_input,
         mutate=mutate_harness_injects_request_user_input_into_cell,
         extra_mutations=(
+            mutate_harness_injects_spawn_agent_into_first_row,
             mutate_harness_swaps_decision_rows,
             mutate_harness_drops_decision_row,
             mutate_harness_drops_section_heading,
@@ -2188,6 +2288,7 @@ CHECKS: dict[str, Check] = {
         mutate=mutate_write_boundary_drops_prohibition,
         extra_mutations=(
             mutate_write_boundary_adds_exception,
+            mutate_write_boundary_appends_permission_exception,
             mutate_write_boundary_adds_allowed_write,
             mutate_write_boundary_drops_section,
         ),
@@ -2202,6 +2303,8 @@ CHECKS: dict[str, Check] = {
             mutate_stop_without_recovery_drops_stop_sentence,
             mutate_stop_without_recovery_drops_push_gate,
             mutate_stop_without_recovery_instructs_auto_rebase,
+            mutate_stop_without_recovery_instructs_auto_merge,
+            mutate_stop_without_recovery_negates_stop,
             mutate_stop_without_recovery_drops_section,
             mutate_stop_without_recovery_drops_push_section,
         ),
