@@ -229,7 +229,7 @@ codex の resume 完全形（非対話 stdin 契約の確認用）:
 JOB_DIR=<記録済みパス> && test -s "$JOB_DIR/thread-id.txt" && codex -a never -C "<worktree>" --sandbox workspace-write exec resume -m gpt-5.6-sol -c model_reasoning_effort="medium" "$(cat "$JOB_DIR/thread-id.txt")" "<指摘と修正指示>" < /dev/null
 ```
 
-cursor-agent は step 6 の完全形の最終引数だけ `"<指摘と修正指示>"` に替える。同じログ保存形を維持し、ログ増分で進捗を示す。diff が計画と一致し、テストが green、指摘がゼロで終了する。3 周で収束しなければ停止して判断を求める。
+cursor-agent は step 6 の完全形の最終引数だけ `"<指摘と修正指示>"` に替える。同じログ保存形を維持し、ログ増分で進捗を示す。diff が計画と一致し、テストが green、指摘がゼロで終了する。5 周で収束しなければ停止して判断を求める。
 
 ### 9. 統合・後始末・完了報告
 
