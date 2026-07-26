@@ -181,6 +181,7 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 - detect-secrets baseline 照合
 - pytest
 - plugin version bump gate (`verify-full` のみ)
+- 配布ドキュメントのサイズレポート（gate ではない）
 
 ローカル hook は `prek.toml` を正本にします。
 
