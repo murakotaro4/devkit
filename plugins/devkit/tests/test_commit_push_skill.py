@@ -68,7 +68,6 @@ def test_secret_two_layer_contract():
     rows = re.findall(r"^\| (path|staged 内容) \| (.+) \|$", section, re.MULTILINE)
     assert {name for name, _ in rows} == {"path", "staged 内容"}
     assert "値は表示しない" in section
-    assert "自動除外せず停止" in section
     assert "バイナリ・巨大ファイル" in section
 
 
@@ -79,12 +78,9 @@ def test_push_contract_uses_single_explicit_refspec():
     assert "`git push <remote> HEAD:<branch>`" in section
     assert all(prohibited in section for prohibited in ("force push", "`--tags`", "複数 ref"))
     assert all(blocker in section for blocker in ("upstream 不在", "detached HEAD", "origin なし"))
-    assert all(forbidden_recovery in section for forbidden_recovery in ("自動 rebase", "merge", "別 branch push"))
 
 
 def test_harness_contract_is_centralized():
     text = _skill_text()
     section = text[text.index("## ハーネス判定") : text.index("## 安全契約")]
-    assert all(tool in section for tool in ("AskUserQuestion", "spawn_agent", "request_user_input", "TaskCreate", "TaskUpdate"))
-    assert "判定キーに使わない" in section
-    assert text.count("## ハーネス判定") == 1
+    assert all(tool in section for tool in ("TaskCreate", "TaskUpdate"))

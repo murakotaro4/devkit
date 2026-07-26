@@ -94,23 +94,6 @@ def test_goal_body_includes_repair_loop_stop_conditions():
     assert "修正ループ停止条件" in body
 
 
-def test_prohibited_actions_contract():
-    prohibitions = _section(_skill_text(), "## 禁止事項")
-    assert "Goal ファイルと専用 `.gitignore` の作成以外は変更しない" in prohibitions
-    for prohibited in (
-        "コード実装",
-        "PR",
-        "commit",
-        "push",
-        "計画レビュー",
-        "独立レビュー",
-        "Claude Code 組み込み `/goal` の自動発動",
-        "scheduler / loop 登録",
-        "thought-db 書き込み",
-    ):
-        assert prohibited in prohibitions
-
-
 def test_retired_terms_are_absent():
     text = _skill_text()
     for retired in ("現セッション自律実行", "起動プロンプト提示", "dig-goal"):

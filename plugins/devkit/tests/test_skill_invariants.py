@@ -1605,6 +1605,458 @@ def mutate_ci_green_before_merge(docs: Docs) -> Docs:
     )
 
 
+# ---------------------------------------------------------------------------
+# B8: request_user_input をハーネス判定キーへ格上げする退行を防ぐ
+# ---------------------------------------------------------------------------
+
+# 表を持たないハーネス節。判定表の代わりに散文の決定文を検査する。
+PROSE_HARNESS_DOCS = frozenset({"plugins/devkit/skills/goal-prompt/SKILL.md"})
+HARNESS_HEADING = re.compile(r"^## ハーネス[^\n]*$", re.MULTILINE)
+GOAL_PROMPT = "plugins/devkit/skills/goal-prompt/SKILL.md"
+HANDOFF = "plugins/devkit/skills/handoff/SKILL.md"
+COMMIT_PUSH = "plugins/devkit/skills/commit-push/SKILL.md"
+
+
+def _skill_paths(docs: Docs) -> list[str]:
+    return sorted(path for path, _ in _skill_docs(docs))
+
+
+def _harness_section(text: str) -> str | None:
+    """`## ハーネス` 前方一致の節をちょうど 1 つ返す。0 件・2 件以上は None。"""
+    matches = list(HARNESS_HEADING.finditer(text))
+    if len(matches) != 1:
+        return None
+    return _section_body(text, matches[0].group(0))
+
+
+def _decision_table_cells(section: str) -> list[str] | None:
+    """ハーネス節内で、ヘッダに `判定` または `条件` を含む最初の表の判定列。
+
+    dig はハーネス表と工程表を同じ節に持つため、節全体ではなく表単位で切る。
+    setup / repo-loop は先頭列が `親` で判定列が 2 列目なので、列名で選ぶ。
+    """
+    lines = section.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("|"):
+            continue
+        header = _cells(line)
+        column = next(
+            (i for i, name in enumerate(header) if "判定" in name or "条件" in name),
+            None,
+        )
+        if column is None or index + 1 >= len(lines):
+            continue
+        rows: list[str] = []
+        for row in lines[index + 2 :]:
+            if not row.startswith("|"):
+                break
+            cells = _cells(row)
+            rows.append(cells[column] if len(cells) > column else "")
+        return rows
+    return None
+
+
+def _docs_with_decision_tables(docs: Docs) -> dict[str, list[str]]:
+    found: dict[str, list[str]] = {}
+    for path in _skill_paths(docs):
+        if path in PROSE_HARNESS_DOCS:
+            continue
+        section = _harness_section(docs.get(path, ""))
+        if section is None:
+            continue
+        cells = _decision_table_cells(section)
+        if cells is not None:
+            found[path] = cells
+    return found
+
+
+def _prose_sentences(text: str) -> list[str]:
+    """句点と改行で文を分割する。`_shell_surfaces` と同じ境界。"""
+    return [part.strip() for part in re.split(r"[。\n]", text) if part.strip()]
+
+
+def check_harness_decision_table_excludes_request_user_input(
+    docs: Docs,
+) -> list[str]:
+    """判定表の判定セルと散文の決定文に request_user_input を持ち込ませない。
+
+    位置関係（節冒頭の禁止文の有無）では成立しない。ハーネス節の見出しが
+    3 形式に分かれ、しかも `request_user_input` が節冒頭の禁止文に現れる文書が
+    複数あるため、判定表のセル（または散文の決定文）を直接見る。
+    """
+    problems: list[str] = []
+    tables = _docs_with_decision_tables(docs)
+
+    for path in _skill_paths(docs):
+        if path in PROSE_HARNESS_DOCS:
+            continue
+        section = _harness_section(docs.get(path, ""))
+        if section is None:
+            problems.append(f"{path}: ハーネス節がちょうど 1 つでない")
+            continue
+        cells = tables.get(path)
+        if cells is None:
+            problems.append(f"{path}: ハーネス判定表がない")
+            continue
+        # 性質 1: データ行はちょうど 3 行。
+        if len(cells) != 3:
+            problems.append(f"{path}: 判定表のデータ行が 3 行でない: {cells}")
+            continue
+        # 性質 2: 1 行目 AskUserQuestion、2 行目 spawn_agent、3 行目はどちらもなし。
+        if "AskUserQuestion" not in cells[0]:
+            problems.append(f"{path}: 1 行目の判定セルに AskUserQuestion がない: {cells[0]}")
+        if "spawn_agent" not in cells[1]:
+            problems.append(f"{path}: 2 行目の判定セルに spawn_agent がない: {cells[1]}")
+        if "AskUserQuestion" in cells[2] or "spawn_agent" in cells[2]:
+            problems.append(
+                f"{path}: 3 行目の判定セルに AskUserQuestion/spawn_agent がある: {cells[2]}"
+            )
+        # 性質 3: どの判定セルにも request_user_input が現れない。
+        for index, cell in enumerate(cells, start=1):
+            if "request_user_input" in cell:
+                problems.append(
+                    f"{path}: 判定セル {index} に request_user_input がある: {cell}"
+                )
+
+    # 性質 4: 散文ハーネスは、親を決定する文に request_user_input を含まない。
+    # 決定文は AskUserQuestion と spawn_agent の両方で親を分ける文。質問手段の
+    # 割り当て文（「Codex 親 plan mode が request_user_input」）はここに来ない。
+    for path in sorted(PROSE_HARNESS_DOCS):
+        text = docs.get(path)
+        if text is None:
+            problems.append(f"{path}: 対象文書が存在しない")
+            continue
+        section = _harness_section(text)
+        if section is None:
+            problems.append(f"{path}: ハーネス節がちょうど 1 つでない")
+            continue
+        decision_sentences = [
+            sentence
+            for sentence in _prose_sentences(section)
+            if "親" in sentence
+            and "AskUserQuestion" in sentence
+            and "spawn_agent" in sentence
+        ]
+        if not decision_sentences:
+            problems.append(f"{path}: 親を決定する文がない")
+            continue
+        for sentence in decision_sentences:
+            if "request_user_input" in sentence:
+                problems.append(
+                    f"{path}: 親の決定文に request_user_input がある: {sentence}"
+                )
+
+    return problems
+
+
+def targets_harness_decision_table_excludes_request_user_input(docs: Docs) -> int:
+    return len(_skill_paths(docs))
+
+
+def mutate_harness_injects_request_user_input_into_cell(docs: Docs) -> Docs:
+    """判定セルへ request_user_input を挿入する（性質 3）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` / `request_user_input` が使える Claude 親 |",
+    )
+
+
+def mutate_harness_swaps_decision_rows(docs: Docs) -> Docs:
+    """1 行目と 2 行目の判定セルを入れ替える（性質 2）。"""
+    return _swap_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| それがなく `spawn_agent` が使える Codex 親 |",
+    )
+
+
+def mutate_harness_drops_decision_row(docs: Docs) -> Docs:
+    """データ行を 1 行削除する（性質 1）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| 判定不能 | 選択肢付き自由文 |\n",
+        "",
+    )
+
+
+def mutate_harness_drops_section_heading(docs: Docs) -> Docs:
+    """ハーネス節の見出しごと削除する（性質 1 またはレジストリ完全性）。"""
+    return _replace_once(docs, HANDOFF, "## ハーネス・進捗\n\n", "")
+
+
+def mutate_harness_injects_request_user_input_into_prose(docs: Docs) -> Docs:
+    """goal-prompt の決定文へ request_user_input を挿入する（性質 4）。"""
+    return _replace_once(
+        docs,
+        GOAL_PROMPT,
+        "なければ `spawn_agent` の有無で",
+        "なければ `request_user_input` や `spawn_agent` の有無で",
+    )
+
+
+# ---------------------------------------------------------------------------
+# B6: 書き込み境界の禁止 / 許可集合を集合等価で固定する
+# ---------------------------------------------------------------------------
+
+def _split_boundary_items(text: str) -> frozenset[str]:
+    """読点・中黒・` / ` で分割して集合化する。"""
+    items: list[str] = []
+    for part in text.split("、"):
+        for mid in part.split("・"):
+            for piece in mid.split(" / "):
+                cleaned = piece.strip().strip("。")
+                if cleaned:
+                    items.append(cleaned)
+    return frozenset(items)
+
+
+# (path, 節見出し, 禁止操作の期待集合, 許可書き込みの期待集合)
+# 期待集合は実本文を分割規則で起こした値。実装に合わせて緩めない。
+WRITE_BOUNDARY_DOCS: tuple[tuple[str, str, frozenset[str], frozenset[str]], ...] = (
+    (
+        GOAL_PROMPT,
+        "## 禁止事項",
+        frozenset(
+            {
+                "コード実装",
+                "PR",
+                "commit",
+                "push",
+                "計画レビュー",
+                "独立レビュー",
+                "Claude Code 組み込み `/goal` の自動発動",
+                "scheduler",
+                "loop 登録",
+                "thought-db 書き込み",
+            }
+        ),
+        frozenset({"Goal ファイルと専用 `.gitignore` の作成"}),
+    ),
+    (
+        HANDOFF,
+        "## 書き込み契約",
+        frozenset({"既存ファイルの編集", "削除", "commit", "push"}),
+        frozenset({"handoff と必要な専用 `.gitignore` の新規 Write"}),
+    ),
+)
+
+
+def _boundary_sets(body: str) -> tuple[frozenset[str], frozenset[str]]:
+    """節から禁止操作集合と許可書き込み集合を取り出す。"""
+    prohibited: set[str] = set()
+    allowed: set[str] = set()
+    for match in re.finditer(r"([^。\n]*を(?:行わない|しない)。)", body):
+        sentence = match.group(1)
+        content = re.sub(r"を(?:行わない|しない)。$", "", sentence)
+        # 「X以外は行わず、Yをしない」は Y だけが禁止集合。
+        if "以外は行わず" in content:
+            content = content.split("以外は行わず", 1)[1].lstrip("、")
+        content = re.sub(r"^[-*]\s*", "", content.strip())
+        prohibited |= _split_boundary_items(content)
+    for match in re.finditer(r"([^。\n]*)以外は(?:変更しない|行わず)", body):
+        prefix = re.sub(r"^[-*]\s*", "", match.group(1).strip())
+        allowed |= _split_boundary_items(prefix)
+    return frozenset(prohibited), frozenset(allowed)
+
+
+def check_write_boundary_sets_are_exact(docs: Docs) -> list[str]:
+    """書き込み境界の禁止 / 許可集合を登録値と完全一致させる。
+
+    `assert "commit" in prohibitions` のような部分集合検査は項目の削除しか
+    検出できず、「ただし承認があれば commit してよい」という例外追加による
+    骨抜きが素通りする。集合等価にして追加も削除も検出する。
+    """
+    problems: list[str] = []
+    for path, heading, expected_prohibited, expected_allowed in WRITE_BOUNDARY_DOCS:
+        text = docs.get(path)
+        if text is None:
+            problems.append(f"{path}: 対象文書が存在しない")
+            continue
+        body = _section_body(text, heading)
+        if not body:
+            # 節ごと消える退行を見逃さない。
+            problems.append(f"{path}: {heading} がない")
+            continue
+        prohibited, allowed = _boundary_sets(body)
+        if prohibited != expected_prohibited:
+            problems.append(
+                f"{path}: 禁止操作集合が期待と違う: "
+                f"missing={sorted(expected_prohibited - prohibited)}, "
+                f"extra={sorted(prohibited - expected_prohibited)}"
+            )
+        if allowed != expected_allowed:
+            problems.append(
+                f"{path}: 許可書き込み集合が期待と違う: "
+                f"missing={sorted(expected_allowed - allowed)}, "
+                f"extra={sorted(allowed - expected_allowed)}"
+            )
+    return problems
+
+
+def targets_write_boundary_sets_are_exact(docs: Docs) -> int:
+    return len(WRITE_BOUNDARY_DOCS)
+
+
+def mutate_write_boundary_drops_prohibition(docs: Docs) -> Docs:
+    """禁止項目を 1 つ削除する。"""
+    return _replace_once(
+        docs,
+        GOAL_PROMPT,
+        "コード実装、PR、commit、push、",
+        "コード実装、PR、push、",
+    )
+
+
+def mutate_write_boundary_adds_exception(docs: Docs) -> Docs:
+    """例外句を追加して禁止集合を狭める。集合等価でしか落ちない退行。
+
+    禁止列から commit を外しつつ例外句で言及だけ残す。本文の部分集合検査
+    （`assert "commit" in section`）なら通るが、抽出集合の等価検査なら落ちる。
+    """
+    return _replace_once(
+        docs,
+        GOAL_PROMPT,
+        "コード実装、PR、commit、push、計画レビュー、独立レビュー、"
+        "Claude Code 組み込み `/goal` の自動発動、scheduler / loop 登録、"
+        "thought-db 書き込みを行わない。",
+        "コード実装、PR、push、計画レビュー、独立レビュー、"
+        "Claude Code 組み込み `/goal` の自動発動、scheduler / loop 登録、"
+        "thought-db 書き込みを行わない。ただし承認があれば commit してよい。",
+    )
+
+
+def mutate_write_boundary_adds_allowed_write(docs: Docs) -> Docs:
+    """許可書き込み集合へ 1 つ追加する。"""
+    return _replace_once(
+        docs,
+        GOAL_PROMPT,
+        "Goal ファイルと専用 `.gitignore` の作成以外は変更しない。",
+        "Goal ファイルと専用 `.gitignore` の作成、premises.json の更新以外は変更しない。",
+    )
+
+
+def mutate_write_boundary_drops_section(docs: Docs) -> Docs:
+    """節ごと削除する。"""
+    return _replace_once(docs, GOAL_PROMPT, "## 禁止事項\n\n", "")
+
+
+# ---------------------------------------------------------------------------
+# B7: 危険検出時は停止し、自動復旧しない
+# ---------------------------------------------------------------------------
+
+STOP_WITHOUT_RECOVERY_SECTIONS: tuple[tuple[str, str], ...] = (
+    (COMMIT_PUSH, "### secret 2 層検査"),
+    (COMMIT_PUSH, "### push"),
+)
+
+# 自動復旧の指示形。禁止文中の引用は PROHIBITION で除外する。
+# 「自動除外せず」「自動 rebase ... はしない」は指示形（〜する / 自動的に）に
+# 一致しない。除外条件を足して誤検出を消すのではなく、指示形だけを見る向きに
+# することで実文書の禁止文脈を通す（§7 の撤回と同じ判断）。
+AUTO_RECOVERY_INSTRUCTION = re.compile(
+    r"自動除外する|自動\s*rebase\s*する|自動的に"
+)
+
+
+def check_dangerous_operations_stop_without_auto_recovery(
+    docs: Docs,
+) -> list[str]:
+    """危険検出時の停止指示があり、自動復旧の指示が混入していないこと。"""
+    problems: list[str] = []
+    for path, heading in STOP_WITHOUT_RECOVERY_SECTIONS:
+        text = docs.get(path)
+        if text is None:
+            problems.append(f"{path}: 対象文書が存在しない")
+            continue
+        body = _section_body(text, heading)
+        if not body:
+            problems.append(f"{path}: {heading} がない")
+            continue
+
+        # 性質 1: 肯定形の停止指示。push 節は語「停止」を使わず
+        # 「場合だけ進む」で進入ゲートを書くので、同等の停止として認める。
+        halt = re.search(r"[^。\n]*(?:停止|場合だけ進む)[^。\n]*", body)
+        if halt is None:
+            problems.append(f"{path}: {heading} に停止指示がない")
+        elif re.search(r"(?:必要はない|しなくてよい|は不要)", halt.group(0)):
+            problems.append(
+                f"{path}: {heading} の停止指示が否定されている: {halt.group(0)}"
+            )
+
+        # 性質 2: 自動復旧の指示がない。PROHIBITION に当たる文は引用として除外。
+        for sentence in _prose_sentences(body):
+            if not AUTO_RECOVERY_INSTRUCTION.search(sentence):
+                continue
+            if PROHIBITION.search(sentence):
+                continue
+            problems.append(
+                f"{path}: {heading} に自動復旧の指示がある: {sentence}"
+            )
+    return problems
+
+
+def targets_dangerous_operations_stop_without_auto_recovery(docs: Docs) -> int:
+    return len(STOP_WITHOUT_RECOVERY_SECTIONS)
+
+
+def mutate_stop_without_recovery_reverses_to_auto_exclude(docs: Docs) -> Docs:
+    """停止指示を「自動除外する」へ反転する。"""
+    return _replace_once(
+        docs,
+        COMMIT_PUSH,
+        "内容層で検出したら自動除外せず停止する。",
+        "内容層で検出したら自動除外する。",
+    )
+
+
+def mutate_stop_without_recovery_drops_stop_sentence(docs: Docs) -> Docs:
+    """停止指示の文を削除する。"""
+    return _replace_once(
+        docs,
+        COMMIT_PUSH,
+        "内容層で検出したら自動除外せず停止する。",
+        "",
+    )
+
+
+def mutate_stop_without_recovery_drops_push_gate(docs: Docs) -> Docs:
+    """push 節の進入ゲート文を削除する。
+
+    登録した節ごとに停止指示の mutation を持たせる。secret 節だけを注入すると、
+    push 節のゲートが消えても検査が成立していることの証跡がコードに残らない。
+    """
+    return _replace_once(
+        docs,
+        COMMIT_PUSH,
+        "承認時と push 直前の remote / branch が完全一致する場合だけ進む。",
+        "承認時と push 直前の remote / branch を確認する。",
+    )
+
+
+def mutate_stop_without_recovery_drops_push_section(docs: Docs) -> Docs:
+    """push 節ごと削除する。節の消失も登録節ごとに検出させる。"""
+    return _replace_once(docs, COMMIT_PUSH, "### push\n\n", "")
+
+
+def mutate_stop_without_recovery_instructs_auto_rebase(docs: Docs) -> Docs:
+    """禁止文脈を外して自動 rebase を指示形にする。"""
+    return _replace_once(
+        docs,
+        COMMIT_PUSH,
+        "自動 rebase / merge / force push / 別 branch push はしない。",
+        "自動 rebase する。",
+    )
+
+
+def mutate_stop_without_recovery_drops_section(docs: Docs) -> Docs:
+    """節ごと削除する。"""
+    return _replace_once(docs, COMMIT_PUSH, "### secret 2 層検査\n\n", "")
+
+
 CHECKS: dict[str, Check] = {
     "stdin_closed": Check(
         run=check_stdin_closed,
@@ -1718,6 +2170,45 @@ CHECKS: dict[str, Check] = {
         category="B5",
         why="3 スキルへ散った修正ループ停止条件のドリフトを防ぐ",
     ),
+    "harness_decision_table_excludes_request_user_input": Check(
+        run=check_harness_decision_table_excludes_request_user_input,
+        mutate=mutate_harness_injects_request_user_input_into_cell,
+        extra_mutations=(
+            mutate_harness_swaps_decision_rows,
+            mutate_harness_drops_decision_row,
+            mutate_harness_drops_section_heading,
+            mutate_harness_injects_request_user_input_into_prose,
+        ),
+        targets=targets_harness_decision_table_excludes_request_user_input,
+        category="B8",
+        why="request_user_input をハーネス判定キーへ格上げする退行を防ぐ",
+    ),
+    "write_boundary_sets_are_exact": Check(
+        run=check_write_boundary_sets_are_exact,
+        mutate=mutate_write_boundary_drops_prohibition,
+        extra_mutations=(
+            mutate_write_boundary_adds_exception,
+            mutate_write_boundary_adds_allowed_write,
+            mutate_write_boundary_drops_section,
+        ),
+        targets=targets_write_boundary_sets_are_exact,
+        category="B6",
+        why="書き込み境界の禁止/許可集合への追加・削除・例外による骨抜きを防ぐ",
+    ),
+    "dangerous_operations_stop_without_auto_recovery": Check(
+        run=check_dangerous_operations_stop_without_auto_recovery,
+        mutate=mutate_stop_without_recovery_reverses_to_auto_exclude,
+        extra_mutations=(
+            mutate_stop_without_recovery_drops_stop_sentence,
+            mutate_stop_without_recovery_drops_push_gate,
+            mutate_stop_without_recovery_instructs_auto_rebase,
+            mutate_stop_without_recovery_drops_section,
+            mutate_stop_without_recovery_drops_push_section,
+        ),
+        targets=targets_dangerous_operations_stop_without_auto_recovery,
+        category="B7",
+        why="危険検出時の停止欠落・自動復旧指示への反転を防ぐ",
+    ),
     "commit_before_independent_review": Check(
         run=check_commit_before_independent_review,
         mutate=mutate_commit_before_independent_review,
@@ -1753,6 +2244,9 @@ EXPECTED_CATEGORIES = {
     "B3",
     "B4",
     "B5",
+    "B6",
+    "B7",
+    "B8",
     "C1",
     "C2",
     "C3",
@@ -1827,4 +2321,22 @@ def test_step_numbering_registry_covers_all_targets():
         "レジストリが TARGET_PATHS を覆っていない: "
         f"missing={sorted(set(TARGET_PATHS) - (numbered | unnumbered))}, "
         f"extra={sorted((numbered | unnumbered) - set(TARGET_PATHS))}"
+    )
+
+
+def test_harness_registry_covers_all_skills():
+    """表形式の判定表文書と PROSE_HARNESS_DOCS の和が全 SKILL.md と一致する。
+
+    新しいスキルを足したときに登録漏れが fail になり、散文側への振り分け忘れを防ぐ。
+    """
+    skill_paths = set(_skill_paths(REAL_DOCS))
+    table_docs = set(_docs_with_decision_tables(REAL_DOCS))
+    prose = set(PROSE_HARNESS_DOCS)
+    assert table_docs.isdisjoint(prose), (
+        f"判定表と散文レジストリが重複: {sorted(table_docs & prose)}"
+    )
+    assert table_docs | prose == skill_paths, (
+        "ハーネスレジストリが全 SKILL.md を覆っていない: "
+        f"missing={sorted(skill_paths - (table_docs | prose))}, "
+        f"extra={sorted((table_docs | prose) - skill_paths)}"
     )
