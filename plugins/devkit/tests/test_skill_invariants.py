@@ -1706,15 +1706,22 @@ def _backtick_identifiers(cell: str) -> frozenset[str]:
     return frozenset(BACKTICK_IDENTIFIER.findall(cell))
 
 
+# CamelCase または snake_case の ASCII トークン。plan / mode 等の普通の英単語は拾わない。
+IDENTIFIER_SHAPE = re.compile(
+    r"(?<![A-Za-z0-9_])(?=[A-Za-z_]*[A-Z_])[A-Za-z][A-Za-z0-9_]*(?![A-Za-z0-9_])"
+)
+# 判定列のセル文言に現れる役割ラベル。判定キーではない。
+DECISION_PROSE_LABELS = frozenset({"Claude", "Codex"})
+# dig の否定句として判定セルに裸で現れる。判定キーは backtick 側だけを見る。
+DECISION_ALLOWED_BARE_IDS = frozenset({"AskUserQuestion"}) | DECISION_PROSE_LABELS
+
 # 判定列の行ごとの識別子集合。文言は文書ごとに揺れるが、構成は正本含め一致する。
 EXPECTED_DECISION_IDS = (
     frozenset({"AskUserQuestion"}),
     frozenset({"spawn_agent"}),
     frozenset(),
 )
-# 質問セルに backtick 無しで現れる既知ツール。未知識別子は backtick 経由で拾う。
-HARNESS_QUESTION_TOOLS = ("AskUserQuestion", "spawn_agent", "request_user_input")
-# dig / AGENTS.md の質問・承認まわりに現れるが、承認手段であって質問手段ではない。
+# dig の質問セルに現れるが、承認手段であって質問手段ではない。
 # 質問セルの識別子集合から除外してよいのは、契約上の役割が質問ではないと分かっているものだけ。
 APPROVED_NON_QUESTION_IDS = frozenset({"EnterPlanMode", "ExitPlanMode"})
 EXPECTED_QUESTION_IDS = (
@@ -1739,18 +1746,30 @@ def _has_identifier(text: str, identifier: str) -> bool:
     )
 
 
-def _question_tool_ids(cell: str) -> frozenset[str]:
-    """質問セルに現れる識別子を集め、承認済み非質問識別子だけを除く。
+def _shaped_identifiers(cell: str) -> frozenset[str]:
+    """識別子らしい形のトークンを backtick の有無を問わずすべて集める。
 
-    既知トークンだけを数えると、BrowserTool のような未知の追加が永遠に見えない。
-    「期待するものが在るか」ではなく「在るものが期待どおりか」を見る。
-    収集は backtick 識別子すべて + 裸の既知 3 ツール（質問セルは backtick の有無が揺れる）。
+    既知名で拾うと未知の追加が永遠に見えない。収集は形だけに依存する。
     """
-    found = set(_backtick_identifiers(cell))
-    for tool in HARNESS_QUESTION_TOOLS:
-        if _has_identifier(cell, tool):
-            found.add(tool)
-    return frozenset(found - APPROVED_NON_QUESTION_IDS)
+    return frozenset(IDENTIFIER_SHAPE.findall(cell))
+
+
+def _question_tool_ids(cell: str) -> frozenset[str]:
+    """質問セルの識別子を形で集め、承認済み非質問識別子だけを除く。"""
+    return frozenset(_shaped_identifiers(cell) - APPROVED_NON_QUESTION_IDS)
+
+
+def _bare_decision_unknowns(cell: str) -> frozenset[str]:
+    """判定セルで backtick 外に現れた、役割ラベル以外の識別子。
+
+    期待集合の比較は backtick 必須のまま（dig の裸 AskUserQuestion を判定キーに
+    しないため）。その穴を塞ぐため、形で拾った裸トークンのうち許可リスト外を拒否する。
+    """
+    return frozenset(
+        _shaped_identifiers(cell)
+        - _backtick_identifiers(cell)
+        - DECISION_ALLOWED_BARE_IDS
+    )
 
 
 def check_harness_decision_table_excludes_request_user_input(
@@ -1783,6 +1802,8 @@ def check_harness_decision_table_excludes_request_user_input(
         # 性質 2: 判定列は行ごとの backtick 識別子集合で固定する。
         # 文言（が使える / が利用可能な 等）は文書ごとに揺れるが、識別子構成は
         # 正本含め一致する。揺れる部分ではなく揃っている部分を見る。
+        # dig の 2 行目は裸の AskUserQuestion を否定句として含むため、期待集合は
+        # backtick 必須のままにする。裸の未知識別子は性質 2b で別途拒否する。
         for index, (cell, expected) in enumerate(
             zip(cells, EXPECTED_DECISION_IDS, strict=True), start=1
         ):
@@ -1792,6 +1813,12 @@ def check_harness_decision_table_excludes_request_user_input(
                     f"{path}: 判定セル {index} の識別子集合が {sorted(expected)} "
                     f"でない: {sorted(actual)} ({cell})"
                 )
+            bare_unknown = _bare_decision_unknowns(cell)
+            if bare_unknown:
+                problems.append(
+                    f"{path}: 判定セル {index} に backtick なしの識別子がある: "
+                    f"{sorted(bare_unknown)} ({cell})"
+                )
         # 性質 3: 判定セルに request_user_input を判定キーとして書かない。
         # backtick 無しの混入も拒否する（集合等価は囲み付きだけを見るため）。
         # 検出は `_has_identifier` で行い、legacy_request_user_input 等の部分一致を避ける。
@@ -1800,9 +1827,9 @@ def check_harness_decision_table_excludes_request_user_input(
                 problems.append(
                     f"{path}: 判定セル {index} に request_user_input がある: {cell}"
                 )
-        # 性質 4: 質問列も行ごとのツール識別子集合で固定する。
-        # 識別子をすべて集めてから承認済み非質問識別子だけを除く。
-        # 既知トークンだけを数えると未知の追加が永遠に見えない。
+        # 性質 4: 質問列は形 (CamelCase / snake_case) で識別子をすべて集め、
+        # 承認済み非質問識別子だけを除いて期待集合と比較する。
+        # 収集を既知名に依存させない（依存すると未知の追加が見えない）。
         if questions is None:
             problems.append(f"{path}: ハーネス表に質問列がない")
         elif len(questions) != 3:
@@ -1857,6 +1884,16 @@ def mutate_harness_injects_extra_decision_id_into_first_row(docs: Docs) -> Docs:
     )
 
 
+def mutate_harness_injects_bare_unknown_into_decision_cell(docs: Docs) -> Docs:
+    """判定セルへ裸の別識別子を足す（性質 2b: backtick 外の未知）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 |",
+        "| `AskUserQuestion` または BrowserTool が使える Claude 親 |",
+    )
+
+
 def mutate_harness_injects_capability_into_fallback_row(docs: Docs) -> Docs:
     """3 行目のフォールバックへ識別子参照を持ち込む（性質 2）。"""
     return _replace_once(
@@ -1888,12 +1925,22 @@ def mutate_harness_adds_request_user_input_to_claude_question(docs: Docs) -> Doc
 
 
 def mutate_harness_adds_unknown_tool_to_claude_question(docs: Docs) -> Docs:
-    """Claude 親行の質問セルへ未知ツールを足す（性質 4: 未知追加の検出）。"""
+    """Claude 親行の質問セルへ未知ツールを足す（性質 4: backtick 付き未知追加）。"""
     return _replace_once(
         docs,
         HANDOFF,
         "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
         "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / `BrowserTool` |",
+    )
+
+
+def mutate_harness_adds_bare_unknown_tool_to_claude_question(docs: Docs) -> Docs:
+    """Claude 親行の質問セルへ裸の未知ツールを足す（性質 4: 形ベース収集）。"""
+    return _replace_once(
+        docs,
+        HANDOFF,
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion |",
+        "| `AskUserQuestion` が使える Claude 親 | AskUserQuestion / BrowserTool |",
     )
 
 
@@ -2248,10 +2295,12 @@ CHECKS: dict[str, Check] = {
         extra_mutations=(
             mutate_harness_injects_spawn_agent_into_first_row,
             mutate_harness_injects_extra_decision_id_into_first_row,
+            mutate_harness_injects_bare_unknown_into_decision_cell,
             mutate_harness_injects_capability_into_fallback_row,
             mutate_harness_drops_ask_user_question_from_claude_row,
             mutate_harness_adds_request_user_input_to_claude_question,
             mutate_harness_adds_unknown_tool_to_claude_question,
+            mutate_harness_adds_bare_unknown_tool_to_claude_question,
             mutate_harness_renames_ask_user_question_to_legacy_in_claude_question,
             mutate_harness_drops_request_user_input_from_codex_row,
             mutate_harness_adds_ask_user_question_to_codex_question,
