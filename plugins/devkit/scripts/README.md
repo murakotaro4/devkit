@@ -63,7 +63,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marke
 Windows の `~/.codex/config.toml` 合成専用です。
 
 - shared template と windows template を結合する
-- shared template は model を `gpt-5.6-sol` に固定し、通常・Plan の effort を Medium にする
+- shared template は model を `gpt-5.6-sol` に固定し、通常・Plan の effort を Medium にし、`features.default_mode_request_user_input = true` で Codex 本体側の Default mode 構造化確認を利用可能にする（DevKit skill の質問手段は変更しない）
 - `~/.codex/config.local.toml` があれば結合する
 - Codex が書く marketplace / plugin runtime section を保持する
 - 次回更新時は既存 `config.toml` をバックアップしてから再合成し、旧 DevKit 固定値の `model` は template の `gpt-5.6-sol` へ置き換え、`model_context_window` / `model_auto_compact_token_limit` を削除する

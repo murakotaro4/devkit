@@ -59,6 +59,7 @@ def test_shared_and_windows_templates_preserve_exact_platform_contract():
         "prevent_idle_sleep": True,
         "unified_exec": True,
         "fast_mode": True,
+        "default_mode_request_user_input": True,
         "shell_snapshot": False,
     }
     assert merged["windows"] == {"sandbox": "unelevated"}
