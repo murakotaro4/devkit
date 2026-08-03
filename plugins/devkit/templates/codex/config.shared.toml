@@ -15,5 +15,6 @@ features.apps = true
 features.prevent_idle_sleep = true
 features.unified_exec = true
 features.fast_mode = true
+features.default_mode_request_user_input = true
 
 notice.hide_full_access_warning = true

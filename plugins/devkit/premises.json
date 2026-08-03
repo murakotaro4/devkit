@@ -723,6 +723,40 @@
           "count": 4
         }
       ]
+    },
+    {
+      "id": "codex-feature-default-mode-request-user-input",
+      "summary": "Codex 本体側で Default mode の構造化確認を利用可能にする feature 設定",
+      "current_value": "default_mode_request_user_input",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])default_mode_request_user_input(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "実機の codex features list",
+      "update_notes": "config.shared.toml・契約テスト・Windows 合成 smoke・README を同時更新。DevKit skill の質問手段は変更しない",
+      "last_verified": "2026-08-03",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/check_skill_surface.py",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/templates/codex/config.shared.toml",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_codex_config_templates.py",
+          "count": 1
+        }
+      ]
     }
   ]
 }

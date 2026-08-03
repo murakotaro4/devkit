@@ -121,7 +121,7 @@ Windows の初回 bootstrap は marketplace 配下の `devkit-setup.ps1` を使�
 powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\plugins\marketplaces\murakotaro4\plugins\devkit\scripts\devkit-setup.ps1"
 ```
 
-Windows だけ `~/.codex/config.toml` の合成を行います。合成時は DevKit の shared / windows template と `config.local.toml` を結合し、Codex が管理する marketplace / plugin runtime section は保持します。shared template は model を `gpt-5.6-sol` に固定し、通常・Plan の effort を Medium にします。
+Windows だけ `~/.codex/config.toml` の合成を行います。合成時は DevKit の shared / windows template と `config.local.toml` を結合し、Codex が管理する marketplace / plugin runtime section は保持します。shared template は model を `gpt-5.6-sol` に固定し、通常・Plan の effort を Medium にし、`features.default_mode_request_user_input = true` で Codex 本体側の Default mode 構造化確認を利用可能にします（DevKit skill の質問手段は変更しません）。
 
 次回の Windows 更新では既存 `config.toml` を通常どおりバックアップしてから再合成し、旧 DevKit 固定値の `model` は template の `gpt-5.6-sol` へ置き換え、`model_context_window` / `model_auto_compact_token_limit` を取り除きます。これらの旧値は `config.local.toml` へ移送せず、local overlay の許可キーも拡張しません。
 

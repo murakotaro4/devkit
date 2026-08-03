@@ -829,6 +829,7 @@ try {{
   if ($installed.Contains('plan_mode_reasoning_effort = "xhigh"')) {{ throw "legacy plan effort retained" }}
   if ($installed -match '(?i)model_reasoning_effort\s*=\s*"(?:max|ultra)"') {{ throw "unsupported effort retained" }}
   if (-not $installed.Contains('features.multi_agent = true')) {{ throw "multi-agent feature lost" }}
+  if (-not $installed.Contains('features.default_mode_request_user_input = true')) {{ throw "default_mode_request_user_input feature lost" }}
   if (-not $installed.Contains('sandbox = "unelevated"')) {{ throw "Windows sandbox lost" }}
   if (-not $installed.Contains("[marketplaces.murakotaro4]")) {{ throw "marketplace runtime section lost" }}
   if (-not $installed.Contains("[plugins.`"devkit@murakotaro4`"]")) {{ throw "plugin runtime section lost" }}
