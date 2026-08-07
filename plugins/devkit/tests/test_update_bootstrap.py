@@ -1042,20 +1042,12 @@ def _run_claude_mem_section(
     os_type: str = "posix",
     path_convert_fail: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(parents=True)
     restart_log = tmp_path / "restart.log"
     health_log = tmp_path / "health.log"
     health_bodies = list(health_bodies or [])
 
     real_node = shutil.which("node")
     assert real_node, "system node is required for claude-mem repair tests"
-    if not hide_node:
-        _write_exec(
-            bin_dir / "node",
-            "#!/usr/bin/env bash\n"
-            f'exec "{Path(real_node).as_posix()}" "$@"\n',
-        )
 
     fail_left = tmp_path / "health-fail-left"
     fail_left.write_text(str(health_fail_times), encoding="utf-8")
@@ -1067,44 +1059,58 @@ def _run_claude_mem_section(
         encoding="utf-8",
     )
 
+    curl_fn = ""
     if not hide_curl:
-        _write_exec(
-            bin_dir / "curl",
-            "\n".join(
-                [
-                    "#!/usr/bin/env bash",
-                    f'echo "$*" >> "{health_log.as_posix()}"',
-                    f'fail_left_file="{fail_left.as_posix()}"',
-                    'if [[ -f "$fail_left_file" ]]; then',
-                    '  left="$(<"$fail_left_file")"',
-                    '  if [[ "$left" -gt 0 ]]; then',
-                    '    printf "%s\\n" "$((left - 1))" >"$fail_left_file"',
-                    "    exit 22",
-                    "  fi",
-                    "fi",
-                    f'bodies="{bodies_file.as_posix()}"',
-                    f'idx_file="{idx_file.as_posix()}"',
-                    'idx=0',
-                    '[[ -f "$idx_file" ]] && idx="$(<"$idx_file")"',
-                    'mapfile -t lines <"$bodies"',
-                    'body="${lines[$idx]-}"',
-                    'printf "%s\\n" "$((idx + 1))" >"$idx_file"',
-                    'if [[ -z "$body" ]]; then exit 22; fi',
-                    'printf "%s\\n" "$body"',
-                    "exit 0",
-                    "",
-                ]
-            ),
+        curl_fn = "\n".join(
+            [
+                "curl() {",
+                f'  echo "$*" >> "{health_log.as_posix()}"',
+                f'  fail_left_file="{fail_left.as_posix()}"',
+                '  if [[ -f "$fail_left_file" ]]; then',
+                '    left="$(<"$fail_left_file")"',
+                '    if [[ "$left" -gt 0 ]]; then',
+                '      printf "%s\\n" "$((left - 1))" >"$fail_left_file"',
+                "      return 22",
+                "    fi",
+                "  fi",
+                f'  bodies="{bodies_file.as_posix()}"',
+                f'  idx_file="{idx_file.as_posix()}"',
+                "  idx=0",
+                '  [[ -f "$idx_file" ]] && idx="$(<"$idx_file")"',
+                '  mapfile -t lines <"$bodies"',
+                '  body="${lines[$idx]-}"',
+                '  printf "%s\\n" "$((idx + 1))" >"$idx_file"',
+                '  if [[ -z "$body" ]]; then return 22; fi',
+                '  printf "%s\\n" "$body"',
+                "  return 0",
+                "}",
+                "",
+            ]
         )
+
+    bun_fn = ""
     if not hide_bun:
-        _write_exec(bin_dir / "bun", "#!/usr/bin/env bash\nexit 0\n")
+        bun_fn = "bun() { return 0; }\n"
+
+    node_fn = ""
+    if hide_node:
+        node_fn = "node() { return 127; }\n"
+    else:
+        node_fn = (
+            "node() {\n"
+            f'  "{Path(real_node).as_posix()}" "$@"\n'
+            "}\n"
+        )
 
     helpers = _claude_mem_helpers_source()
     probe = (
         f"OS_TYPE={json.dumps(os_type)}\n"
         "WARNINGS=()\n"
         "ERRORS=()\n"
-        "windows_path_from_posix() {\n"
+        + node_fn
+        + curl_fn
+        + bun_fn
+        + "windows_path_from_posix() {\n"
         '  if [[ "$CLAUDE_MEM_PATH_CONVERT_FAIL" == 1 ]]; then return 1; fi\n'
         '  printf \'C:\\\\converted\\\\%s\\n\' "${1##*/}"\n'
         "}\n"
@@ -1116,12 +1122,11 @@ def _run_claude_mem_section(
         'if ((${#WARNINGS[@]} > 0)); then printf "warning0:%s\\n" "${WARNINGS[0]}"; fi\n'
     )
 
-    path_entries = [str(bin_dir)]
+    path_entries: list[str] = []
     for tool in ("bash", "sort", "ls", "rm", "dirname", "basename", "uname", "cygpath"):
         located = shutil.which(tool)
         if located:
             path_entries.append(str(Path(located).resolve().parent))
-    # Keep a deduped PATH that still reaches core Git Bash tools, but prefer stubs.
     seen: set[str] = set()
     filtered_path: list[str] = []
     for entry in path_entries + os.environ.get("PATH", "").split(os.pathsep):
