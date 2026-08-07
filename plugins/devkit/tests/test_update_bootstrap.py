@@ -958,6 +958,57 @@ def _shell_function(name: str, next_name: str) -> str:
     return name + "()" + body + "\n}\n"
 
 
+
+
+def _claude_mem_port_helpers() -> str:
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    start = shell.index("claude_mem_data_dir()")
+    end = shell.index("\nclaude_mem_worker_healthy()")
+    return shell[start:end]
+
+
+def _claude_mem_resolve_helpers() -> str:
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    start = shell.index("claude_mem_version_sort_key()")
+    end = shell.index("\nclaude_mem_expected_version()")
+    return shell[start:end]
+
+
+def _uid_fallback_port() -> str:
+    result = subprocess.run(
+        [
+            _bash_path(),
+            "-c",
+            "uid=$(id -u 2>/dev/null) || uid=''; "
+            "if [[ \"$uid\" =~ ^[0-9]+$ ]]; then echo $((37700 + (uid % 100))); else echo 37777; fi",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return result.stdout.strip()
+
+
+def _install_claude_mem_cache_version(
+    home: Path, version: str, *, orphaned: bool = False
+) -> Path:
+    cache_root = home / ".claude" / "plugins" / "cache" / "thedotmack" / "claude-mem"
+    install = cache_root / version
+    scripts = install / "scripts"
+    scripts.mkdir(parents=True)
+    if orphaned:
+        (install / ".orphaned_at").write_text("1\n", encoding="utf-8")
+    pkg_version = version
+    (install / "package.json").write_text(
+        json.dumps({"name": "claude-mem-plugin", "version": pkg_version}),
+        encoding="utf-8",
+    )
+    _write_exec(scripts / "bun-runner.js", "#!/usr/bin/env node\n")
+    (scripts / "worker-service.cjs").write_text("// stub\n", encoding="utf-8")
+    return install
+
+
 def _claude_mem_helpers_source() -> str:
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
     start = shell.index("claude_mem_cache_root()")
@@ -980,8 +1031,9 @@ def _prepare_claude_mem_home(
     consecutive_failures: int | None = None,
     marker: bool = False,
     extra_fields: dict | None = None,
+    data_dir: Path | None = None,
 ) -> Path:
-    mem_home = home / ".claude-mem"
+    mem_home = data_dir if data_dir is not None else (home / ".claude-mem")
     mem_home.mkdir(parents=True)
     cache_root = home / ".claude" / "plugins" / "cache" / "thedotmack" / "claude-mem"
     install = cache_root / version
@@ -1041,6 +1093,7 @@ def _run_claude_mem_section(
     hide_node: bool = False,
     os_type: str = "posix",
     path_convert_fail: bool = False,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     restart_log = tmp_path / "restart.log"
     health_log = tmp_path / "health.log"
@@ -1146,6 +1199,10 @@ def _run_claude_mem_section(
         "CLAUDE_MEM_RESTART_LOG": str(restart_log),
         "CLAUDE_MEM_PATH_CONVERT_FAIL": "1" if path_convert_fail else "0",
     }
+    env.pop("CLAUDE_MEM_WORKER_PORT", None)
+    env.pop("CLAUDE_MEM_DATA_DIR", None)
+    if extra_env:
+        env.update(extra_env)
     if restart_fail:
         env["CLAUDE_MEM_RESTART_FAIL"] = "1"
 
@@ -1188,13 +1245,20 @@ def test_claude_mem_repair_skips_when_not_installed(tmp_path):
 def test_claude_mem_worker_port_fallbacks(tmp_path):
     home = tmp_path / "home space"
     _prepare_claude_mem_home(home, settings=None)
-    helpers = _shell_function("claude_mem_worker_port", "claude_mem_worker_healthy")
-    for label, settings in (
-        ("missing", None),
-        ("broken", "{"),
-        ("oob", {"CLAUDE_MEM_WORKER_PORT": 99999}),
-        ("string", {"CLAUDE_MEM_WORKER_PORT": "37777"}),
-        ("number", {"CLAUDE_MEM_WORKER_PORT": 37777}),
+    helpers = _claude_mem_port_helpers()
+    uid_port = _uid_fallback_port()
+    env_base = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+    }
+    env_base["HOME"] = str(home)
+    for label, settings, expected in (
+        ("missing", None, uid_port),
+        ("broken", "{", uid_port),
+        ("oob", {"CLAUDE_MEM_WORKER_PORT": 99999}, uid_port),
+        ("string", {"CLAUDE_MEM_WORKER_PORT": "37777"}, "37777"),
+        ("number", {"CLAUDE_MEM_WORKER_PORT": 37777}, "37777"),
     ):
         mem = home / ".claude-mem"
         settings_path = mem / "settings.json"
@@ -1205,15 +1269,156 @@ def test_claude_mem_worker_port_fallbacks(tmp_path):
         else:
             settings_path.write_text(json.dumps(settings), encoding="utf-8")
         result = subprocess.run(
-            [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+                        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
             check=False,
             capture_output=True,
             text=True,
             encoding="utf-8",
-            env={**os.environ, "HOME": str(home)},
+            env=env_base,
         )
         assert result.returncode == 0, f"{label}: {result.stderr}"
-        assert result.stdout.strip() == "37777", label
+        assert result.stdout.strip() == expected, label
+
+
+def test_claude_mem_worker_port_env_overrides_settings(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, settings={"CLAUDE_MEM_WORKER_PORT": 37777})
+    helpers = _claude_mem_port_helpers()
+    result = subprocess.run(
+                    [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={
+            **{
+                k: v
+                for k, v in os.environ.items()
+                if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+            },
+            "HOME": str(home),
+            "CLAUDE_MEM_WORKER_PORT": "12345",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "12345"
+
+
+def test_claude_mem_worker_port_invalid_env_falls_back(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, settings={"CLAUDE_MEM_WORKER_PORT": 37777})
+    helpers = _claude_mem_port_helpers()
+    env_base = {
+        **{
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+        },
+        "HOME": str(home),
+    }
+    for bad_port in ("abc", "0", "99999", "-1"):
+        result = subprocess.run(
+                        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env={**env_base, "CLAUDE_MEM_WORKER_PORT": bad_port},
+        )
+        assert result.returncode == 0, f"{bad_port}: {result.stderr}"
+        assert result.stdout.strip() == "37777", bad_port
+
+
+def test_claude_mem_data_dir_override_and_tilde(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    poison = home / ".claude-mem"
+    poison.mkdir()
+    (poison / "settings.json").write_text(
+        '{"CLAUDE_MEM_WORKER_PORT": 99999}', encoding="utf-8"
+    )
+    (poison / ".worker-start-attempted").write_text("poison\n", encoding="utf-8")
+    poison_state = poison / "state"
+    poison_state.mkdir()
+    (poison_state / "hook-failures.json").write_text(
+        json.dumps({"consecutiveFailures": 99}), encoding="utf-8"
+    )
+
+    custom = home / "custom-mem"
+    custom.mkdir()
+    (custom / "settings.json").write_text(
+        json.dumps({"CLAUDE_MEM_WORKER_PORT": 37777}), encoding="utf-8"
+    )
+
+    custom_abs = tmp_path / "override-mem"
+    _prepare_claude_mem_home(
+        home,
+        data_dir=custom_abs,
+        consecutive_failures=3,
+        marker=True,
+    )
+
+    helpers = _claude_mem_port_helpers()
+    env_base = {
+        **{
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+        },
+        "HOME": str(home),
+    }
+
+    result = subprocess.run(
+                    [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**env_base, "CLAUDE_MEM_DATA_DIR": "~/custom-mem"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "37777"
+
+    result = subprocess.run(
+                    [_bash_path(), "-c", helpers + "\nclaude_mem_data_dir\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**env_base, "CLAUDE_MEM_DATA_DIR": "~/custom-mem"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert normalize_git_bash_path(result.stdout) == custom
+
+    assert (poison / ".worker-start-attempted").read_text(encoding="utf-8") == "poison\n"
+    assert (
+        json.loads(
+            (poison_state / "hook-failures.json").read_text(encoding="utf-8")
+        )["consecutiveFailures"]
+        == 99
+    )
+
+    body = json.dumps({"status": "ok", "version": "13.13.1"})
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_bodies=[body],
+        extra_env={"CLAUDE_MEM_DATA_DIR": str(custom_abs)},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not (custom_abs / ".worker-start-attempted").exists()
+    payload = json.loads(
+        (custom_abs / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 0
+    assert (poison / ".worker-start-attempted").exists()
+    assert (
+        json.loads(
+            (poison_state / "hook-failures.json").read_text(encoding="utf-8")
+        )["consecutiveFailures"]
+        == 99
+    )
+
 
 
 def test_claude_mem_repair_healthy_same_version_no_restart(tmp_path):
@@ -1356,9 +1561,7 @@ def test_claude_mem_repair_skips_orphaned_cache_and_prefers_latest(tmp_path):
     )
     (scripts / "bun-runner.js").write_text("//\n", encoding="utf-8")
     (scripts / "worker-service.cjs").write_text("//\n", encoding="utf-8")
-    helpers = _shell_function(
-        "claude_mem_resolve_active_install", "claude_mem_expected_version"
-    )
+    helpers = _claude_mem_resolve_helpers()
     result = subprocess.run(
         [
             _bash_path(),
@@ -1375,6 +1578,52 @@ def test_claude_mem_repair_skips_orphaned_cache_and_prefers_latest(tmp_path):
     )
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stdout.strip().endswith("13.13.1")
+
+
+
+
+def test_claude_mem_resolve_prefers_stable_over_prerelease(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    _install_claude_mem_cache_version(home, "13.13.1")
+    _install_claude_mem_cache_version(home, "13.13.1-beta.1")
+    helpers = _claude_mem_resolve_helpers()
+    result = subprocess.run(
+        [
+            _bash_path(),
+            "-c",
+            helpers + '\nclaude_mem_resolve_active_install "$HOME/.claude/plugins/cache/thedotmack/claude-mem"\n',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(home)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("13.13.1")
+
+
+def test_claude_mem_resolve_prefers_higher_core_even_if_prerelease(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    _install_claude_mem_cache_version(home, "13.13.1")
+    _install_claude_mem_cache_version(home, "13.14.0-alpha")
+    helpers = _claude_mem_resolve_helpers()
+    result = subprocess.run(
+        [
+            _bash_path(),
+            "-c",
+            helpers + '\nclaude_mem_resolve_active_install "$HOME/.claude/plugins/cache/thedotmack/claude-mem"\n',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(home)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("13.14.0-alpha")
 
 
 def test_claude_mem_repair_windows_path_conversion_failure_is_warn_only(tmp_path):

@@ -1086,6 +1086,18 @@ claude_mem_cache_root() {
     printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem"
 }
 
+claude_mem_data_dir() {
+    # Mirror claude-mem paths.ts expandHome for CLAUDE_MEM_DATA_DIR overrides.
+    local raw="${CLAUDE_MEM_DATA_DIR:-$HOME/.claude-mem}"
+    if [[ "$raw" == "~" ]]; then
+        raw="$HOME"
+    elif [[ "$raw" == "~/"* ]]; then
+        raw="$HOME/${raw:2}"
+    fi
+    printf '%s
+' "${raw%/}"
+}
+
 claude_mem_bun_available() {
     # bun-runner.js resolves bun more broadly; this pre-check is intentionally conservative.
     command -v bun &>/dev/null && return 0
@@ -1094,20 +1106,53 @@ claude_mem_bun_available() {
     return 1
 }
 
+claude_mem_version_sort_key() {
+    # Mirror claude-mem hooks.json prelude: major/minor/patch zero-padded, stable(1) before prerelease(0).
+    local _B="$1"
+    local core="${_B%%-*}"
+    local major="${core%%.*}"
+    local rest minor patch
+    case "$core" in
+        *.*) rest="${core#*.}" ;;
+        *) rest="0" ;;
+    esac
+    minor="${rest%%.*}"
+    case "$rest" in
+        *.*) patch="${rest#*.}" ;;
+        *) patch="0" ;;
+    esac
+    patch="${patch%%.*}"
+    major="${major%%[!0-9]*}"
+    minor="${minor%%[!0-9]*}"
+    patch="${patch%%[!0-9]*}"
+    [[ "$major" =~ ^[0-9]+$ ]] || major=0
+    [[ "$minor" =~ ^[0-9]+$ ]] || minor=0
+    [[ "$patch" =~ ^[0-9]+$ ]] || patch=0
+    local stable=1
+    [[ "$_B" == *-* ]] && stable=0
+    printf '%08d%08d%08d%d
+' "$major" "$minor" "$patch" "$stable"
+}
+
 claude_mem_resolve_active_install() {
     local cache_root="$1"
-    local candidate
+    local candidate name key best_key="" best_path=""
     [[ -d "$cache_root" ]] || return 1
-    while IFS= read -r candidate; do
-        [[ -n "$candidate" ]] || continue
-        [[ -d "$cache_root/$candidate" ]] || continue
-        [[ -f "$cache_root/$candidate/.orphaned_at" ]] && continue
-        [[ -f "$cache_root/$candidate/scripts/bun-runner.js" ]] || continue
-        [[ -f "$cache_root/$candidate/scripts/worker-service.cjs" ]] || continue
-        printf '%s\n' "$cache_root/$candidate"
-        return 0
-    done < <(ls -1 "$cache_root" 2>/dev/null | sort -rV)
-    return 1
+    for candidate in "$cache_root"/*; do
+        [[ -d "$candidate" ]] || continue
+        name="$(basename -- "$candidate")"
+        [[ -f "$candidate/.orphaned_at" ]] && continue
+        [[ -f "$candidate/scripts/bun-runner.js" ]] || continue
+        [[ -f "$candidate/scripts/worker-service.cjs" ]] || continue
+        key="$(claude_mem_version_sort_key "$name")"
+        if [[ -z "$best_key" || "$key" > "$best_key" ]]; then
+            best_key="$key"
+            best_path="$candidate"
+        fi
+    done
+    [[ -n "$best_path" ]] || return 1
+    printf '%s
+' "$best_path"
 }
 
 claude_mem_expected_version() {
@@ -1131,11 +1176,26 @@ process.exit(1);
     fi
 }
 
+claude_mem_normalize_port() {
+    local raw="$1"
+    [[ "$raw" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+    if (( raw < 1 || raw > 65535 )); then
+        return 1
+    fi
+    printf '%s\n' "$raw"
+}
+
 claude_mem_worker_port() {
-    local settings_path="$HOME/.claude-mem/settings.json"
     local port=""
-    if [[ -f "$settings_path" ]]; then
-        port="$(node -e '
+    if [[ -n "${CLAUDE_MEM_WORKER_PORT:-}" ]]; then
+        port="$(claude_mem_normalize_port "$CLAUDE_MEM_WORKER_PORT" || true)"
+    fi
+
+    if [[ -z "$port" ]]; then
+        local settings_path
+        settings_path="$(claude_mem_data_dir)/settings.json"
+        if [[ -f "$settings_path" ]]; then
+            port="$(node -e '
 const fs = require("fs");
 try {
   const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -1148,9 +1208,19 @@ try {
   process.stdout.write(String(n));
 } catch { process.exit(2); }
 ' "$settings_path" 2>/dev/null)" || port=""
+        fi
     fi
+
     if [[ -n "$port" ]]; then
         printf '%s\n' "$port"
+        return 0
+    fi
+
+    # Mirror SettingsDefaultsManager.ts: String(37700 + ((process.getuid?.() ?? 77) % 100))
+    local uid=""
+    uid="$(id -u 2>/dev/null)" || uid=""
+    if [[ "$uid" =~ ^[0-9]+$ ]]; then
+        printf '%s\n' "$((37700 + (uid % 100)))"
     else
         printf '37777\n'
     fi
@@ -1171,7 +1241,8 @@ if (!data || typeof data !== "object" || data.version !== expected) process.exit
 }
 
 claude_mem_hook_failures_need_reset() {
-    local failures_path="$HOME/.claude-mem/state/hook-failures.json"
+    local failures_path
+    failures_path="$(claude_mem_data_dir)/state/hook-failures.json"
     [[ -f "$failures_path" ]] || return 1
     node -e '
 const fs = require("fs");
@@ -1186,8 +1257,9 @@ process.exit(1);
 }
 
 claude_mem_reset_hook_failures() {
-    local state_dir="$HOME/.claude-mem/state"
-    local failures_path="$state_dir/hook-failures.json"
+    local state_dir failures_path
+    state_dir="$(claude_mem_data_dir)/state"
+    failures_path="$state_dir/hook-failures.json"
     [[ -d "$state_dir" ]] || return 0
     node -e '
 const fs = require("fs");
@@ -1225,7 +1297,8 @@ section_claude_mem_repair() {
     echo ""
     echo "=== [Claude Mem Worker] ==="
 
-    local mem_home="$HOME/.claude-mem"
+    local mem_home
+    mem_home="$(claude_mem_data_dir)"
     local cache_root
     cache_root="$(claude_mem_cache_root)"
     local install_path=""

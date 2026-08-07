@@ -783,7 +783,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
-          "count": 10
+          "count": 16
         }
       ]
     },
@@ -796,7 +796,9 @@
         "(?<![A-Za-z0-9_])/api/health(?![A-Za-z0-9_])",
         "(?<![A-Za-z0-9_])CLAUDE_MEM_WORKER_PORT(?![A-Za-z0-9_])",
         "(?<![A-Za-z0-9_])\\.worker-start-attempted(?![A-Za-z0-9_])",
-        "(?<![A-Za-z0-9_])hook-failures\\.json(?![A-Za-z0-9_.-])"
+        "(?<![A-Za-z0-9_])hook-failures\\.json(?![A-Za-z0-9_.-])",
+        "(?<![A-Za-z0-9_])CLAUDE_MEM_DATA_DIR(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])37700(?![A-Za-z0-9_])"
       ],
       "obsolete_value_patterns": [],
       "verify_hint": "~/.claude-mem/settings.json と worker /api/health の実機確認",
@@ -805,15 +807,15 @@
       "occurrences": [
         {
           "path": "plugins/devkit/scripts/README.md",
-          "count": 6
+          "count": 8
         },
         {
           "path": "plugins/devkit/scripts/update-ccx.sh",
-          "count": 9
+          "count": 15
         },
         {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
-          "count": 21
+          "count": 56
         }
       ]
     }
