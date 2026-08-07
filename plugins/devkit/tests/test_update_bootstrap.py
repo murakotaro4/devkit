@@ -1246,6 +1246,8 @@ def test_claude_mem_worker_port_fallbacks(tmp_path):
     home = tmp_path / "home space"
     _prepare_claude_mem_home(home, settings=None)
     helpers = _claude_mem_port_helpers()
+    # uid ベース fallback は非 Windows 経路で検証する(Windows は MSYS UID を使わない)
+    linux_helpers = "OS_TYPE=linux\n" + helpers
     uid_port = _uid_fallback_port()
     env_base = {
         k: v
@@ -1269,7 +1271,7 @@ def test_claude_mem_worker_port_fallbacks(tmp_path):
         else:
             settings_path.write_text(json.dumps(settings), encoding="utf-8")
         result = subprocess.run(
-                        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+            [_bash_path(), "-c", linux_helpers + "\nclaude_mem_worker_port\n"],
             check=False,
             capture_output=True,
             text=True,
@@ -1278,6 +1280,21 @@ def test_claude_mem_worker_port_fallbacks(tmp_path):
         )
         assert result.returncode == 0, f"{label}: {result.stderr}"
         assert result.stdout.strip() == expected, label
+
+    # Windows: id -u が数値でも 37777(process.getuid 不可時の既定)
+    win_helpers = "OS_TYPE=windows\n" + helpers
+    settings_path = home / ".claude-mem" / "settings.json"
+    settings_path.unlink(missing_ok=True)
+    result = subprocess.run(
+        [_bash_path(), "-c", win_helpers + "\nclaude_mem_worker_port\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env_base,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "37777"
 
 
 def test_claude_mem_worker_port_env_overrides_settings(tmp_path):

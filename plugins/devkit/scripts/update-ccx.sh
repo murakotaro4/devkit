@@ -1217,13 +1217,16 @@ try {
     fi
 
     # Mirror SettingsDefaultsManager.ts: String(37700 + ((process.getuid?.() ?? 77) % 100))
-    local uid=""
-    uid="$(id -u 2>/dev/null)" || uid=""
-    if [[ "$uid" =~ ^[0-9]+$ ]]; then
-        printf '%s\n' "$((37700 + (uid % 100)))"
-    else
-        printf '37777\n'
+    # Windows は process.getuid 不可 → 77 → 37777。Git Bash の id -u は MSYS UID なので使わない。
+    local uid="77"
+    if [[ "$OS_TYPE" != "windows" ]]; then
+        local detected=""
+        detected="$(id -u 2>/dev/null)" || detected=""
+        if [[ "$detected" =~ ^[0-9]+$ ]]; then
+            uid="$detected"
+        fi
     fi
+    printf '%s\n' "$((37700 + (uid % 100)))"
 }
 
 claude_mem_worker_healthy() {
