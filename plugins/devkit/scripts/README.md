@@ -22,6 +22,7 @@ DevKit の setup / update / verification scripts を置くディレクトリで�
 - `codex plugin marketplace upgrade murakotaro4` による即時反映
 - Claude Code marketplace `murakotaro4` の source / repo 検証と update / 再登録
 - Claude Code plugin `devkit@murakotaro4` の update / install（実行中セッションには `/reload-plugins` を案内）
+- claude-mem worker の健全性確認と自動修復（不健全・版不一致時のみ。失敗は WARNING）
 - v9 migration marker(`.migrated-v9-dig-goal`) が無い場合の統合前 live skill directory prune
 - v6 migration marker が無い場合の旧 DevKit 管理資産 prune
 
@@ -33,6 +34,16 @@ update-ccx --version
 update-ccx --cli-only
 update-ccx --devkit-only
 ```
+
+`section_claude_mem_repair` は `--cli-only` 以外(default / `--devkit-only`)で、`section_claude_plugin` の後に動く。対応する plugin cache root は `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem` のみで、claude-mem hook prelude の他経路(`CLAUDE_PLUGIN_ROOT` / marketplace checkout 等)は再現しない。`~/.claude-mem` 不在、または cache に有効版が無い場合は SKIP。`node` / `curl` / `bun` 不在は WARN で状態ファイルを触らず終了する。有効版は `.orphaned_at` を持たず `scripts/bun-runner.js` と `scripts/worker-service.cjs` が揃う最新版。`curl` で `http://127.0.0.1:<port>/api/health` を確認し、返却 `version` が期待版と一致するときだけ健全とする。健全でも `.worker-start-attempted` や `hook-failures.json` の失敗カウンタ残があれば再起動なしで解除する。不健全時だけクールダウン解除 → plugin 自身の `restart` → 再ヘルス成功時のみカウンタ初期化を行い、失敗は WARNING に積んで updater 全体は赤にしない。
+
+自動修復が失敗した場合の手動復旧:
+
+1. `netstat -ano | findstr :37777` でポート占有を確認し、残留プロセスは `taskkill /PID <pid> /T /F`
+2. `~/.claude-mem/.worker-start-attempted` を削除(Windows の 120 秒スポーンクールダウン解除)
+3. `node <cache>/scripts/bun-runner.js <cache>/scripts/worker-service.cjs restart` で再起動
+4. `~/.claude-mem/state/hook-failures.json` の `consecutiveFailures` を 0 へ(フックの exit 2 ブロック解除)
+5. 最終手段は Claude Code の再起動
 
 旧 Cursor 同期資産の移行掃除は `plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py` に安全ロジックを集約します。manifest の hash と一致する通常ファイルだけを prune し、ユーザー改変・symlink・manifest 非掲載ファイルは保持します。`~/.cursor/`、manifest、Python 3.10 以上のいずれかが無い環境では skip し、prune 自体の失敗は他 section の実行後に updater 全体を非ゼロ終了させます。
 

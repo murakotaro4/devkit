@@ -109,6 +109,7 @@ update-ccx --version
 - `codex plugin marketplace upgrade murakotaro4` による即時反映
 - Claude Code marketplace `murakotaro4` の source / repo 検証と update / 再登録
 - Claude Code plugin `devkit@murakotaro4` の update / install（実行中セッションには `/reload-plugins` を案内）
+- claude-mem worker の健全性確認と自動修復（不健全・版不一致時のみ。失敗は WARNING）
 - v6 移行 marker が無い場合の旧資産 prune
 
 `--cli-only` は CLI 更新のみ、`--devkit-only` は DevKit 管理ファイルと Claude/Codex plugin 登録のみを処理します。

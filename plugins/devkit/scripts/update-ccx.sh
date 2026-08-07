@@ -1082,6 +1082,249 @@ section_claude_plugin() {
     echo "NOTE: Running Claude Code sessions need /reload-plugins (or restart) to apply the updated plugin."
 }
 
+claude_mem_cache_root() {
+    printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem"
+}
+
+claude_mem_bun_available() {
+    # bun-runner.js resolves bun more broadly; this pre-check is intentionally conservative.
+    command -v bun &>/dev/null && return 0
+    [[ -x "$HOME/.bun/bin/bun" ]] && return 0
+    [[ -x "$HOME/.bun/bin/bun.exe" ]] && return 0
+    return 1
+}
+
+claude_mem_resolve_active_install() {
+    local cache_root="$1"
+    local candidate
+    [[ -d "$cache_root" ]] || return 1
+    while IFS= read -r candidate; do
+        [[ -n "$candidate" ]] || continue
+        [[ -d "$cache_root/$candidate" ]] || continue
+        [[ -f "$cache_root/$candidate/.orphaned_at" ]] && continue
+        [[ -f "$cache_root/$candidate/scripts/bun-runner.js" ]] || continue
+        [[ -f "$cache_root/$candidate/scripts/worker-service.cjs" ]] || continue
+        printf '%s\n' "$cache_root/$candidate"
+        return 0
+    done < <(ls -1 "$cache_root" 2>/dev/null | sort -rV)
+    return 1
+}
+
+claude_mem_expected_version() {
+    local install_path="$1"
+    local version=""
+    version="$(node -e '
+const fs = require("fs");
+try {
+  const pkg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  if (typeof pkg.version === "string" && pkg.version.length > 0) {
+    process.stdout.write(pkg.version);
+    process.exit(0);
+  }
+} catch {}
+process.exit(1);
+' "$install_path/package.json" 2>/dev/null)" || true
+    if [[ -n "$version" ]]; then
+        printf '%s\n' "$version"
+    else
+        printf '%s\n' "$(basename -- "$install_path")"
+    fi
+}
+
+claude_mem_worker_port() {
+    local settings_path="$HOME/.claude-mem/settings.json"
+    local port=""
+    if [[ -f "$settings_path" ]]; then
+        port="$(node -e '
+const fs = require("fs");
+try {
+  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const raw = data && data.CLAUDE_MEM_WORKER_PORT;
+  let n;
+  if (typeof raw === "number" && Number.isInteger(raw)) n = raw;
+  else if (typeof raw === "string" && /^(0|[1-9]\d*)$/.test(raw)) n = Number(raw);
+  else process.exit(2);
+  if (n < 1 || n > 65535) process.exit(2);
+  process.stdout.write(String(n));
+} catch { process.exit(2); }
+' "$settings_path" 2>/dev/null)" || port=""
+    fi
+    if [[ -n "$port" ]]; then
+        printf '%s\n' "$port"
+    else
+        printf '37777\n'
+    fi
+}
+
+claude_mem_worker_healthy() {
+    local port="$1"
+    local expected_version="$2"
+    local body=""
+    body="$(curl -fsS -m 5 "http://127.0.0.1:${port}/api/health" 2>/dev/null)" || return 1
+    printf '%s\n' "$body" | node -e '
+const fs = require("fs");
+const expected = process.argv[1];
+let data;
+try { data = JSON.parse(fs.readFileSync(0, "utf8")); } catch { process.exit(1); }
+if (!data || typeof data !== "object" || data.version !== expected) process.exit(1);
+' "$expected_version" 2>/dev/null
+}
+
+claude_mem_hook_failures_need_reset() {
+    local failures_path="$HOME/.claude-mem/state/hook-failures.json"
+    [[ -f "$failures_path" ]] || return 1
+    node -e '
+const fs = require("fs");
+try {
+  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const n = data && data.consecutiveFailures;
+  if (typeof n === "number" && Number.isFinite(n) && n > 0) process.exit(0);
+  if (typeof n === "string" && Number(n) > 0) process.exit(0);
+} catch {}
+process.exit(1);
+' "$failures_path" 2>/dev/null
+}
+
+claude_mem_reset_hook_failures() {
+    local state_dir="$HOME/.claude-mem/state"
+    local failures_path="$state_dir/hook-failures.json"
+    [[ -d "$state_dir" ]] || return 0
+    node -e '
+const fs = require("fs");
+const path = process.argv[1];
+let data = {};
+try {
+  data = JSON.parse(fs.readFileSync(path, "utf8"));
+  if (!data || typeof data !== "object" || Array.isArray(data)) data = {};
+} catch { data = {}; }
+data.consecutiveFailures = 0;
+data.lastFailureAt = 0;
+const tmp = path + ".tmp." + process.pid;
+fs.writeFileSync(tmp, JSON.stringify(data));
+fs.renameSync(tmp, path);
+' "$failures_path" 2>/dev/null
+}
+
+claude_mem_restart_worker() {
+    local install_path="$1"
+    local runner="$install_path/scripts/bun-runner.js"
+    local service="$install_path/scripts/worker-service.cjs"
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        local win_runner="" win_service=""
+        if ! win_runner="$(windows_path_from_posix "$runner")" || \
+           ! win_service="$(windows_path_from_posix "$service")"; then
+            return 2
+        fi
+        runner="$win_runner"
+        service="$win_service"
+    fi
+    node "$runner" "$service" restart </dev/null
+}
+
+section_claude_mem_repair() {
+    echo ""
+    echo "=== [Claude Mem Worker] ==="
+
+    local mem_home="$HOME/.claude-mem"
+    local cache_root
+    cache_root="$(claude_mem_cache_root)"
+    local install_path=""
+    install_path="$(claude_mem_resolve_active_install "$cache_root" || true)"
+
+    if [[ ! -d "$mem_home" || -z "$install_path" ]]; then
+        echo "SKIP claude-mem worker repair (not installed)"
+        return 0
+    fi
+
+    if ! command -v node &>/dev/null; then
+        echo "WARN claude-mem: Node.js is not available; worker repair skipped"
+        WARNINGS+=("claude-mem: Node.js unavailable; worker repair skipped")
+        return 0
+    fi
+    if ! command -v curl &>/dev/null; then
+        echo "WARN claude-mem: curl is not available; worker repair skipped"
+        WARNINGS+=("claude-mem: curl unavailable; worker repair skipped")
+        return 0
+    fi
+    if ! claude_mem_bun_available; then
+        echo "WARN claude-mem: bun is not available; worker repair skipped"
+        WARNINGS+=("claude-mem: bun unavailable; worker repair skipped")
+        return 0
+    fi
+
+    local expected_version port
+    expected_version="$(claude_mem_expected_version "$install_path")"
+    port="$(claude_mem_worker_port)"
+
+    local marker_path="$mem_home/.worker-start-attempted"
+    local healthy=false
+    if claude_mem_worker_healthy "$port" "$expected_version"; then
+        healthy=true
+    fi
+
+    if [[ "$healthy" == true ]]; then
+        if [[ -e "$marker_path" ]] || claude_mem_hook_failures_need_reset; then
+            echo -n "Clearing stale claude-mem hook failure state... "
+            rm -f -- "$marker_path"
+            if [[ -e "$marker_path" ]]; then
+                echo "WARN"
+                WARNINGS+=("claude-mem: could not remove .worker-start-attempted")
+                return 0
+            fi
+            if ! claude_mem_reset_hook_failures; then
+                echo "WARN"
+                WARNINGS+=("claude-mem: worker recovered but failure counter reset failed")
+                return 0
+            fi
+            echo "OK"
+            return 0
+        fi
+        echo "OK claude-mem worker v$expected_version is healthy"
+        return 0
+    fi
+
+    local runner_path="$install_path/scripts/bun-runner.js"
+    local service_path="$install_path/scripts/worker-service.cjs"
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        local win_runner="" win_service=""
+        if ! win_runner="$(windows_path_from_posix "$runner_path")" || \
+           ! win_service="$(windows_path_from_posix "$service_path")"; then
+            echo "WARN claude-mem: could not convert worker script paths for Windows"
+            WARNINGS+=("claude-mem: Windows path conversion failed; worker repair skipped")
+            return 0
+        fi
+    fi
+
+    echo -n "Repairing claude-mem worker v$expected_version... "
+    rm -f -- "$marker_path"
+    if [[ -e "$marker_path" ]]; then
+        echo "WARN"
+        WARNINGS+=("claude-mem: could not remove .worker-start-attempted; manual recovery: see plugins/devkit/scripts/README.md")
+        return 0
+    fi
+
+    local restart_status=0
+    claude_mem_restart_worker "$install_path" >/dev/null 2>&1 || restart_status=$?
+    if [[ $restart_status -ne 0 ]]; then
+        echo "WARN"
+        WARNINGS+=("claude-mem: worker restart failed; manual recovery: see plugins/devkit/scripts/README.md")
+        return 0
+    fi
+
+    if ! claude_mem_worker_healthy "$port" "$expected_version"; then
+        echo "WARN"
+        WARNINGS+=("claude-mem: worker restart did not restore /api/health; manual recovery: see plugins/devkit/scripts/README.md")
+        return 0
+    fi
+
+    if ! claude_mem_reset_hook_failures; then
+        echo "WARN"
+        WARNINGS+=("claude-mem: worker recovered but failure counter reset failed")
+        return 0
+    fi
+    echo "OK"
+}
+
 section_prune_legacy_assets() {
     echo ""
     echo "=== [DevKit Migration] ==="
@@ -1202,6 +1445,7 @@ main() {
         section_prune_cursor_sync
         section_codex_plugin
         section_claude_plugin
+        section_claude_mem_repair
     fi
 
     echo ""
