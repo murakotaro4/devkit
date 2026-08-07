@@ -757,6 +757,65 @@
           "count": 1
         }
       ]
+    },
+    {
+      "id": "claude-mem-plugin-cache-contract",
+      "summary": "claude-mem plugin cache の探索契約(marketplace・runner・orphan 判定)",
+      "current_value": "thedotmack",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])thedotmack(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])bun-runner\\.js(?![A-Za-z0-9_.-])",
+        "(?<![A-Za-z0-9_])worker-service\\.cjs(?![A-Za-z0-9_.-])",
+        "(?<![A-Za-z0-9_])\\.orphaned_at(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "claude-mem cache の hooks.json prelude 実機確認",
+      "update_notes": "cache 探索経路や runner / orphan 判定が変わったら update-ccx の section_claude_mem_repair・scripts/README・契約テストを同時更新",
+      "last_verified": "2026-08-08",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 9
+        },
+        {
+          "path": "plugins/devkit/tests/test_update_bootstrap.py",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "id": "claude-mem-worker-state-contract",
+      "summary": "claude-mem worker の通信・状態契約(port・health・cooldown・失敗カウンタ)",
+      "current_value": "37777",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])37777(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])/api/health(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])CLAUDE_MEM_WORKER_PORT(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])\\.worker-start-attempted(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])hook-failures\\.json(?![A-Za-z0-9_.-])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "~/.claude-mem/settings.json と worker /api/health の実機確認",
+      "update_notes": "port・health 経路・cooldown / hook-failures の契約が変わったら update-ccx の修復セクション・scripts/README・契約テストを同時更新",
+      "last_verified": "2026-08-08",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 9
+        },
+        {
+          "path": "plugins/devkit/tests/test_update_bootstrap.py",
+          "count": 21
+        }
+      ]
     }
   ]
 }

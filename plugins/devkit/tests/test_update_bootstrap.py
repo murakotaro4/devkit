@@ -943,3 +943,450 @@ def test_update_ccx_cmd_uses_source_root_fallback_when_adjacent_shell_is_missing
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert marker_path.read_text(encoding="utf-8") == "sentinel\n"
+
+
+def _bash_path() -> str:
+    bash = shutil.which("bash")
+    if not bash:
+        raise AssertionError("bash が見つからない: PATH で bash を解決できません")
+    return str(Path(bash).resolve())
+
+
+def _shell_function(name: str, next_name: str) -> str:
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    body = shell.split(name + "()", 1)[1].split("\n}\n\n" + next_name + "()", 1)[0]
+    return name + "()" + body + "\n}\n"
+
+
+def _claude_mem_helpers_source() -> str:
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    start = shell.index("claude_mem_cache_root()")
+    end = shell.index("\nsection_prune_legacy_assets()")
+    return shell[start:end]
+
+
+def _write_exec(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8", newline="\n")
+    path.chmod(path.stat().st_mode | 0o111)
+
+
+def _prepare_claude_mem_home(
+    home: Path,
+    *,
+    version: str = "13.13.1",
+    orphaned: bool = False,
+    package_version: str | None = None,
+    settings: object | None = ...,
+    consecutive_failures: int | None = None,
+    marker: bool = False,
+    extra_fields: dict | None = None,
+) -> Path:
+    mem_home = home / ".claude-mem"
+    mem_home.mkdir(parents=True)
+    cache_root = home / ".claude" / "plugins" / "cache" / "thedotmack" / "claude-mem"
+    install = cache_root / version
+    scripts = install / "scripts"
+    scripts.mkdir(parents=True)
+    if orphaned:
+        (install / ".orphaned_at").write_text("1\n", encoding="utf-8")
+    pkg_version = version if package_version is None else package_version
+    (install / "package.json").write_text(
+        json.dumps({"name": "claude-mem-plugin", "version": pkg_version}),
+        encoding="utf-8",
+    )
+    _write_exec(
+        scripts / "bun-runner.js",
+        "#!/usr/bin/env node\n"
+        "const fs = require('fs');\n"
+        "const log = process.env.CLAUDE_MEM_RESTART_LOG;\n"
+        "if (log) fs.appendFileSync(log, process.argv.slice(2).join(' ') + '\\n');\n"
+        "if (process.env.CLAUDE_MEM_RESTART_FAIL === '1') process.exit(1);\n",
+    )
+    (scripts / "worker-service.cjs").write_text("// stub\n", encoding="utf-8")
+    if settings is not ...:
+        if settings is not None:
+            (mem_home / "settings.json").write_text(
+                settings if isinstance(settings, str) else json.dumps(settings),
+                encoding="utf-8",
+            )
+    else:
+        (mem_home / "settings.json").write_text(
+            json.dumps({"CLAUDE_MEM_WORKER_PORT": "37777"}),
+            encoding="utf-8",
+        )
+    if consecutive_failures is not None:
+        state_dir = mem_home / "state"
+        state_dir.mkdir(parents=True)
+        payload = {"consecutiveFailures": consecutive_failures, "lastFailureAt": 99}
+        if extra_fields:
+            payload.update(extra_fields)
+        (state_dir / "hook-failures.json").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+    if marker:
+        (mem_home / ".worker-start-attempted").write_text("1\n", encoding="utf-8")
+    return install
+
+
+def _run_claude_mem_section(
+    tmp_path: Path,
+    *,
+    home: Path,
+    health_bodies: list[str] | None = None,
+    health_fail_times: int = 0,
+    restart_fail: bool = False,
+    hide_bun: bool = False,
+    hide_curl: bool = False,
+    hide_node: bool = False,
+    os_type: str = "posix",
+    path_convert_fail: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    restart_log = tmp_path / "restart.log"
+    health_log = tmp_path / "health.log"
+    health_bodies = list(health_bodies or [])
+
+    real_node = shutil.which("node")
+    assert real_node, "system node is required for claude-mem repair tests"
+    if not hide_node:
+        _write_exec(
+            bin_dir / "node",
+            "#!/usr/bin/env bash\n"
+            f'exec "{Path(real_node).as_posix()}" "$@"\n',
+        )
+
+    fail_left = tmp_path / "health-fail-left"
+    fail_left.write_text(str(health_fail_times), encoding="utf-8")
+    idx_file = tmp_path / "health-idx"
+    idx_file.write_text("0", encoding="utf-8")
+    bodies_file = tmp_path / "health-bodies.txt"
+    bodies_file.write_text(
+        "\n".join(health_bodies) + ("\n" if health_bodies else ""),
+        encoding="utf-8",
+    )
+
+    if not hide_curl:
+        _write_exec(
+            bin_dir / "curl",
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    f'echo "$*" >> "{health_log.as_posix()}"',
+                    f'fail_left_file="{fail_left.as_posix()}"',
+                    'if [[ -f "$fail_left_file" ]]; then',
+                    '  left="$(<"$fail_left_file")"',
+                    '  if [[ "$left" -gt 0 ]]; then',
+                    '    printf "%s\\n" "$((left - 1))" >"$fail_left_file"',
+                    "    exit 22",
+                    "  fi",
+                    "fi",
+                    f'bodies="{bodies_file.as_posix()}"',
+                    f'idx_file="{idx_file.as_posix()}"',
+                    'idx=0',
+                    '[[ -f "$idx_file" ]] && idx="$(<"$idx_file")"',
+                    'mapfile -t lines <"$bodies"',
+                    'body="${lines[$idx]-}"',
+                    'printf "%s\\n" "$((idx + 1))" >"$idx_file"',
+                    'if [[ -z "$body" ]]; then exit 22; fi',
+                    'printf "%s\\n" "$body"',
+                    "exit 0",
+                    "",
+                ]
+            ),
+        )
+    if not hide_bun:
+        _write_exec(bin_dir / "bun", "#!/usr/bin/env bash\nexit 0\n")
+
+    helpers = _claude_mem_helpers_source()
+    probe = (
+        f"OS_TYPE={json.dumps(os_type)}\n"
+        "WARNINGS=()\n"
+        "ERRORS=()\n"
+        "windows_path_from_posix() {\n"
+        '  if [[ "$CLAUDE_MEM_PATH_CONVERT_FAIL" == 1 ]]; then return 1; fi\n'
+        '  printf \'C:\\\\converted\\\\%s\\n\' "${1##*/}"\n'
+        "}\n"
+        + helpers
+        + "\n"
+        "section_claude_mem_repair\n"
+        'printf "warnings:%s\\n" "${#WARNINGS[@]}"\n'
+        'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        'if ((${#WARNINGS[@]} > 0)); then printf "warning0:%s\\n" "${WARNINGS[0]}"; fi\n'
+    )
+
+    path_entries = [str(bin_dir)]
+    for tool in ("bash", "sort", "ls", "rm", "dirname", "basename", "uname", "cygpath"):
+        located = shutil.which(tool)
+        if located:
+            path_entries.append(str(Path(located).resolve().parent))
+    # Keep a deduped PATH that still reaches core Git Bash tools, but prefer stubs.
+    seen: set[str] = set()
+    filtered_path: list[str] = []
+    for entry in path_entries + os.environ.get("PATH", "").split(os.pathsep):
+        if not entry or entry in seen:
+            continue
+        seen.add(entry)
+        if hide_bun and (
+            (Path(entry) / "bun").exists() or (Path(entry) / "bun.exe").exists()
+        ):
+            continue
+        filtered_path.append(entry)
+
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": os.pathsep.join(filtered_path),
+        "CLAUDE_MEM_RESTART_LOG": str(restart_log),
+        "CLAUDE_MEM_PATH_CONVERT_FAIL": "1" if path_convert_fail else "0",
+    }
+    if restart_fail:
+        env["CLAUDE_MEM_RESTART_FAIL"] = "1"
+
+    probe_path = tmp_path / "claude-mem-repair-probe.sh"
+    probe_path.write_text(probe, encoding="utf-8", newline="\n")
+    return subprocess.run(
+        [_bash_path(), str(probe_path.as_posix())],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        cwd=str(tmp_path),
+    )
+
+
+def test_claude_mem_repair_main_wiring_and_heading():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    assert "=== [Claude Mem Worker] ===" in shell
+    assert "section_claude_mem_repair()" in shell
+    main = shell.split("main()", 1)[1]
+    second_cli_only = main.split('if [[ "$CLI_ONLY" != true ]]; then')[2]
+    assert "section_claude_mem_repair" in second_cli_only
+    assert second_cli_only.index("section_claude_plugin") < second_cli_only.index(
+        "section_claude_mem_repair"
+    )
+    assert main.count("section_claude_mem_repair") == 1
+
+
+def test_claude_mem_repair_skips_when_not_installed(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    result = _run_claude_mem_section(tmp_path, home=home)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "SKIP" in result.stdout
+    assert "warnings:0" in result.stdout
+    assert "errors:0" in result.stdout
+
+
+def test_claude_mem_worker_port_fallbacks(tmp_path):
+    home = tmp_path / "home space"
+    _prepare_claude_mem_home(home, settings=None)
+    helpers = _shell_function("claude_mem_worker_port", "claude_mem_worker_healthy")
+    for label, settings in (
+        ("missing", None),
+        ("broken", "{"),
+        ("oob", {"CLAUDE_MEM_WORKER_PORT": 99999}),
+        ("string", {"CLAUDE_MEM_WORKER_PORT": "37777"}),
+        ("number", {"CLAUDE_MEM_WORKER_PORT": 37777}),
+    ):
+        mem = home / ".claude-mem"
+        settings_path = mem / "settings.json"
+        if settings is None:
+            settings_path.unlink(missing_ok=True)
+        elif isinstance(settings, str):
+            settings_path.write_text(settings, encoding="utf-8")
+        else:
+            settings_path.write_text(json.dumps(settings), encoding="utf-8")
+        result = subprocess.run(
+            [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env={**os.environ, "HOME": str(home)},
+        )
+        assert result.returncode == 0, f"{label}: {result.stderr}"
+        assert result.stdout.strip() == "37777", label
+
+
+def test_claude_mem_repair_healthy_same_version_no_restart(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=0)
+    body = json.dumps({"status": "ok", "version": "13.13.1"})
+    result = _run_claude_mem_section(tmp_path, home=home, health_bodies=[body])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "OK claude-mem worker v13.13.1 is healthy" in result.stdout
+    assert "warnings:0" in result.stdout
+    assert "errors:0" in result.stdout
+    assert not (tmp_path / "restart.log").exists()
+
+
+def test_claude_mem_repair_healthy_clears_marker_and_counter_only(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(
+        home,
+        consecutive_failures=3,
+        marker=True,
+        extra_fields={"kept": "yes"},
+    )
+    body = json.dumps({"status": "ok", "version": "13.13.1"})
+    result = _run_claude_mem_section(tmp_path, home=home, health_bodies=[body])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Clearing stale claude-mem hook failure state" in result.stdout
+    assert not (home / ".claude-mem" / ".worker-start-attempted").exists()
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 0
+    assert payload["lastFailureAt"] == 0
+    assert payload["kept"] == "yes"
+    assert not (tmp_path / "restart.log").exists()
+    assert "warnings:0" in result.stdout
+    assert "errors:0" in result.stdout
+
+
+def test_claude_mem_repair_restarts_once_on_version_mismatch(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=2)
+    bodies = [
+        json.dumps({"status": "ok", "version": "13.12.4"}),
+        json.dumps({"status": "ok", "version": "13.13.1"}),
+    ]
+    result = _run_claude_mem_section(tmp_path, home=home, health_bodies=bodies)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Repairing claude-mem worker" in result.stdout
+    restart_log = (tmp_path / "restart.log").read_text(encoding="utf-8").strip().splitlines()
+    assert len(restart_log) == 1
+    assert restart_log[0].endswith("worker-service.cjs restart")
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 0
+    assert "warnings:0" in result.stdout
+    assert "errors:0" in result.stdout
+
+
+def test_claude_mem_repair_restarts_once_when_unreachable(tmp_path):
+    home = tmp_path / "home"
+    install = _prepare_claude_mem_home(home, consecutive_failures=1, marker=True)
+    bodies = [json.dumps({"status": "ok", "version": "13.13.1"})]
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_bodies=bodies,
+        health_fail_times=1,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Repairing claude-mem worker" in result.stdout
+    restart_log = (tmp_path / "restart.log").read_text(encoding="utf-8").strip().splitlines()
+    assert len(restart_log) == 1
+    assert not (home / ".claude-mem" / ".worker-start-attempted").exists()
+    assert install.is_dir()
+
+
+def test_claude_mem_repair_bun_missing_leaves_state(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=4, marker=True)
+    result = _run_claude_mem_section(tmp_path, home=home, hide_bun=True)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "warnings:1" in result.stdout
+    assert "errors:0" in result.stdout
+    assert (home / ".claude-mem" / ".worker-start-attempted").exists()
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 4
+
+
+def test_claude_mem_repair_restart_failure_leaves_counter(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=2, marker=True)
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_fail_times=1,
+        restart_fail=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "warnings:1" in result.stdout
+    assert "errors:0" in result.stdout
+    assert "manual recovery" in result.stdout
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 2
+    # cooldown marker is cleared before restart attempt
+    assert not (home / ".claude-mem" / ".worker-start-attempted").exists()
+
+
+def test_claude_mem_repair_rehealth_failure_leaves_counter(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=5)
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_fail_times=2,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "warnings:1" in result.stdout
+    assert "errors:0" in result.stdout
+    assert "manual recovery" in result.stdout
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 5
+
+
+def test_claude_mem_repair_skips_orphaned_cache_and_prefers_latest(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, version="13.13.1")
+    older = home / ".claude" / "plugins" / "cache" / "thedotmack" / "claude-mem" / "13.12.4"
+    scripts = older / "scripts"
+    scripts.mkdir(parents=True)
+    (older / ".orphaned_at").write_text("1\n", encoding="utf-8")
+    (older / "package.json").write_text(
+        json.dumps({"version": "13.12.4"}), encoding="utf-8"
+    )
+    (scripts / "bun-runner.js").write_text("//\n", encoding="utf-8")
+    (scripts / "worker-service.cjs").write_text("//\n", encoding="utf-8")
+    helpers = _shell_function(
+        "claude_mem_resolve_active_install", "claude_mem_expected_version"
+    )
+    result = subprocess.run(
+        [
+            _bash_path(),
+            "-c",
+            helpers
+            + "\n"
+            + 'claude_mem_resolve_active_install "$HOME/.claude/plugins/cache/thedotmack/claude-mem"\n',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(home)},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert result.stdout.strip().endswith("13.13.1")
+
+
+def test_claude_mem_repair_windows_path_conversion_failure_is_warn_only(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=2, marker=True)
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_fail_times=1,
+        os_type="windows",
+        path_convert_fail=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "warnings:1" in result.stdout
+    assert "errors:0" in result.stdout
+    assert (home / ".claude-mem" / ".worker-start-attempted").exists()
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 2
