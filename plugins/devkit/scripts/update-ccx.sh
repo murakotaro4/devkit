@@ -1222,7 +1222,7 @@ claude_mem_normalize_port() {
 
 claude_mem_worker_port() {
     local port=""
-    if [[ -n "${CLAUDE_MEM_WORKER_PORT:-}" ]]; then
+    if [[ -n "${CLAUDE_MEM_WORKER_PORT+x}" ]]; then
         port="$(claude_mem_normalize_port "$CLAUDE_MEM_WORKER_PORT" || true)"
         if [[ -z "$port" ]]; then
             # env が不正なら settings/既定へ落とさない(claude-mem も env をそのまま採用するため)

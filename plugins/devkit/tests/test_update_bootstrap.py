@@ -1333,7 +1333,7 @@ def test_claude_mem_worker_port_invalid_env_does_not_fall_back(tmp_path):
         },
         "HOME": str(home),
     }
-    for bad_port in ("abc", "0", "99999", "-1"):
+    for bad_port in ("abc", "0", "99999", "-1", ""):
         result = subprocess.run(
             [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
             check=False,
@@ -1595,22 +1595,31 @@ def test_claude_mem_repair_invalid_env_port_skips_unchanged(tmp_path):
         extra_fields={"kept": "yes"},
     )
     body = json.dumps({"status": "ok", "version": "13.13.1"})
-    result = _run_claude_mem_section(
-        tmp_path,
-        home=home,
-        health_bodies=[body],
-        extra_env={"CLAUDE_MEM_WORKER_PORT": "abc"},
-    )
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert "invalid CLAUDE_MEM_WORKER_PORT" in result.stdout
-    assert (home / ".claude-mem" / ".worker-start-attempted").exists()
-    payload = json.loads(
-        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
-    )
-    assert payload["consecutiveFailures"] == 3
-    assert payload["kept"] == "yes"
-    assert "warnings:1" in result.stdout
-    assert not (tmp_path / "restart.log").exists()
+    marker = home / ".claude-mem" / ".worker-start-attempted"
+    failures = home / ".claude-mem" / "state" / "hook-failures.json"
+    for bad_port in ("abc", ""):
+        marker.write_text("1\n", encoding="utf-8")
+        failures.write_text(
+            json.dumps(
+                {"consecutiveFailures": 3, "lastFailureAt": 99, "kept": "yes"}
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "restart.log").unlink(missing_ok=True)
+        result = _run_claude_mem_section(
+            tmp_path,
+            home=home,
+            health_bodies=[body],
+            extra_env={"CLAUDE_MEM_WORKER_PORT": bad_port},
+        )
+        assert result.returncode == 0, f"{bad_port!r}: {result.stderr + result.stdout}"
+        assert "invalid CLAUDE_MEM_WORKER_PORT" in result.stdout, bad_port
+        assert marker.exists(), bad_port
+        payload = json.loads(failures.read_text(encoding="utf-8"))
+        assert payload["consecutiveFailures"] == 3, bad_port
+        assert payload["kept"] == "yes", bad_port
+        assert "warnings:1" in result.stdout, bad_port
+        assert not (tmp_path / "restart.log").exists(), bad_port
 
 
 def test_claude_mem_repair_marker_uses_bootstrap_under_settings_datadir(tmp_path):
