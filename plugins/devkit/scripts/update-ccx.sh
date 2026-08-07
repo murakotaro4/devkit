@@ -1114,7 +1114,7 @@ claude_mem_data_dir() {
         raw="$(node -e '
 const fs = require("fs");
 try {
-  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8").replace(/^\uFEFF/, ""));
   const src = data?.env ?? data;
   const v = src && src.CLAUDE_MEM_DATA_DIR;
   if (typeof v === "string" && v.length > 0) process.stdout.write(v);
@@ -1224,6 +1224,12 @@ claude_mem_worker_port() {
     local port=""
     if [[ -n "${CLAUDE_MEM_WORKER_PORT:-}" ]]; then
         port="$(claude_mem_normalize_port "$CLAUDE_MEM_WORKER_PORT" || true)"
+        if [[ -z "$port" ]]; then
+            # env が不正なら settings/既定へ落とさない(claude-mem も env をそのまま採用するため)
+            return 1
+        fi
+        printf '%s\n' "$port"
+        return 0
     fi
 
     if [[ -z "$port" ]]; then
@@ -1234,7 +1240,7 @@ claude_mem_worker_port() {
             port="$(node -e '
 const fs = require("fs");
 try {
-  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8").replace(/^\uFEFF/, ""));
   const src = data?.env ?? data;
   const raw = src && src.CLAUDE_MEM_WORKER_PORT;
   let n;
@@ -1337,14 +1343,15 @@ section_claude_mem_repair() {
     echo ""
     echo "=== [Claude Mem Worker] ==="
 
-    local mem_home
-    mem_home="$(claude_mem_data_dir)"
+    # 非対称: marker は bootstrap(SettingsDefaultsManager)、state は resolveDataDir(3段)
+    local bootstrap_home
+    bootstrap_home="$(claude_mem_bootstrap_dir)"
     local cache_root
     cache_root="$(claude_mem_cache_root)"
     local install_path=""
     install_path="$(claude_mem_resolve_active_install "$cache_root" || true)"
 
-    if [[ ! -d "$mem_home" || -z "$install_path" ]]; then
+    if [[ ! -d "$bootstrap_home" || -z "$install_path" ]]; then
         echo "SKIP claude-mem worker repair (not installed)"
         return 0
     fi
@@ -1367,9 +1374,13 @@ section_claude_mem_repair() {
 
     local expected_version port
     expected_version="$(claude_mem_expected_version "$install_path")"
-    port="$(claude_mem_worker_port)"
+    if ! port="$(claude_mem_worker_port)"; then
+        echo "WARN claude-mem: invalid CLAUDE_MEM_WORKER_PORT; worker repair skipped"
+        WARNINGS+=("claude-mem: invalid CLAUDE_MEM_WORKER_PORT; worker repair skipped")
+        return 0
+    fi
 
-    local marker_path="$mem_home/.worker-start-attempted"
+    local marker_path="$bootstrap_home/.worker-start-attempted"
     local healthy=false
     if claude_mem_worker_healthy "$port" "$expected_version"; then
         healthy=true

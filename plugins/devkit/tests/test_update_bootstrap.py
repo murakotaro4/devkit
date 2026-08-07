@@ -1321,7 +1321,7 @@ def test_claude_mem_worker_port_env_overrides_settings(tmp_path):
     assert result.stdout.strip() == "12345"
 
 
-def test_claude_mem_worker_port_invalid_env_falls_back(tmp_path):
+def test_claude_mem_worker_port_invalid_env_does_not_fall_back(tmp_path):
     home = tmp_path / "home"
     _prepare_claude_mem_home(home, settings={"CLAUDE_MEM_WORKER_PORT": 37777})
     helpers = _claude_mem_port_helpers()
@@ -1335,16 +1335,14 @@ def test_claude_mem_worker_port_invalid_env_falls_back(tmp_path):
     }
     for bad_port in ("abc", "0", "99999", "-1"):
         result = subprocess.run(
-                        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+            [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
             check=False,
             capture_output=True,
             text=True,
             encoding="utf-8",
             env={**env_base, "CLAUDE_MEM_WORKER_PORT": bad_port},
         )
-        assert result.returncode == 0, f"{bad_port}: {result.stderr}"
-        assert result.stdout.strip() == "37777", bad_port
-
+        assert result.returncode != 0, bad_port
 
 def test_claude_mem_data_dir_override_and_tilde(tmp_path):
     home = tmp_path / "home"
@@ -1587,6 +1585,110 @@ def test_claude_mem_data_dir_env_overrides_settings(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "37773"
+
+def test_claude_mem_repair_invalid_env_port_skips_unchanged(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(
+        home,
+        consecutive_failures=3,
+        marker=True,
+        extra_fields={"kept": "yes"},
+    )
+    body = json.dumps({"status": "ok", "version": "13.13.1"})
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_bodies=[body],
+        extra_env={"CLAUDE_MEM_WORKER_PORT": "abc"},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "invalid CLAUDE_MEM_WORKER_PORT" in result.stdout
+    assert (home / ".claude-mem" / ".worker-start-attempted").exists()
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 3
+    assert payload["kept"] == "yes"
+    assert "warnings:1" in result.stdout
+    assert not (tmp_path / "restart.log").exists()
+
+
+def test_claude_mem_repair_marker_uses_bootstrap_under_settings_datadir(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    custom = home / "custom-mem"
+    custom.mkdir()
+    (custom / ".worker-start-attempted").write_text("custom-marker\n", encoding="utf-8")
+    (custom / "state").mkdir()
+    (custom / "state" / "hook-failures.json").write_text(
+        json.dumps({"consecutiveFailures": 3, "kept": "yes"}), encoding="utf-8"
+    )
+    _prepare_claude_mem_home(
+        home,
+        settings={
+            "CLAUDE_MEM_DATA_DIR": str(custom),
+            "CLAUDE_MEM_WORKER_PORT": 37777,
+        },
+        marker=True,
+    )
+    body = json.dumps({"status": "ok", "version": "13.13.1"})
+    result = _run_claude_mem_section(tmp_path, home=home, health_bodies=[body])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Clearing stale claude-mem hook failure state" in result.stdout
+    assert not (home / ".claude-mem" / ".worker-start-attempted").exists()
+    assert (custom / ".worker-start-attempted").read_text(encoding="utf-8") == "custom-marker\n"
+    payload = json.loads(
+        (custom / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 0
+    assert payload["kept"] == "yes"
+
+
+def test_claude_mem_settings_json_bom_is_accepted(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    custom = home / "bom-custom"
+    custom.mkdir()
+    default_mem = home / ".claude-mem"
+    default_mem.mkdir()
+    bom = chr(0xFEFF)
+    (default_mem / "settings.json").write_text(
+        bom + json.dumps({
+            "CLAUDE_MEM_DATA_DIR": str(custom),
+            "CLAUDE_MEM_WORKER_PORT": 37774,
+        }),
+        encoding="utf-8",
+    )
+    helpers = _claude_mem_port_helpers()
+    env = {
+        **{
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+        },
+        "HOME": str(home),
+    }
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_data_dir\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert normalize_git_bash_path(result.stdout) == custom
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "37774"
+
 
 def test_claude_mem_repair_healthy_same_version_no_restart(tmp_path):
     home = tmp_path / "home"
