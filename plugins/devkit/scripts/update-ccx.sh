@@ -1087,15 +1087,37 @@ claude_mem_cache_root() {
 }
 
 claude_mem_data_dir() {
-    # Mirror claude-mem paths.ts expandHome for CLAUDE_MEM_DATA_DIR overrides.
-    local raw="${CLAUDE_MEM_DATA_DIR:-$HOME/.claude-mem}"
+    # Mirror claude-mem paths.ts resolveDataDir / expandHome.
+    # Tier: env CLAUDE_MEM_DATA_DIR -> $HOME/.claude-mem/settings.json -> $HOME/.claude-mem
+    # node 非在時は settings 段をスキップ(env / 既定のみ)。
+    local raw=""
+    if [[ -n "${CLAUDE_MEM_DATA_DIR:-}" ]]; then
+        raw="$CLAUDE_MEM_DATA_DIR"
+    else
+        local default_home="$HOME/.claude-mem"
+        local settings_path="$default_home/settings.json"
+        if [[ -f "$settings_path" ]] && command -v node &>/dev/null; then
+            raw="$(node -e '
+const fs = require("fs");
+try {
+  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const src = data?.env ?? data;
+  const v = src && src.CLAUDE_MEM_DATA_DIR;
+  if (typeof v === "string" && v.length > 0) process.stdout.write(v);
+  else process.exit(2);
+} catch { process.exit(2); }
+' "$settings_path" 2>/dev/null)" || raw=""
+        fi
+        if [[ -z "$raw" ]]; then
+            raw="$default_home"
+        fi
+    fi
     if [[ "$raw" == "~" ]]; then
         raw="$HOME"
     elif [[ "$raw" == "~/"* ]]; then
         raw="$HOME/${raw:2}"
     fi
-    printf '%s
-' "${raw%/}"
+    printf '%s\n' "${raw%/}"
 }
 
 claude_mem_bun_available() {
@@ -1130,8 +1152,7 @@ claude_mem_version_sort_key() {
     [[ "$patch" =~ ^[0-9]+$ ]] || patch=0
     local stable=1
     [[ "$_B" == *-* ]] && stable=0
-    printf '%08d%08d%08d%d
-' "$major" "$minor" "$patch" "$stable"
+    printf '%08d%08d%08d%d\n' "$major" "$minor" "$patch" "$stable"
 }
 
 claude_mem_resolve_active_install() {
@@ -1144,15 +1165,15 @@ claude_mem_resolve_active_install() {
         [[ -f "$candidate/.orphaned_at" ]] && continue
         [[ -f "$candidate/scripts/bun-runner.js" ]] || continue
         [[ -f "$candidate/scripts/worker-service.cjs" ]] || continue
-        key="$(claude_mem_version_sort_key "$name")"
+        # 数値キーにディレクトリ名を連結し、同一 core の prerelease 同士は名前の辞書順降順で tie-break
+        key="$(claude_mem_version_sort_key "$name") $name"
         if [[ -z "$best_key" || "$key" > "$best_key" ]]; then
             best_key="$key"
             best_path="$candidate"
         fi
     done
     [[ -n "$best_path" ]] || return 1
-    printf '%s
-' "$best_path"
+    printf '%s\n' "$best_path"
 }
 
 claude_mem_expected_version() {
@@ -1199,7 +1220,8 @@ claude_mem_worker_port() {
 const fs = require("fs");
 try {
   const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const raw = data && data.CLAUDE_MEM_WORKER_PORT;
+  const src = data?.env ?? data;
+  const raw = src && src.CLAUDE_MEM_WORKER_PORT;
   let n;
   if (typeof raw === "number" && Number.isInteger(raw)) n = raw;
   else if (typeof raw === "string" && /^(0|[1-9]\d*)$/.test(raw)) n = Number(raw);

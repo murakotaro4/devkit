@@ -783,7 +783,7 @@
         },
         {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
-          "count": 16
+          "count": 17
         }
       ]
     },
@@ -811,11 +811,11 @@
         },
         {
           "path": "plugins/devkit/scripts/update-ccx.sh",
-          "count": 15
+          "count": 17
         },
         {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
-          "count": 58
+          "count": 68
         }
       ]
     }

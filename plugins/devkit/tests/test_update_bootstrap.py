@@ -1438,6 +1438,104 @@ def test_claude_mem_data_dir_override_and_tilde(tmp_path):
 
 
 
+
+
+def test_claude_mem_data_dir_from_default_settings_top_level(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    custom = home / "from-settings"
+    custom.mkdir()
+    default_mem = home / ".claude-mem"
+    default_mem.mkdir()
+    (default_mem / "settings.json").write_text(
+        json.dumps({"CLAUDE_MEM_DATA_DIR": str(custom)}), encoding="utf-8"
+    )
+    helpers = _claude_mem_port_helpers()
+    env = {
+        **{
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+        },
+        "HOME": str(home),
+    }
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_data_dir\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert normalize_git_bash_path(result.stdout) == custom
+
+
+def test_claude_mem_data_dir_from_default_settings_env_object(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    custom = home / "from-env-object"
+    custom.mkdir()
+    default_mem = home / ".claude-mem"
+    default_mem.mkdir()
+    (default_mem / "settings.json").write_text(
+        json.dumps({"env": {"CLAUDE_MEM_DATA_DIR": str(custom)}}), encoding="utf-8"
+    )
+    helpers = _claude_mem_port_helpers()
+    env = {
+        **{
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+        },
+        "HOME": str(home),
+    }
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_data_dir\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert normalize_git_bash_path(result.stdout) == custom
+
+
+def test_claude_mem_data_dir_env_overrides_settings(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    from_settings = home / "from-settings"
+    from_settings.mkdir()
+    from_env = home / "from-env"
+    from_env.mkdir()
+    default_mem = home / ".claude-mem"
+    default_mem.mkdir()
+    (default_mem / "settings.json").write_text(
+        json.dumps({"CLAUDE_MEM_DATA_DIR": str(from_settings)}), encoding="utf-8"
+    )
+    helpers = _claude_mem_port_helpers()
+    env = {
+        **{
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+        },
+        "HOME": str(home),
+        "CLAUDE_MEM_DATA_DIR": str(from_env),
+    }
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_data_dir\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert normalize_git_bash_path(result.stdout) == from_env
+
+
 def test_claude_mem_repair_healthy_same_version_no_restart(tmp_path):
     home = tmp_path / "home"
     _prepare_claude_mem_home(home, consecutive_failures=0)
@@ -1641,6 +1739,30 @@ def test_claude_mem_resolve_prefers_higher_core_even_if_prerelease(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip().endswith("13.14.0-alpha")
+
+
+
+
+def test_claude_mem_resolve_prefers_newer_prerelease_on_same_core(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    _install_claude_mem_cache_version(home, "13.14.0-beta.1")
+    _install_claude_mem_cache_version(home, "13.14.0-beta.2")
+    helpers = _claude_mem_resolve_helpers()
+    result = subprocess.run(
+        [
+            _bash_path(),
+            "-c",
+            helpers + '\nclaude_mem_resolve_active_install "$HOME/.claude/plugins/cache/thedotmack/claude-mem"\n',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(home)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("13.14.0-beta.2")
 
 
 def test_claude_mem_repair_windows_path_conversion_failure_is_warn_only(tmp_path):
