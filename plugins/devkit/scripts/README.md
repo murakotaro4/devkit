@@ -39,6 +39,8 @@ update-ccx --devkit-only
 
 自動修復が失敗した場合の手動復旧:
 
+注: 下記は既定構成の例。port は env `CLAUDE_MEM_WORKER_PORT` → bootstrap(env `CLAUDE_MEM_DATA_DIR` または `~/.claude-mem`)の settings.json → `37700+(uid%100)`(Windows は `37777`)の順で解決した実値に読み替える。state ファイル(`state/hook-failures.json`)は resolveDataDir(env → `~/.claude-mem/settings.json` の `CLAUDE_MEM_DATA_DIR` → `~/.claude-mem`)配下、クールダウンマーカー(`.worker-start-attempted`)は bootstrap 配下に読み替える。
+
 1. `netstat -ano | findstr :37777` でポート占有を確認し、残留プロセスは `taskkill /PID <pid> /T /F`
 2. `~/.claude-mem/.worker-start-attempted` を削除(Windows の 120 秒スポーンクールダウン解除)
 3. `node <cache>/scripts/bun-runner.js <cache>/scripts/worker-service.cjs restart` で再起動
