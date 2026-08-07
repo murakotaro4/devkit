@@ -1086,18 +1086,32 @@ claude_mem_cache_root() {
     printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem"
 }
 
+claude_mem_bootstrap_dir() {
+    # SettingsDefaultsManager.get(CLAUDE_MEM_DATA_DIR): process.env ?? 既定 ~/.claude-mem
+    # port 用 settings.json はここから読む。state は resolveDataDir(3段)との非対称がある。
+    local raw="${CLAUDE_MEM_DATA_DIR:-$HOME/.claude-mem}"
+    if [[ "$raw" == "~" ]]; then
+        raw="$HOME"
+    elif [[ "$raw" == "~/"* ]]; then
+        raw="$HOME/${raw:2}"
+    fi
+    printf '%s\n' "${raw%/}"
+}
+
 claude_mem_data_dir() {
     # Mirror claude-mem paths.ts resolveDataDir / expandHome.
     # Tier: env CLAUDE_MEM_DATA_DIR -> $HOME/.claude-mem/settings.json -> $HOME/.claude-mem
     # node 非在時は settings 段をスキップ(env / 既定のみ)。
+    # 非対称: port は SettingsDefaultsManager(bootstrap)側、state はこの 3 段を使う。
     local raw=""
     if [[ -n "${CLAUDE_MEM_DATA_DIR:-}" ]]; then
-        raw="$CLAUDE_MEM_DATA_DIR"
-    else
-        local default_home="$HOME/.claude-mem"
-        local settings_path="$default_home/settings.json"
-        if [[ -f "$settings_path" ]] && command -v node &>/dev/null; then
-            raw="$(node -e '
+        claude_mem_bootstrap_dir
+        return 0
+    fi
+    local default_home="$HOME/.claude-mem"
+    local settings_path="$default_home/settings.json"
+    if [[ -f "$settings_path" ]] && command -v node &>/dev/null; then
+        raw="$(node -e '
 const fs = require("fs");
 try {
   const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -1107,10 +1121,10 @@ try {
   else process.exit(2);
 } catch { process.exit(2); }
 ' "$settings_path" 2>/dev/null)" || raw=""
-        fi
-        if [[ -z "$raw" ]]; then
-            raw="$default_home"
-        fi
+    fi
+    if [[ -z "$raw" ]]; then
+        claude_mem_bootstrap_dir
+        return 0
     fi
     if [[ "$raw" == "~" ]]; then
         raw="$HOME"
@@ -1214,7 +1228,8 @@ claude_mem_worker_port() {
 
     if [[ -z "$port" ]]; then
         local settings_path
-        settings_path="$(claude_mem_data_dir)/settings.json"
+        # port は bootstrap(env ?? 既定)の settings.json のみ(settings 経由 data-dir override は見ない)
+        settings_path="$(claude_mem_bootstrap_dir)/settings.json"
         if [[ -f "$settings_path" ]]; then
             port="$(node -e '
 const fs = require("fs");

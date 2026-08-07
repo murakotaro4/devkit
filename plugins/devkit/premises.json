@@ -811,11 +811,11 @@
         },
         {
           "path": "plugins/devkit/scripts/update-ccx.sh",
-          "count": 17
+          "count": 18
         },
         {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
-          "count": 68
+          "count": 74
         }
       ]
     }

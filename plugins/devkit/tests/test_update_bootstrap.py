@@ -962,7 +962,7 @@ def _shell_function(name: str, next_name: str) -> str:
 
 def _claude_mem_port_helpers() -> str:
     shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
-    start = shell.index("claude_mem_data_dir()")
+    start = shell.index("claude_mem_bootstrap_dir()")
     end = shell.index("\nclaude_mem_worker_healthy()")
     return shell[start:end]
 
@@ -1445,10 +1445,17 @@ def test_claude_mem_data_dir_from_default_settings_top_level(tmp_path):
     home.mkdir()
     custom = home / "from-settings"
     custom.mkdir()
+    (custom / "settings.json").write_text(
+        json.dumps({"CLAUDE_MEM_WORKER_PORT": 11111}), encoding="utf-8"
+    )
     default_mem = home / ".claude-mem"
     default_mem.mkdir()
     (default_mem / "settings.json").write_text(
-        json.dumps({"CLAUDE_MEM_DATA_DIR": str(custom)}), encoding="utf-8"
+        json.dumps({
+            "CLAUDE_MEM_DATA_DIR": str(custom),
+            "CLAUDE_MEM_WORKER_PORT": 37771,
+        }),
+        encoding="utf-8",
     )
     helpers = _claude_mem_port_helpers()
     env = {
@@ -1469,17 +1476,36 @@ def test_claude_mem_data_dir_from_default_settings_top_level(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert normalize_git_bash_path(result.stdout) == custom
-
+    # port は bootstrap(~/.claude-mem)の settings から読む(custom の 11111 ではない)
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "37771"
 
 def test_claude_mem_data_dir_from_default_settings_env_object(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
     custom = home / "from-env-object"
     custom.mkdir()
+    (custom / "settings.json").write_text(
+        json.dumps({"CLAUDE_MEM_WORKER_PORT": 11111}), encoding="utf-8"
+    )
     default_mem = home / ".claude-mem"
     default_mem.mkdir()
     (default_mem / "settings.json").write_text(
-        json.dumps({"env": {"CLAUDE_MEM_DATA_DIR": str(custom)}}), encoding="utf-8"
+        json.dumps({
+            "env": {
+                "CLAUDE_MEM_DATA_DIR": str(custom),
+                "CLAUDE_MEM_WORKER_PORT": 37772,
+            }
+        }),
+        encoding="utf-8",
     )
     helpers = _claude_mem_port_helpers()
     env = {
@@ -1500,7 +1526,16 @@ def test_claude_mem_data_dir_from_default_settings_env_object(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert normalize_git_bash_path(result.stdout) == custom
-
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "37772"
 
 def test_claude_mem_data_dir_env_overrides_settings(tmp_path):
     home = tmp_path / "home"
@@ -1509,10 +1544,17 @@ def test_claude_mem_data_dir_env_overrides_settings(tmp_path):
     from_settings.mkdir()
     from_env = home / "from-env"
     from_env.mkdir()
+    (from_env / "settings.json").write_text(
+        json.dumps({"CLAUDE_MEM_WORKER_PORT": 37773}), encoding="utf-8"
+    )
     default_mem = home / ".claude-mem"
     default_mem.mkdir()
     (default_mem / "settings.json").write_text(
-        json.dumps({"CLAUDE_MEM_DATA_DIR": str(from_settings)}), encoding="utf-8"
+        json.dumps({
+            "CLAUDE_MEM_DATA_DIR": str(from_settings),
+            "CLAUDE_MEM_WORKER_PORT": 11111,
+        }),
+        encoding="utf-8",
     )
     helpers = _claude_mem_port_helpers()
     env = {
@@ -1534,7 +1576,17 @@ def test_claude_mem_data_dir_env_overrides_settings(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert normalize_git_bash_path(result.stdout) == from_env
-
+    # env DATA_DIR あり → port もその bootstrap dir の settings から読む
+    result = subprocess.run(
+        [_bash_path(), "-c", helpers + "\nclaude_mem_worker_port\n"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "37773"
 
 def test_claude_mem_repair_healthy_same_version_no_restart(tmp_path):
     home = tmp_path / "home"
