@@ -35,9 +35,11 @@ update-ccx --cli-only
 update-ccx --devkit-only
 ```
 
-`section_claude_mem_repair` は `--cli-only` 以外(default / `--devkit-only`)で、`section_claude_plugin` の後に動く。対応する plugin cache root は `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem` のみで、claude-mem hook prelude の他経路(`CLAUDE_PLUGIN_ROOT` / marketplace checkout 等)は再現しない。`~/.claude-mem` 不在、または cache に有効版が無い場合は SKIP。`node` / `curl` / `bun` 不在は WARN で状態ファイルを触らず終了する。有効版は `.orphaned_at` を持たず `scripts/bun-runner.js` と `scripts/worker-service.cjs` が揃う最新版。`curl` で `http://127.0.0.1:<port>/api/health` を確認し、返却 `version` が期待版と一致するときだけ健全とする。健全でも `.worker-start-attempted` や `hook-failures.json` の失敗カウンタ残があれば再起動なしで解除する。不健全時だけクールダウン解除 → plugin 自身の `restart` → 再ヘルス成功時のみカウンタ初期化を行い、失敗は WARNING に積んで updater 全体は赤にしない。
+`section_claude_mem_repair` は `--cli-only` 以外(default / `--devkit-only`)で、`section_claude_plugin` の後に動く。対応する plugin cache root は `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem` のみで、claude-mem hook prelude の他経路(`CLAUDE_PLUGIN_ROOT` / marketplace checkout 等)は再現しない。`~/.claude-mem` 不在、または cache に有効版が無い場合は SKIP。`node` / `curl` / `bun` 不在は WARN で状態ファイルを触らず終了する。有効版は `.orphaned_at` を持たず `scripts/bun-runner.js` と `scripts/worker-service.cjs` が揃う最新版。環境変数 `CLAUDE_MEM_WORKER_PORT` / `CLAUDE_MEM_DATA_DIR` が設定されていれば settings / 既定パスより優先する。版選択は同一 major.minor.patch なら stable を prerelease より優先し、それ以外は core version が高い方を選ぶ。`curl` で `http://127.0.0.1:<port>/api/health` を確認し、返却 `version` が期待版と一致するときだけ健全とする。健全でも `.worker-start-attempted` や `hook-failures.json` の失敗カウンタ残があれば再起動なしで解除する。不健全時だけクールダウン解除 → plugin 自身の `restart` → 再ヘルス成功時のみカウンタ初期化を行い、失敗は WARNING に積んで updater 全体は赤にしない。
 
 自動修復が失敗した場合の手動復旧:
+
+注: 下記は既定構成の例。port は env `CLAUDE_MEM_WORKER_PORT` → bootstrap(env `CLAUDE_MEM_DATA_DIR` または `~/.claude-mem`)の settings.json → `37700+(uid%100)`(Windows は `37777`)の順で解決した実値に読み替える。state ファイル(`state/hook-failures.json`)は resolveDataDir(env → `~/.claude-mem/settings.json` の `CLAUDE_MEM_DATA_DIR` → `~/.claude-mem`)配下、クールダウンマーカー(`.worker-start-attempted`)は bootstrap 配下に読み替える。
 
 1. `netstat -ano | findstr :37777` でポート占有を確認し、残留プロセスは `taskkill /PID <pid> /T /F`
 2. `~/.claude-mem/.worker-start-attempted` を削除(Windows の 120 秒スポーンクールダウン解除)
