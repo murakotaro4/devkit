@@ -1542,6 +1542,75 @@ claude_mem_restart_worker() {
     node "$runner" "$service" restart </dev/null
 }
 
+claude_mem_kill_stale_processes() {
+    # 死んだ worker の子プロセス(chroma-mcp sidecar 等)が listen socket handle を
+    # 継承したまま残ると、port が「LISTENING だが接続拒否」のゾンビ状態になり
+    # restart が「port still bound」で失敗する。claude-mem に帰属すると特定できる
+    # プロセスだけ(chroma data-dir 参照、または cache 配下の worker-service.cjs。
+    # hook/restart 起動は除外)を強制終了し、1 つ以上終了できたときのみ 0 を返す。
+    local data_dir cache_root
+    data_dir="$(claude_mem_data_dir)"
+    cache_root="$(claude_mem_cache_root)"
+    local killed=""
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        command -v powershell.exe &>/dev/null || return 1
+        local win_chroma="" win_cache=""
+        if ! win_chroma="$(windows_path_from_posix "$data_dir/chroma")" || \
+           ! win_cache="$(windows_path_from_posix "$cache_root")"; then
+            return 1
+        fi
+        killed="$(DEVKIT_MEM_CHROMA_DIR="${win_chroma//\\//}" \
+            DEVKIT_MEM_CACHE_ROOT="${win_cache//\\//}" \
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command '
+                $ErrorActionPreference = "SilentlyContinue"
+                $chromaPattern = [regex]::Escape($env:DEVKIT_MEM_CHROMA_DIR)
+                $cachePattern = [regex]::Escape($env:DEVKIT_MEM_CACHE_ROOT)
+                $killed = 0
+                foreach ($proc in Get-CimInstance Win32_Process) {
+                    if (-not $proc.CommandLine) { continue }
+                    $cl = $proc.CommandLine -replace "\\", "/"
+                    $isChroma = ($chromaPattern) -and ($cl -match $chromaPattern)
+                    $isWorker = ($cachePattern) -and ($cl -match $cachePattern) -and
+                        ($cl -match "worker-service\.cjs") -and
+                        ($cl -notmatch "worker-service\.cjs[\x22\x27]?\s+(hook|restart)")
+                    if (($isChroma -or $isWorker) -and ($proc.ProcessId -ne $PID)) {
+                        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+                        if ($?) { $killed++ }
+                    }
+                }
+                Write-Output $killed
+            ' 2>/dev/null)" || return 1
+    else
+        command -v ps &>/dev/null || return 1
+        local chroma_needle="$data_dir/chroma"
+        local pid args count=0
+        local -a stale_pids=()
+        while read -r pid args; do
+            [[ "$pid" =~ ^[0-9]+$ ]] || continue
+            [[ "$pid" -eq $$ ]] && continue
+            if [[ "$args" == *"$chroma_needle"* ]]; then
+                stale_pids+=("$pid")
+                continue
+            fi
+            if [[ "$args" == *"$cache_root"* && "$args" == *"worker-service.cjs"* ]]; then
+                # hook / restart 起動は除外(Windows 側 regex と同形)。`start` は wedged worker を
+                # 殺せる必要があるため意図的に対象へ含める(新 worker は直後の再試行が立て直す)
+                if [[ "$args" =~ worker-service\.cjs[\"\']?[[:space:]]+(hook|restart) ]]; then
+                    continue
+                fi
+                stale_pids+=("$pid")
+            fi
+        done < <(ps -Ao pid=,args= 2>/dev/null)
+        for pid in "${stale_pids[@]}"; do
+            kill -9 -- "$pid" 2>/dev/null && count=$((count + 1))
+        done
+        killed="$count"
+    fi
+    killed="${killed//[$'\r\n\t ']/}"
+    [[ "$killed" =~ ^[0-9]+$ ]] || return 1
+    (( killed > 0 ))
+}
+
 section_claude_mem_repair() {
     echo ""
     echo "=== [Claude Mem Worker] ==="
@@ -1632,15 +1701,32 @@ section_claude_mem_repair() {
 
     local restart_status=0
     claude_mem_restart_worker "$install_path" >/dev/null 2>&1 || restart_status=$?
-    if [[ $restart_status -ne 0 ]]; then
-        echo "WARN"
-        WARNINGS+=("claude-mem: worker restart failed; manual recovery: see plugins/devkit/scripts/README.md")
-        return 0
+
+    local restored=false
+    if [[ $restart_status -eq 0 ]] && claude_mem_worker_healthy "$port" "$expected_version"; then
+        restored=true
     fi
 
-    if ! claude_mem_worker_healthy "$port" "$expected_version"; then
+    if [[ "$restored" != true ]]; then
+        # ゾンビ port(死んだ worker の子が socket handle を継承)や wedged sidecar が
+        # 疑われるため、claude-mem 帰属の残留プロセスを掃除して 1 回だけ再試行する。
+        if claude_mem_kill_stale_processes; then
+            sleep 1
+            restart_status=0
+            claude_mem_restart_worker "$install_path" >/dev/null 2>&1 || restart_status=$?
+            if [[ $restart_status -eq 0 ]] && claude_mem_worker_healthy "$port" "$expected_version"; then
+                restored=true
+            fi
+        fi
+    fi
+
+    if [[ "$restored" != true ]]; then
         echo "WARN"
-        WARNINGS+=("claude-mem: worker restart did not restore /api/health; manual recovery: see plugins/devkit/scripts/README.md")
+        if [[ $restart_status -ne 0 ]]; then
+            WARNINGS+=("claude-mem: worker restart failed; manual recovery: see plugins/devkit/scripts/README.md")
+        else
+            WARNINGS+=("claude-mem: worker restart did not restore /api/health; manual recovery: see plugins/devkit/scripts/README.md")
+        fi
         return 0
     fi
 
