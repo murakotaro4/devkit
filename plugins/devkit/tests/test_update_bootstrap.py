@@ -1946,3 +1946,784 @@ def test_claude_mem_repair_windows_path_conversion_failure_is_warn_only(tmp_path
         (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
     )
     assert payload["consecutiveFailures"] == 2
+
+def _cursor_agent_helpers_source() -> str:
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    # Production windows_path_to_posix only (not the functions between it and
+    # cursor_agent_install_dir, which would source libs / overwrite OS_TYPE).
+    path_start = shell.index("windows_path_to_posix()")
+    path_end = shell.index(chr(10) + "source_root_path_for_shell()")
+    early_start = shell.index("cursor_agent_install_dir()")
+    early_end = shell.index(chr(10) + "resolve_command_path()")
+    ensure_start = shell.index(chr(10) + "ensure_cursor_agent()")
+    ensure_end = shell.index(chr(10) + "section_setup()")
+    setup_start = shell.index(chr(10) + "section_setup()")
+    setup_end = shell.index(chr(10) + "update_claude()")
+    update_start = shell.index(chr(10) + "update_cursor_agent()")
+    update_end = shell.index(chr(10) + "windows_path_from_posix()")
+    return (
+        shell[path_start:path_end]
+        + shell[early_start:early_end]
+        + shell[ensure_start:ensure_end]
+        + shell[setup_start:setup_end]
+        + shell[update_start:update_end]
+    )
+
+
+def _cursor_agent_prelude(os_type: str) -> str:
+    return (
+        "set -o pipefail\n"
+        f"OS_TYPE={json.dumps(os_type)}\n"
+        "ERRORS=()\n"
+        "WARNINGS=()\n"
+        'CURSOR_AGENT_CMD=""\n'
+        "CURSOR_AGENT_SKIP_UPDATE=false\n"
+        "resolve_command_path() {\n"
+        '  echo "$1"\n'
+        "}\n"
+        "join_summary_parts() {\n"
+        "  local IFS=' / '\n"
+        '  echo "$*"\n'
+        "}\n"
+    )
+
+
+def _fake_cursor_agent_shell_source(*, version: str, update_exit: int = 0) -> str:
+    """POSIX launcher body; usable as .cmd on non-Windows hosts."""
+    return (
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then\n'
+        f'  printf "%s\\n" "{version}"\n'
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$1" = "update" ]; then\n'
+        f"  exit {update_exit}\n"
+        "fi\n"
+        "exit 0\n"
+    )
+
+
+def _write_fake_cursor_agent(path: Path, *, version: str = "2026.08.04-test", update_exit: int = 0) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == ".cmd" and os.name == "nt":
+        # Payload uses LF only; newline=CRLF performs the sole CRLF translation.
+        # Embedding CRLF in the payload would become CR+CRLF under that mode.
+        path.write_text(
+            "@echo off\n"
+            f'if "%~1"=="--version" (\n'
+            f"  echo {version}\n"
+            "  exit /b 0\n"
+            ")\n"
+            f'if "%~1"=="update" (\n'
+            f"  exit /b {update_exit}\n"
+            ")\n"
+            "exit /b 0\n",
+            encoding="utf-8",
+            newline='\r\n',
+        )
+        return
+    # Linux CI simulates OS_TYPE=windows with a .cmd path, but bash executes it
+    # directly (no cmd.exe). Keep the .cmd name for the known-launcher contract.
+    _write_exec(
+        path,
+        _fake_cursor_agent_shell_source(version=version, update_exit=update_exit),
+    )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="[platform] Windows .cmd CRLF fixture bytes")
+def test_fake_cursor_agent_cmd_bytes_are_single_crlf(tmp_path):
+    """Batch fixture must be CRLF without doubled CR from newline translation."""
+    path = tmp_path / "fake-launcher.cmd"
+    _write_fake_cursor_agent(path, version="crlf-check")
+    data = path.read_bytes()
+    assert b'\r\r\n' not in data
+    assert b'\r\n' in data
+    assert data.startswith(b'@echo off\r\n')
+    # Invoke via cmd.exe (same as Git Bash for *.cmd), not bash-as-script.
+    result = subprocess.run(
+        ["cmd.exe", "/c", str(path), "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "crlf-check" in result.stdout
+
+
+def _shell_posix_path(path: Path) -> str:
+    """Normalize a filesystem path the way Git Bash probes see it.
+
+    Prefer `bash -c 'cd ... && pwd'` over bare `cygpath -u`: MSYS remaps Windows
+    Temp to `/tmp/...` inside the probe, while `Path.as_posix()` stays `C:/Users/...`
+    when cygpath is missing from PATH.
+    """
+    converted = subprocess.run(
+        [_bash_path(), "-c", 'cd "$1" && pwd', "_", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if converted.returncode == 0 and converted.stdout.strip():
+        return converted.stdout.strip().rstrip("/")
+    located_cygpath = shutil.which("cygpath")
+    if located_cygpath:
+        via_cygpath = subprocess.run(
+            [located_cygpath, "-u", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if via_cygpath.returncode == 0 and via_cygpath.stdout.strip():
+            return via_cygpath.stdout.strip().rstrip("/")
+    return path.as_posix().rstrip("/")
+
+
+def _run_cursor_agent_probe(
+    tmp_path: Path,
+    *,
+    home: Path,
+    os_type: str,
+    body: str,
+    extra_env: dict[str, str] | None = None,
+    path_prefix: list[Path] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    probe = _cursor_agent_prelude(os_type) + _cursor_agent_helpers_source() + "\n" + body
+    probe_path = tmp_path / "cursor-agent-probe.sh"
+    probe_path.write_text(probe, encoding="utf-8", newline="\n")
+
+    path_entries: list[str] = []
+    for tool in ("bash", "curl", "head", "tr", "uname", "cygpath"):
+        located = shutil.which(tool)
+        if located:
+            path_entries.append(str(Path(located).resolve().parent))
+    if path_prefix:
+        path_entries = [str(p) for p in path_prefix] + path_entries
+    seen: set[str] = set()
+    filtered: list[str] = []
+    for entry in path_entries:
+        if entry and entry not in seen:
+            seen.add(entry)
+            filtered.append(entry)
+
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": os.pathsep.join(filtered),
+    }
+    env.pop("LOCALAPPDATA", None)
+    if extra_env:
+        env.update(extra_env)
+
+    return subprocess.run(
+        [_bash_path(), str(probe_path.as_posix())],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        cwd=str(tmp_path),
+    )
+
+
+def test_cursor_agent_wiring_in_setup_update_and_flags():
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    assert "ensure_cursor_agent()" in shell
+    assert "update_cursor_agent()" in shell
+    assert "=== Claude Code, Codex CLI, Cursor Agent & DevKit ===" in shell
+    assert "Cursor Agent:" in shell
+    assert "https://cursor.com/install" in shell
+    assert "https://cursor.com/install?win32=true" in shell
+    assert "cursor-agent update failed" in shell
+
+    setup = shell.split("section_setup()", 1)[1].split("update_claude()", 1)[0]
+    assert "ensure_cursor_agent" in setup
+    update = shell.split("section_update()", 1)[1].split("windows_path_from_posix()", 1)[0]
+    assert "update_cursor_agent" in update
+    assert "cursor-agent: $(get_cursor_agent_version)" in update
+
+    # raw version helper must not extract semver
+    version_fn = shell.split("get_cursor_agent_version()", 1)[1].split(
+        "resolve_command_path()", 1
+    )[0]
+    assert "grep -oE" not in version_fn
+
+    usage = shell.split("show_usage()", 1)[1].split("parse_args()", 1)[0]
+    assert "Claude/Codex/Cursor Agent CLIs only" in usage
+
+    main = shell.split("main()", 1)[1]
+    assert 'if [[ "$DEVKIT_ONLY" != true ]]; then' in main
+    assert "section_setup" in main
+    assert "section_update" in main
+    # Cursor Agent is CLI-path only: setup/update live under DEVKIT_ONLY guard
+    cli_path = main.split('if [[ "$DEVKIT_ONLY" != true ]]; then', 1)[1].split(
+        "fi\n", 1
+    )[0]
+    assert "section_setup" in cli_path
+    assert "section_update" in cli_path
+
+
+def test_cursor_agent_posix_resolves_outside_path(tmp_path):
+    home = tmp_path / "home"
+    local_bin = home / ".local" / "bin"
+    _write_fake_cursor_agent(local_bin / "cursor-agent", version="2026.08.04-out-of-path")
+    # PATH intentionally excludes local_bin; resolver must prepend it.
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "resolve_cursor_agent_command\n"
+            'printf "cmd:%s\\n" "$CURSOR_AGENT_CMD"\n'
+            'printf "ver:%s\\n" "$(get_cursor_agent_version)"\n'
+            "ensure_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "cmd:" in result.stdout and "cursor-agent" in result.stdout
+    assert "ver:2026.08.04-out-of-path" in result.stdout
+    assert "already installed" in result.stdout
+    assert "errors:0" in result.stdout
+
+
+def test_cursor_agent_windows_resolves_cmd_without_installer(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    local_app = tmp_path / "LocalAppData"
+    install_dir = local_app / "cursor-agent"
+    _write_fake_cursor_agent(install_dir / "cursor-agent.cmd", version="2026.08.04-win-cmd")
+    install_log = tmp_path / "install.log"
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="windows",
+        extra_env={"LOCALAPPDATA": str(local_app)},
+        body=(
+            f'INSTALL_LOG="{install_log.as_posix()}"\n'
+            "powershell.exe() {\n"
+            '  echo "powershell-called" >> "$INSTALL_LOG"\n'
+            "  return 1\n"
+            "}\n"
+            "ensure_cursor_agent\n"
+            'printf "cmd:%s\\n" "$CURSOR_AGENT_CMD"\n'
+            'printf "ver:%s\\n" "$(get_cursor_agent_version)"\n'
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "already installed" in result.stdout
+    assert "ver:2026.08.04-win-cmd" in result.stdout
+    assert "errors:0" in result.stdout
+    assert not install_log.exists()
+
+
+def test_cursor_agent_missing_runs_installer_and_resolves_posix(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    install_log = tmp_path / "install.log"
+    launcher = home / ".local" / "bin" / "cursor-agent"
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            f'INSTALL_LOG="{install_log.as_posix()}"\n'
+            f'LAUNCHER="{launcher.as_posix()}"\n'
+            "curl() {\n"
+            '  echo "$*" >> "$INSTALL_LOG"\n'
+            '  mkdir -p "$(dirname "$LAUNCHER")"\n'
+            "  cat > \"$LAUNCHER\" <<'EOF'\n"
+            "#!/bin/sh\n"
+            'if [ "$1" = "--version" ]; then echo 2026.08.04-installed; exit 0; fi\n'
+            "exit 0\n"
+            "EOF\n"
+            '  chmod +x "$LAUNCHER"\n'
+            "}\n"
+            "ensure_cursor_agent\n"
+            'printf "ver:%s\\n" "$(get_cursor_agent_version)"\n'
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+            'printf "exists:%s\\n" "$([[ -x "$LAUNCHER" ]] && echo yes || echo no)"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert install_log.exists()
+    assert "https://cursor.com/install" in install_log.read_text(encoding="utf-8")
+    assert "ver:2026.08.04-installed" in result.stdout
+    assert "errors:0" in result.stdout
+    assert "exists:yes" in result.stdout
+
+
+def test_cursor_agent_windows_missing_runs_installer(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    local_app = tmp_path / "LocalAppData"
+    local_app.mkdir()
+    install_log = tmp_path / "install.log"
+    if os.name == "nt":
+        # Reuse the CRLF-correct writer; powershell stub only installs the file.
+        golden = tmp_path / "golden-launcher.cmd"
+        _write_fake_cursor_agent(golden, version="2026.08.04-win-installed")
+        create_launcher = (
+            f'  GOLDEN="{golden.as_posix()}"\n'
+            '  install_dir="$(cursor_agent_install_dir)"\n'
+            '  mkdir -p "$install_dir"\n'
+            '  cp "$GOLDEN" "$install_dir/cursor-agent.cmd"\n'
+        )
+    else:
+        # Linux CI: bash executes the .cmd path directly; emit a shebang script.
+        create_launcher = (
+            '  install_dir="$(cursor_agent_install_dir)"\n'
+            '  mkdir -p "$install_dir"\n'
+            "  cat > \"$install_dir/cursor-agent.cmd\" <<'EOF'\n"
+            "#!/bin/sh\n"
+            'if [ "$1" = "--version" ]; then echo 2026.08.04-win-installed; exit 0; fi\n'
+            "exit 0\n"
+            "EOF\n"
+            '  chmod +x "$install_dir/cursor-agent.cmd"\n'
+        )
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="windows",
+        extra_env={"LOCALAPPDATA": str(local_app)},
+        body=(
+            f'INSTALL_LOG="{install_log.as_posix()}"\n'
+            "powershell.exe() {\n"
+            '  echo "$*" >> "$INSTALL_LOG"\n'
+            + create_launcher
+            + "  return 0\n"
+            + "}\n"
+            + "ensure_cursor_agent\n"
+            + 'printf "ver:%s\\n" "$(get_cursor_agent_version)"\n'
+            + 'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    log = install_log.read_text(encoding="utf-8")
+    assert "https://cursor.com/install?win32=true" in log
+    assert "ver:2026.08.04-win-installed" in result.stdout
+    assert "errors:0" in result.stdout
+
+
+
+def test_cursor_agent_installer_failure_is_error(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "curl() { return 22; }\n"
+            "ensure_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+            'printf "error0:%s\\n" "${ERRORS[0]-}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "errors:1" in result.stdout
+    assert "native install failed" in result.stdout
+
+
+def test_cursor_agent_update_failure_is_error(tmp_path):
+    home = tmp_path / "home"
+    _write_fake_cursor_agent(
+        home / ".local" / "bin" / "cursor-agent",
+        version="2026.08.04-upd",
+        update_exit=7,
+    )
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "resolve_cursor_agent_command >/dev/null\n"
+            "update_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+            'printf "error0:%s\\n" "${ERRORS[0]-}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "errors:1" in result.stdout
+    assert "exit code 7" in result.stdout
+
+
+def test_cursor_agent_install_without_launcher_is_error(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "curl() { :; }\n"  # pretend install succeeded but create nothing
+            "ensure_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+            'printf "error0:%s\\n" "${ERRORS[0]-}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "errors:1" in result.stdout
+    assert "launcher was not found" in result.stdout
+
+
+def test_cursor_agent_broken_launcher_is_error_without_reinstall(tmp_path):
+    home = tmp_path / "home"
+    broken = home / ".local" / "bin" / "cursor-agent"
+    broken.parent.mkdir(parents=True)
+    _write_exec(
+        broken,
+        "#!/bin/sh\n"
+        "exit 1\n",
+    )
+    install_log = tmp_path / "install.log"
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            f'INSTALL_LOG="{install_log.as_posix()}"\n'
+            "curl() { echo called >> \"$INSTALL_LOG\"; return 0; }\n"
+            "ensure_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+            'printf "error0:%s\\n" "${ERRORS[0]-}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "errors:1" in result.stdout
+    assert "broken installation" in result.stdout
+    assert not install_log.exists()
+
+
+def test_cursor_agent_raw_version_in_before_after(tmp_path):
+    home = tmp_path / "home"
+    _write_fake_cursor_agent(
+        home / ".local" / "bin" / "cursor-agent",
+        version="2026.08.04-raw-build",
+    )
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "detect_claude_install() { echo skip; }\n"
+            "detect_codex_install() { echo skip; }\n"
+            "get_claude_version() { echo unknown; }\n"
+            "get_codex_version() { echo unknown; }\n"
+            "update_claude() { :; }\n"
+            "update_codex() { :; }\n"
+            # Re-open section_update from the real script via helpers already loaded;
+            # call the version lines directly for Before/After contract.
+            "resolve_cursor_agent_command >/dev/null\n"
+            'before="cursor-agent: $(get_cursor_agent_version)"\n'
+            'after="cursor-agent: $(get_cursor_agent_version)"\n'
+            'printf "before:%s\\n" "$before"\n'
+            'printf "after:%s\\n" "$after"\n'
+            "update_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "before:cursor-agent: 2026.08.04-raw-build" in result.stdout
+    assert "after:cursor-agent: 2026.08.04-raw-build" in result.stdout
+    assert "errors:0" in result.stdout
+    # Must keep raw build id, not strip to x.y.z only
+    assert "2026.08.04-raw-build" in result.stdout
+
+
+def test_cursor_agent_version_flag_includes_raw_line(tmp_path):
+    home = tmp_path / "home"
+    _write_fake_cursor_agent(
+        home / ".local" / "bin" / "cursor-agent",
+        version="2026.08.04-version-flag",
+    )
+    # Minimal show_versions using helpers
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "get_claude_version() { echo 1.0.0; }\n"
+            "get_codex_version() { echo 2.0.0; }\n"
+            "show_versions() {\n"
+            '  echo "Environment: $OS_TYPE"\n'
+            '  echo "Claude Code: $(get_claude_version)"\n'
+            '  echo "Codex CLI:   $(get_codex_version)"\n'
+            '  echo "Cursor Agent: $(get_cursor_agent_version)"\n'
+            "}\n"
+            "show_versions\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Cursor Agent: 2026.08.04-version-flag" in result.stdout
+
+
+
+def test_cursor_agent_path_prepend_is_idempotent(tmp_path):
+    home = tmp_path / "home"
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    body = (
+        # Same bash process that prepends PATH; captures MSYS /tmp remap of HOME.
+        'printf "ref:%s\n" "$HOME/.local/bin"\n'
+        'export PATH=""\n'
+        'prepend_cursor_agent_path\n'
+        'echo "after1:$PATH"\n'
+        'prepend_cursor_agent_path\n'
+        'prepend_cursor_agent_path\n'
+        'echo "after3:$PATH"\n'
+        'export PATH="/other:$HOME/.local/bin/extra:$HOME/.local/bin"\n'
+        'prepend_cursor_agent_path\n'
+        'echo "already:$PATH"\n'
+        'export PATH="/other:$HOME/.local/bin-extra"\n'
+        'prepend_cursor_agent_path\n'
+        'echo "sibling:$PATH"\n'
+    )
+    result = _run_cursor_agent_probe(
+        tmp_path, home=home, os_type="linux", body=body
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    lines = {
+        line.split(":", 1)[0]: line.split(":", 1)[1]
+        for line in result.stdout.splitlines()
+        if ":" in line
+        and line.split(":", 1)[0] in {"ref", "after1", "after3", "already", "sibling"}
+    }
+    expected = lines["ref"]
+    assert expected == _shell_posix_path(local_bin)
+    assert lines["after1"] == expected
+    assert lines["after3"] == expected
+    assert lines["already"].endswith(expected)
+    assert lines["already"].split(":").count(expected) == 1
+    assert lines["sibling"].startswith(expected + ":")
+    assert lines["sibling"].endswith("/.local/bin-extra")
+
+
+
+def test_cursor_agent_broken_launcher_default_flow_single_error(tmp_path):
+    home = tmp_path / "home"
+    broken = home / ".local" / "bin" / "cursor-agent"
+    broken.parent.mkdir(parents=True)
+    _write_exec(broken, "#!/bin/sh" + chr(10) + "exit 1" + chr(10))
+    update_log = tmp_path / "update.log"
+    body = (
+        'UPDATE_LOG="__LOG__"\n'
+        'detect_claude_install() { echo skip; }\n'
+        'detect_codex_install() { echo skip; }\n'
+        'get_claude_version() { echo unknown; }\n'
+        'get_codex_version() { echo unknown; }\n'
+        'update_claude() { :; }\n'
+        'update_codex() { :; }\n'
+        'update_cursor_agent() {\n'
+        '  echo called >> "$UPDATE_LOG"\n'
+        '  ERRORS+=("Cursor Agent: cursor-agent update failed (exit code 99)")\n'
+        '}\n'
+        'ensure_fnm() { :; }\n'
+        'ensure_nodejs() { :; }\n'
+        'ensure_claude() { :; }\n'
+        'ensure_codex() { :; }\n'
+        'section_setup\n'
+        'section_update\n'
+        'echo "errors:${#ERRORS[@]}"\n'
+        'echo "warnings:${#WARNINGS[@]}"\n'
+        'echo "skip:$CURSOR_AGENT_SKIP_UPDATE"\n'
+        'if ((${#ERRORS[@]} > 0)); then echo "error0:${ERRORS[0]}"; fi\n'
+    ).replace("__LOG__", update_log.as_posix())
+    result = _run_cursor_agent_probe(
+        tmp_path, home=home, os_type="linux", body=body
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "errors:1" in result.stdout
+    assert "warnings:0" in result.stdout
+    assert "skip:true" in result.stdout
+    assert "broken installation" in result.stdout
+    assert "cursor-agent update failed" not in result.stdout
+    assert not update_log.exists()
+
+
+def test_cursor_agent_installer_failure_default_flow_no_double_warn(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    update_log = tmp_path / "update.log"
+    body = (
+        'UPDATE_LOG="__LOG__"\n'
+        'curl() { return 22; }\n'
+        'detect_claude_install() { echo skip; }\n'
+        'detect_codex_install() { echo skip; }\n'
+        'get_claude_version() { echo unknown; }\n'
+        'get_codex_version() { echo unknown; }\n'
+        'update_claude() { :; }\n'
+        'update_codex() { :; }\n'
+        'update_cursor_agent() { echo called >> "$UPDATE_LOG"; }\n'
+        'ensure_fnm() { :; }\n'
+        'ensure_nodejs() { :; }\n'
+        'ensure_claude() { :; }\n'
+        'ensure_codex() { :; }\n'
+        'section_setup\n'
+        'section_update\n'
+        'echo "errors:${#ERRORS[@]}"\n'
+        'echo "warnings:${#WARNINGS[@]}"\n'
+        'echo "skip:$CURSOR_AGENT_SKIP_UPDATE"\n'
+        'if ((${#ERRORS[@]} > 0)); then echo "error0:${ERRORS[0]}"; fi\n'
+    ).replace("__LOG__", update_log.as_posix())
+    result = _run_cursor_agent_probe(
+        tmp_path, home=home, os_type="linux", body=body
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "errors:1" in result.stdout
+    assert "warnings:0" in result.stdout
+    assert "skip:true" in result.stdout
+    assert "error0:Cursor Agent: native install failed" in result.stdout
+    assert "not installed, skipping update" not in result.stdout
+    assert not update_log.exists()
+
+
+def _cursor_agent_main_harness_source() -> str:
+    shell = (SCRIPTS / "update-ccx.sh").read_text(encoding="utf-8")
+    show_start = shell.index("show_versions()")
+    parse_end = shell.index(chr(10) + "join_summary_parts()")
+    main_start = shell.index(chr(10) + "main()")
+    main_end = shell.index(chr(10) + 'main "$@"; exit $?')
+    setup_start = shell.index(chr(10) + "section_setup()")
+    setup_end = shell.index(chr(10) + "update_claude()")
+    update_start = shell.index(chr(10) + "update_cursor_agent()")
+    update_end = shell.index(chr(10) + "windows_path_from_posix()")
+    return (
+        shell[show_start:parse_end]
+        + shell[setup_start:setup_end]
+        + shell[update_start:update_end]
+        + shell[main_start:main_end]
+    )
+
+
+def _run_cursor_agent_main_flags(
+    tmp_path: Path,
+    *,
+    args: list[str],
+    home: Path,
+) -> subprocess.CompletedProcess[str]:
+    call_log = tmp_path / ("calls-" + ("-".join(args) if args else "default") + ".log")
+    args_lit = " ".join(json.dumps(a) for a in args)
+    stub_lines = [
+        'CALL_LOG="__LOG__"',
+        'log_call() { echo "$1" >> "$CALL_LOG"; }',
+        'section_managed_copy() { log_call managed; }',
+        'section_prerequisites() { log_call prereq; }',
+        'section_prune_legacy_assets() { log_call prune_legacy; }',
+        'section_prune_cursor_sync() { log_call prune_cursor; }',
+        'section_codex_plugin() { log_call codex_plugin; }',
+        'section_claude_plugin() { log_call claude_plugin; }',
+        'section_claude_mem_repair() { log_call claude_mem; }',
+        'resolve_devkit_python() { return 1; }',
+        'ensure_fnm() { :; }',
+        'ensure_nodejs() { :; }',
+        'ensure_claude() { log_call ensure_claude; }',
+        'ensure_codex() { log_call ensure_codex; }',
+        'ensure_cursor_agent() {',
+        '  log_call ensure_cursor_agent',
+        '  CURSOR_AGENT_SKIP_UPDATE=false',
+        '  CURSOR_AGENT_CMD="/fake/cursor-agent"',
+        '  return 0',
+        '}',
+        'detect_claude_install() { echo skip; }',
+        'detect_codex_install() { echo skip; }',
+        'get_claude_version() { echo c-ver; }',
+        'get_codex_version() { echo x-ver; }',
+        'get_cursor_agent_version() { echo ca-ver; }',
+        'update_claude() { :; }',
+        'update_codex() { :; }',
+        'update_cursor_agent() { log_call update_cursor_agent; }',
+        'resolve_cursor_agent_command() {',
+        '  [[ -n "$CURSOR_AGENT_CMD" ]] || return 1',
+        '  return 0',
+        '}',
+    ]
+    stubs = (chr(10).join(stub_lines) + chr(10)).replace("__LOG__", call_log.as_posix())
+    probe = (
+        "set -o pipefail" + chr(10)
+        + 'OS_TYPE="linux"' + chr(10)
+        + "ERRORS=()" + chr(10)
+        + "WARNINGS=()" + chr(10)
+        + "CLI_ONLY=false" + chr(10)
+        + "DEVKIT_ONLY=false" + chr(10)
+        + 'RUN_MODE="run"' + chr(10)
+        + 'DEVKIT_PYTHON_KIND=""' + chr(10)
+        + 'CURSOR_AGENT_CMD=""' + chr(10)
+        + "CURSOR_AGENT_SKIP_UPDATE=false" + chr(10)
+        + "join_summary_parts() {" + chr(10)
+        + "  local IFS=' / '" + chr(10)
+        + '  echo "$*"' + chr(10)
+        + "}" + chr(10)
+        # Real section_*/main first; stubs override update_cursor_agent afterward.
+        + _cursor_agent_main_harness_source()
+        + stubs
+        + chr(10)
+        + f"main {args_lit}" + chr(10)
+        + 'echo "exit:$?"' + chr(10)
+    )
+    probe_path = tmp_path / (
+        "main-flags-" + ("-".join(args) if args else "default") + ".sh"
+    )
+    probe_path.write_text(probe, encoding="utf-8", newline=chr(10))
+    path_entries: list[str] = []
+    for tool in ("bash", "head", "tr", "uname"):
+        located = shutil.which(tool)
+        if located:
+            path_entries.append(str(Path(located).resolve().parent))
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PATH": os.pathsep.join(dict.fromkeys(path_entries)),
+    }
+    result = subprocess.run(
+        [_bash_path(), str(probe_path.as_posix())],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        cwd=str(tmp_path),
+    )
+    setattr(result, "call_log", call_log)
+    return result
+
+
+def test_cursor_agent_main_flag_boundaries_runtime(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+
+    default = _run_cursor_agent_main_flags(tmp_path, args=[], home=home)
+    assert default.returncode == 0, default.stderr + default.stdout
+    default_calls = default.call_log.read_text(encoding="utf-8").splitlines()
+    assert "ensure_cursor_agent" in default_calls
+    assert default_calls.count("update_cursor_agent") == 1
+    assert "managed" in default_calls
+
+    cli_only = _run_cursor_agent_main_flags(tmp_path, args=["--cli-only"], home=home)
+    assert cli_only.returncode == 0, cli_only.stderr + cli_only.stdout
+    cli_calls = cli_only.call_log.read_text(encoding="utf-8").splitlines()
+    assert "ensure_cursor_agent" in cli_calls
+    assert cli_calls.count("update_cursor_agent") == 1
+    assert "managed" not in cli_calls
+    assert "codex_plugin" not in cli_calls
+
+    devkit_only = _run_cursor_agent_main_flags(
+        tmp_path, args=["--devkit-only"], home=home
+    )
+    assert devkit_only.returncode == 0, devkit_only.stderr + devkit_only.stdout
+    devkit_calls = devkit_only.call_log.read_text(encoding="utf-8").splitlines()
+    assert "ensure_cursor_agent" not in devkit_calls
+    assert "update_cursor_agent" not in devkit_calls
+    assert "managed" in devkit_calls
+
+    version = _run_cursor_agent_main_flags(tmp_path, args=["--version"], home=home)
+    assert version.returncode == 0, version.stderr + version.stdout
+    assert "Cursor Agent: ca-ver" in version.stdout
+    assert "Claude Code: c-ver" in version.stdout
+    assert (not version.call_log.exists()) or (
+        version.call_log.read_text(encoding="utf-8") == ""
+    )
+    assert "=== [" not in version.stdout

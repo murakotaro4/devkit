@@ -71,7 +71,7 @@ repo rules は `version` / 同期時刻 / template SHA-256 を記録する。tho
 | POSIX | `update-ccx.sh` / `devkit-lib.sh` を `~/.codex/bin/`、`update-ccx` shim を `~/.local/bin/` へ同期し、shell script に実行権を付ける |
 | Windows | bash 正本チェーン、`update-ccx.cmd` launcher、`devkit-lib.ps1` / `devkit-setup.ps1` / `devkit-codex-config.ps1`、shim を同期。launcher は `HOME`、次に `USERPROFILE` を使い、保存する source root は Windows 絶対 path。bash は旧 POSIX 形式も読む |
 
-Windows updater の PowerShell 責務は Claude Code native installer、Codex config templating、v6 migration marker 前の旧日次 task cleanup に限る。
+Windows updater の PowerShell 責務は Claude Code native installer、Cursor Agent native installer（`https://cursor.com/install?win32=true`）、Codex config templating、v6 migration marker 前の旧日次 task cleanup に限る。Cursor Agent の導入・更新は `update-ccx`（default / `--cli-only`）が行い、Cursor IDE 本体の更新・認証・壊れた launcher の再 install は非対象。
 
 ### compaction env の不変条件
 
