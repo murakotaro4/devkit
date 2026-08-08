@@ -2006,19 +2006,20 @@ def _fake_cursor_agent_shell_source(*, version: str, update_exit: int = 0) -> st
 def _write_fake_cursor_agent(path: Path, *, version: str = "2026.08.04-test", update_exit: int = 0) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".cmd" and os.name == "nt":
-        # Git Bash executes *.cmd via cmd.exe; use a real batch file on Windows hosts.
+        # Payload uses LF only; newline=CRLF performs the sole CRLF translation.
+        # Embedding CRLF in the payload would become CR+CRLF under that mode.
         path.write_text(
-            "@echo off\r\n"
-            f'if "%~1"=="--version" (\r\n'
-            f"  echo {version}\r\n"
-            "  exit /b 0\r\n"
-            ")\r\n"
-            f'if "%~1"=="update" (\r\n'
-            f"  exit /b {update_exit}\r\n"
-            ")\r\n"
-            "exit /b 0\r\n",
+            "@echo off\n"
+            f'if "%~1"=="--version" (\n'
+            f"  echo {version}\n"
+            "  exit /b 0\n"
+            ")\n"
+            f'if "%~1"=="update" (\n'
+            f"  exit /b {update_exit}\n"
+            ")\n"
+            "exit /b 0\n",
             encoding="utf-8",
-            newline="\r\n",
+            newline='\r\n',
         )
         return
     # Linux CI simulates OS_TYPE=windows with a .cmd path, but bash executes it
@@ -2028,6 +2029,26 @@ def _write_fake_cursor_agent(path: Path, *, version: str = "2026.08.04-test", up
         _fake_cursor_agent_shell_source(version=version, update_exit=update_exit),
     )
 
+
+@pytest.mark.skipif(os.name != "nt", reason="[platform] Windows .cmd CRLF fixture bytes")
+def test_fake_cursor_agent_cmd_bytes_are_single_crlf(tmp_path):
+    """Batch fixture must be CRLF without doubled CR from newline translation."""
+    path = tmp_path / "fake-launcher.cmd"
+    _write_fake_cursor_agent(path, version="crlf-check")
+    data = path.read_bytes()
+    assert b'\r\r\n' not in data
+    assert b'\r\n' in data
+    assert data.startswith(b'@echo off\r\n')
+    # Invoke via cmd.exe (same as Git Bash for *.cmd), not bash-as-script.
+    result = subprocess.run(
+        ["cmd.exe", "/c", str(path), "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "crlf-check" in result.stdout
 
 
 def _shell_posix_path(path: Path) -> str:
@@ -2242,18 +2263,14 @@ def test_cursor_agent_windows_missing_runs_installer(tmp_path):
     local_app.mkdir()
     install_log = tmp_path / "install.log"
     if os.name == "nt":
-        # Real .cmd batch for Git Bash -> cmd.exe on Windows hosts.
+        # Reuse the CRLF-correct writer; powershell stub only installs the file.
+        golden = tmp_path / "golden-launcher.cmd"
+        _write_fake_cursor_agent(golden, version="2026.08.04-win-installed")
         create_launcher = (
+            f'  GOLDEN="{golden.as_posix()}"\n'
             '  install_dir="$(cursor_agent_install_dir)"\n'
             '  mkdir -p "$install_dir"\n'
-            "  cat > \"$install_dir/cursor-agent.cmd\" <<'EOF'\n"
-            "@echo off\r\n"
-            'if "%~1"=="--version" (\r\n'
-            "  echo 2026.08.04-win-installed\r\n"
-            "  exit /b 0\r\n"
-            ")\r\n"
-            "exit /b 0\r\n"
-            "EOF\n"
+            '  cp "$GOLDEN" "$install_dir/cursor-agent.cmd"\n'
         )
     else:
         # Linux CI: bash executes the .cmd path directly; emit a shebang script.
@@ -2280,8 +2297,8 @@ def test_cursor_agent_windows_missing_runs_installer(tmp_path):
             + "  return 0\n"
             + "}\n"
             + "ensure_cursor_agent\n"
-            + 'printf "ver:%s\n" "$(get_cursor_agent_version)"\n'
-            + 'printf "errors:%s\n" "${#ERRORS[@]}"\n'
+            + 'printf "ver:%s\\n" "$(get_cursor_agent_version)"\n'
+            + 'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
         ),
     )
     assert result.returncode == 0, result.stderr + result.stdout
