@@ -14,7 +14,7 @@ DevKit の setup / update / verification scripts を置くディレクトリで�
 
 主な責務:
 
-- Claude Code / Codex CLI の install / update
+- Claude Code / Codex CLI / Cursor Agent の install / update
 - managed script の配置更新
 - v10.1.0 の manifest が存在する場合の旧 Cursor 同期資産の安全 prune
 - Codex marketplace `murakotaro4/devkit` の登録確認
@@ -35,6 +35,7 @@ update-ccx --cli-only
 update-ccx --devkit-only
 ```
 
+Cursor Agent は default / `--cli-only` で install（未導入時）と `cursor-agent update`（導入済み）を行い、`--devkit-only` では扱いません。POSIX / WSL は `https://cursor.com/install`、Windows は `https://cursor.com/install?win32=true` の native installer を使い、解決は `$HOME/.local/bin`（POSIX）または `%LOCALAPPDATA%\cursor-agent`（Windows、`cursor-agent.cmd`）を PATH 先頭へ足してから行います。Cursor IDE 本体の更新、認証、壊れた launcher の再 install は非対象です。
 `section_claude_mem_repair` は `--cli-only` 以外(default / `--devkit-only`)で、`section_claude_plugin` の後に動く。対応する plugin cache root は `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem` のみで、claude-mem hook prelude の他経路(`CLAUDE_PLUGIN_ROOT` / marketplace checkout 等)は再現しない。`~/.claude-mem` 不在、または cache に有効版が無い場合は SKIP。`node` / `curl` / `bun` 不在は WARN で状態ファイルを触らず終了する。有効版は `.orphaned_at` を持たず `scripts/bun-runner.js` と `scripts/worker-service.cjs` が揃う最新版。環境変数 `CLAUDE_MEM_WORKER_PORT` / `CLAUDE_MEM_DATA_DIR` が設定されていれば settings / 既定パスより優先する。版選択は同一 major.minor.patch なら stable を prerelease より優先し、それ以外は core version が高い方を選ぶ。`curl` で `http://127.0.0.1:<port>/api/health` を確認し、返却 `version` が期待版と一致するときだけ健全とする。健全でも `.worker-start-attempted` や `hook-failures.json` の失敗カウンタ残があれば再起動なしで解除する。不健全時だけクールダウン解除 → plugin 自身の `restart` → 再ヘルス成功時のみカウンタ初期化を行い、失敗は WARNING に積んで updater 全体は赤にしない。
 
 自動修復が失敗した場合の手動復旧:
@@ -59,7 +60,7 @@ Windows でも updater のロジックは `update-ccx.sh` だけに置きます�
 
 Windows でも呼び出し側が設定した `HOME` を尊重し、managed files は `$HOME` 配下へ配置します。生成する cmd shim と Codex config templating はコピー先の実パスを参照し、ランチャーの source-root fallback は `HOME`、次に `USERPROFILE` の順で探します。`source-root.txt` は Windows launcher が直接扱える Windows 絶対パスで保存し、bash 側は旧 POSIX 形式と Windows 形式の両方を読めます。また、非対話 shell では fnm の shell 環境を明示初期化し、失敗時は警告して継続します。
 
-PowerShell を残す責務は、`update-ccx.sh` からの Claude Code native installer 呼び出し、`devkit-codex-config.ps1` による Windows Codex config templating、v6 migration marker を書く前の `Remove-DevKitLegacyScheduledTask` による旧日次タスク削除の 3 点です。旧 PowerShell updater 固有の npm repair、`.npmrc` legacy Codex prefix migration、レジストリからの PATH 再読込は廃止します。install 直後にコマンドが PATH へ現れない場合は警告し、ターミナル再起動を案内します。Cursor legacy manifest の prune と Claude plugin JSON 状態判定は共通の `resolve_devkit_python` を使い、`python3`、`python`、`py -3` の順に実際に `-c` 実行して Python 3.10 以上を確認します(`command -v` だけの判定は Windows の Microsoft Store App Execution Alias stub を誤検出するため使いません)。
+PowerShell を残す責務は、`update-ccx.sh` からの Claude Code native installer 呼び出し、`update-ccx.sh` からの Cursor Agent native installer（`https://cursor.com/install?win32=true`）呼び出し、`devkit-codex-config.ps1` による Windows Codex config templating、v6 migration marker を書く前の `Remove-DevKitLegacyScheduledTask` による旧日次タスク削除の 4 点です。旧 PowerShell updater 固有の npm repair、`.npmrc` legacy Codex prefix migration、レジストリからの PATH 再読込は廃止します。install 直後にコマンドが PATH へ現れない場合は警告し、ターミナル再起動を案内します。Cursor legacy manifest の prune と Claude plugin JSON 状態判定は共通の `resolve_devkit_python` を使い、`python3`、`python`、`py -3` の順に実際に `-c` 実行して Python 3.10 以上を確認します(`command -v` だけの判定は Windows の Microsoft Store App Execution Alias stub を誤検出するため使いません)。
 
 Windows での継続更新には Git for Windows が必須です。ランチャーは標準の 2 箇所、次に `where git` から導出した `Git\bin\bash.exe` の順で探索します。
 

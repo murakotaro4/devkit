@@ -101,7 +101,7 @@ update-ccx --version
 
 `update-ccx` が行うこと:
 
-- Claude Code / Codex CLI の install / update
+- Claude Code / Codex CLI / Cursor Agent の install / update
 - DevKit 管理 script の配置更新
 - v10.1.0 の manifest が存在する場合の旧 Cursor skills / templates / scripts / statusline 安全 prune
 - Codex marketplace `murakotaro4/devkit` の登録確認
@@ -112,7 +112,7 @@ update-ccx --version
 - claude-mem worker の健全性確認と自動修復（不健全・版不一致時のみ。失敗は WARNING）
 - v6 移行 marker が無い場合の旧資産 prune
 
-`--cli-only` は CLI 更新のみ、`--devkit-only` は DevKit 管理ファイルと Claude/Codex plugin 登録のみを処理します。
+`--cli-only` は Claude Code / Codex CLI / Cursor Agent の更新のみ、`--devkit-only` は DevKit 管理ファイルと Claude/Codex plugin 登録のみを処理します。Cursor Agent は default / `--cli-only` の対象で、`--devkit-only` では扱いません。Cursor IDE 本体の更新、認証、壊れた launcher の再 install は非対象です（壊れた導入は ERROR として報告し、再 install しません）。
 
 ## Windows
 
@@ -134,13 +134,14 @@ Windows の updater 実装は PowerShell から bash 正本へ完全移行しま
 
 Windows でも明示された `HOME` を尊重し、managed files は `$HOME` 配下へ配置します。生成する cmd shim と Codex config templating はコピー先の実パスを参照し、ランチャーの source-root fallback は `HOME`、次に `USERPROFILE` の順で探します。`source-root.txt` は Windows launcher が直接扱える Windows 絶対パスで保存し、bash 側は旧 POSIX 形式と Windows 形式の両方を読めます。非対話 Git Bash では fnm の shell 環境も updater が初期化し、初期化できない場合は警告して後続処理を継続します。
 
-PowerShell の残置責務は次の 3 点だけです。
+PowerShell の残置責務は次の 4 点だけです。
 
 - `update-ccx.sh` から Windows の Claude Code native installer を呼ぶ
+- `update-ccx.sh` から Windows の Cursor Agent native installer（`https://cursor.com/install?win32=true`）を呼ぶ
 - `devkit-codex-config.ps1` を dot-source して Codex config templating を行う
 - v6 migration marker を書く前に `devkit-lib.ps1` の `Remove-DevKitLegacyScheduledTask` で旧日次タスクを削除する
 
-旧 `update-ccx.ps1` 固有の npm repair、`.npmrc` legacy Codex prefix migration、レジストリからの PATH 再読込は廃止しました。install 成功直後にコマンドが PATH へ現れない場合、updater は警告とターミナル再起動案内を出して処理を続けます。
+旧 `update-ccx.ps1` 固有の npm repair、`.npmrc` legacy Codex prefix migration、レジストリからの PATH 再読込は廃止しました。install 成功直後にコマンドが PATH へ現れない場合、updater は警告とターミナル再起動案内を出して処理を続けます。Cursor Agent は POSIX では `https://cursor.com/install`、Windows では上記 native installer で未導入時のみ導入し、導入済みなら `cursor-agent update` で更新します。
 
 Git for Windows が見つからない場合は exit 1 で停止します。探索順は `%ProgramFiles%\Git\bin\bash.exe`、`%ProgramFiles(x86)%\Git\bin\bash.exe`、`where git` の `Git\cmd\git.exe` から導出する `Git\bin\bash.exe` です。
 

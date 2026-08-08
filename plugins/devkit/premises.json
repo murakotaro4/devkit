@@ -145,7 +145,11 @@
       "occurrences": [
         {
           "path": "plugins/devkit/scripts/README.md",
-          "count": 1
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 2
         },
         {
           "path": "plugins/devkit/skills/setup/SKILL.md",
@@ -158,6 +162,104 @@
         {
           "path": "plugins/devkit/tests/test_sync_cursor_agent_shims.py",
           "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_update_bootstrap.py",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "cursor-agent-posix-installer",
+      "summary": "Cursor Agent の POSIX / WSL 公式 installer URL",
+      "current_value": "https://cursor.com/install",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])https://cursor\\.com/install(?![A-Za-z0-9_?])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "https://cursor.com/install と公式 docs / changelog",
+      "update_notes": "update-ccx.sh・README・setup SKILL・契約テストを同時更新",
+      "last_verified": "2026-08-08",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_update_bootstrap.py",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "cursor-agent-windows-installer",
+      "summary": "Cursor Agent の Windows 公式 installer endpoint",
+      "current_value": "https://cursor.com/install?win32=true",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])https://cursor\\.com/install\\?win32=true(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "https://cursor.com/install?win32=true と Windows PowerShell 5.1 での導入 smoke",
+      "update_notes": "update-ccx.sh・README・setup SKILL・契約テストを同時更新",
+      "last_verified": "2026-08-08",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 2
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/skills/setup/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_update_bootstrap.py",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "cursor-agent-update-command",
+      "summary": "Cursor Agent の自己更新サブコマンド表記",
+      "current_value": "cursor-agent update",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])cursor-agent update(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "cursor-agent update --help / Cursor Agent changelog",
+      "update_notes": "update-ccx.sh・README・契約テストを同時更新",
+      "last_verified": "2026-08-08",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/update-ccx.sh",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_update_bootstrap.py",
+          "count": 3
         }
       ]
     },

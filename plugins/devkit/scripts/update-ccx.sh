@@ -2,8 +2,8 @@
 #
 # update-ccx.sh - DevKit updater.
 #
-# Updates Claude Code / Codex CLI and keeps the DevKit Claude/Codex plugins
-# current through their plugin marketplaces.
+# Updates Claude Code / Codex CLI / Cursor Agent and keeps the DevKit
+# Claude/Codex plugins current through their plugin marketplaces.
 #
 # Usage:
 #   update-ccx.sh              # update CLIs and DevKit plugin registrations
@@ -18,6 +18,8 @@ CLI_ONLY=false
 DEVKIT_ONLY=false
 RUN_MODE="run"
 DEVKIT_PYTHON_KIND=""
+CURSOR_AGENT_CMD=""
+CURSOR_AGENT_SKIP_UPDATE=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -145,6 +147,102 @@ get_codex_version() {
     codex --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown"
 }
 
+cursor_agent_install_dir() {
+    case "$OS_TYPE" in
+        windows)
+            [[ -n "${LOCALAPPDATA:-}" ]] || return 1
+            local local_app_data=""
+            local_app_data="$(windows_path_to_posix "$LOCALAPPDATA" || true)"
+            [[ -n "$local_app_data" ]] || return 1
+            printf '%s\n' "$local_app_data/cursor-agent"
+            ;;
+        *)
+            printf '%s\n' "$HOME/.local/bin"
+            ;;
+    esac
+}
+
+cursor_agent_known_launcher() {
+    case "$OS_TYPE" in
+        windows)
+            local install_dir=""
+            install_dir="$(cursor_agent_install_dir || true)"
+            [[ -n "$install_dir" && -f "$install_dir/cursor-agent.cmd" ]] || return 1
+            printf '%s\n' "$install_dir/cursor-agent.cmd"
+            ;;
+        *)
+            local launcher="$HOME/.local/bin/cursor-agent"
+            [[ -f "$launcher" || -L "$launcher" ]] || return 1
+            printf '%s\n' "$launcher"
+            ;;
+    esac
+}
+
+prepend_cursor_agent_path() {
+    local install_dir=""
+    install_dir="$(cursor_agent_install_dir || true)"
+    [[ -n "$install_dir" ]] || return 0
+
+    # Element-boundary membership; empty PATH becomes "::" and never matches a real dir.
+    case ":${PATH}:" in
+        *":${install_dir}:"*)
+            return 0
+            ;;
+    esac
+
+    if [[ -n "${PATH:-}" ]]; then
+        export PATH="${install_dir}:${PATH}"
+    else
+        export PATH="${install_dir}"
+    fi
+    hash -r 2>/dev/null || true
+}
+
+resolve_cursor_agent_command() {
+    prepend_cursor_agent_path
+
+    local found=""
+    found="$(command -v cursor-agent 2>/dev/null || true)"
+    if [[ -n "$found" ]]; then
+        if [[ "$found" != /* ]]; then
+            found="$(resolve_command_path "$found")"
+        fi
+        CURSOR_AGENT_CMD="$found"
+        printf '%s\n' "$CURSOR_AGENT_CMD"
+        return 0
+    fi
+
+    local launcher=""
+    launcher="$(cursor_agent_known_launcher || true)"
+    if [[ -n "$launcher" ]]; then
+        CURSOR_AGENT_CMD="$launcher"
+        printf '%s\n' "$CURSOR_AGENT_CMD"
+        return 0
+    fi
+
+    CURSOR_AGENT_CMD=""
+    return 1
+}
+
+get_cursor_agent_version() {
+    local cmd="${CURSOR_AGENT_CMD:-}"
+    if [[ -z "$cmd" ]]; then
+        cmd="$(resolve_cursor_agent_command 2>/dev/null || true)"
+    fi
+    if [[ -z "$cmd" ]]; then
+        echo "unknown"
+        return
+    fi
+    # Raw --version output (no semver extraction).
+    local raw=""
+    raw="$("$cmd" --version </dev/null 2>/dev/null | head -1 | tr -d '\r' || true)"
+    if [[ -n "$raw" ]]; then
+        printf '%s\n' "$raw"
+    else
+        echo "unknown"
+    fi
+}
+
 resolve_command_path() {
     local command_path="$1"
 
@@ -245,6 +343,7 @@ show_versions() {
     echo "Environment: $OS_TYPE"
     echo "Claude Code: $(get_claude_version)"
     echo "Codex CLI:   $(get_codex_version)"
+    echo "Cursor Agent: $(get_cursor_agent_version)"
 }
 
 show_usage() {
@@ -252,7 +351,7 @@ show_usage() {
 Usage:
   update-ccx.sh                       # update tools and DevKit plugin registrations
   update-ccx.sh --version             # show current versions
-  update-ccx.sh --cli-only            # update Claude/Codex CLIs only
+  update-ccx.sh --cli-only            # update Claude/Codex/Cursor Agent CLIs only
   update-ccx.sh --devkit-only         # update DevKit managed files and Claude/Codex plugins only
 EOF
 }
@@ -500,6 +599,78 @@ ensure_codex() {
     fi
 }
 
+ensure_cursor_agent() {
+    local cmd=""
+    local launcher=""
+
+    prepend_cursor_agent_path
+    cmd="$(command -v cursor-agent 2>/dev/null || true)"
+    launcher="$(cursor_agent_known_launcher || true)"
+
+    if [[ -n "$cmd" || -n "$launcher" ]]; then
+        local use_cmd="${cmd:-$launcher}"
+        if [[ "$use_cmd" != /* ]]; then
+            use_cmd="$(resolve_command_path "$use_cmd")"
+        fi
+        if "$use_cmd" --version </dev/null &>/dev/null; then
+            CURSOR_AGENT_CMD="$use_cmd"
+            CURSOR_AGENT_SKIP_UPDATE=false
+            echo "OK Cursor Agent: already installed ($(get_cursor_agent_version))"
+            return 0
+        fi
+        echo "ERROR Cursor Agent: launcher present but --version failed"
+        ERRORS+=("Cursor Agent: broken installation (launcher exists but --version failed)")
+        CURSOR_AGENT_SKIP_UPDATE=true
+        return 1
+    fi
+
+    echo -n "Installing Cursor Agent... "
+    case "$OS_TYPE" in
+        windows)
+            if ! command -v powershell.exe &>/dev/null; then
+                echo "ERROR"
+                ERRORS+=("Cursor Agent: powershell.exe is not available")
+                CURSOR_AGENT_SKIP_UPDATE=true
+                return 1
+            fi
+            # Quote so Bash does not expand $ErrorActionPreference; use PS double quotes inside.
+            if powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \
+                "& { \$ErrorActionPreference = 'Stop'; Invoke-RestMethod 'https://cursor.com/install?win32=true' | Invoke-Expression }" \
+                >/dev/null 2>&1; then
+                :
+            else
+                echo "ERROR"
+                ERRORS+=("Cursor Agent: native install failed")
+                CURSOR_AGENT_SKIP_UPDATE=true
+                return 1
+            fi
+            ;;
+        macos|wsl|linux|*)
+            if ! curl https://cursor.com/install -fsS | bash >/dev/null 2>&1; then
+                echo "ERROR"
+                ERRORS+=("Cursor Agent: native install failed")
+                CURSOR_AGENT_SKIP_UPDATE=true
+                return 1
+            fi
+            ;;
+    esac
+
+    if ! resolve_cursor_agent_command >/dev/null; then
+        echo "ERROR"
+        ERRORS+=("Cursor Agent: install completed but launcher was not found")
+        CURSOR_AGENT_SKIP_UPDATE=true
+        return 1
+    fi
+    if ! "$CURSOR_AGENT_CMD" --version </dev/null &>/dev/null; then
+        echo "ERROR"
+        ERRORS+=("Cursor Agent: install completed but --version failed")
+        CURSOR_AGENT_SKIP_UPDATE=true
+        return 1
+    fi
+    CURSOR_AGENT_SKIP_UPDATE=false
+    echo "OK ($(get_cursor_agent_version))"
+}
+
 section_setup() {
     echo ""
     echo "=== [Setup] ==="
@@ -510,6 +681,7 @@ section_setup() {
     fi
     ensure_claude
     ensure_codex
+    ensure_cursor_agent
 }
 
 update_claude() {
@@ -586,13 +758,39 @@ update_codex() {
     esac
 }
 
+update_cursor_agent() {
+    echo -n "Updating Cursor Agent... "
+    if [[ -z "$CURSOR_AGENT_CMD" ]]; then
+        if ! resolve_cursor_agent_command >/dev/null; then
+            echo "SKIPPED"
+            WARNINGS+=("Cursor Agent: not installed, skipping update")
+            return 0
+        fi
+    fi
+    if "$CURSOR_AGENT_CMD" update </dev/null 2>/dev/null; then
+        echo "OK"
+    else
+        local exit_code=$?
+        echo "ERROR"
+        ERRORS+=("Cursor Agent: cursor-agent update failed (exit code $exit_code)")
+    fi
+}
+
 section_update() {
     echo ""
     echo "=== [Update] ==="
 
-    local claude_install codex_install
+    local claude_install codex_install cursor_agent_present=false
     claude_install=$(detect_claude_install)
     codex_install=$(detect_codex_install)
+    if [[ "$CURSOR_AGENT_SKIP_UPDATE" == true ]]; then
+        # Setup already recorded the Cursor Agent ERROR; do not update or warn again.
+        cursor_agent_present=false
+    elif resolve_cursor_agent_command >/dev/null; then
+        cursor_agent_present=true
+    else
+        echo "WARN Cursor Agent: not installed, skipping update"
+    fi
 
     if [[ "$claude_install" == "not_found" ]]; then
         echo "WARN Claude Code: not installed, skipping update"
@@ -606,6 +804,7 @@ section_update() {
     local before_parts=(
         "claude: $(get_claude_version) ($claude_install)"
         "codex: $(get_codex_version) ($codex_install)"
+        "cursor-agent: $(get_cursor_agent_version)"
     )
     echo "[Before] $(join_summary_parts "${before_parts[@]}")"
 
@@ -615,10 +814,14 @@ section_update() {
     if [[ "$codex_install" != "skip" ]]; then
         update_codex "$codex_install"
     fi
+    if [[ "$cursor_agent_present" == true ]]; then
+        update_cursor_agent
+    fi
 
     local after_parts=(
         "claude: $(get_claude_version)"
         "codex: $(get_codex_version)"
+        "cursor-agent: $(get_cursor_agent_version)"
     )
     echo "[After]  $(join_summary_parts "${after_parts[@]}")"
 }
@@ -1550,7 +1753,7 @@ main() {
         exit 0
     fi
 
-    echo "=== Claude Code, Codex CLI & DevKit ==="
+    echo "=== Claude Code, Codex CLI, Cursor Agent & DevKit ==="
     echo "Environment: $OS_TYPE"
 
     if [[ "$CLI_ONLY" != true ]]; then
