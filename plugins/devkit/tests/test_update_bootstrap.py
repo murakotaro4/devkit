@@ -1988,10 +1988,25 @@ def _cursor_agent_prelude(os_type: str) -> str:
     )
 
 
+def _fake_cursor_agent_shell_source(*, version: str, update_exit: int = 0) -> str:
+    """POSIX launcher body; usable as .cmd on non-Windows hosts."""
+    return (
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then\n'
+        f'  printf "%s\\n" "{version}"\n'
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$1" = "update" ]; then\n'
+        f"  exit {update_exit}\n"
+        "fi\n"
+        "exit 0\n"
+    )
+
+
 def _write_fake_cursor_agent(path: Path, *, version: str = "2026.08.04-test", update_exit: int = 0) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.suffix.lower() == ".cmd":
-        # Git Bash executes *.cmd via cmd.exe; use a real batch file on Windows tests.
+    if path.suffix.lower() == ".cmd" and os.name == "nt":
+        # Git Bash executes *.cmd via cmd.exe; use a real batch file on Windows hosts.
         path.write_text(
             "@echo off\r\n"
             f'if "%~1"=="--version" (\r\n'
@@ -2006,18 +2021,13 @@ def _write_fake_cursor_agent(path: Path, *, version: str = "2026.08.04-test", up
             newline="\r\n",
         )
         return
+    # Linux CI simulates OS_TYPE=windows with a .cmd path, but bash executes it
+    # directly (no cmd.exe). Keep the .cmd name for the known-launcher contract.
     _write_exec(
         path,
-        "#!/bin/sh\n"
-        'if [ "$1" = "--version" ]; then\n'
-        f'  printf "%s\\n" "{version}"\n'
-        "  exit 0\n"
-        "fi\n"
-        'if [ "$1" = "update" ]; then\n'
-        f"  exit {update_exit}\n"
-        "fi\n"
-        "exit 0\n",
+        _fake_cursor_agent_shell_source(version=version, update_exit=update_exit),
     )
+
 
 
 def _shell_posix_path(path: Path) -> str:
@@ -2231,6 +2241,32 @@ def test_cursor_agent_windows_missing_runs_installer(tmp_path):
     local_app = tmp_path / "LocalAppData"
     local_app.mkdir()
     install_log = tmp_path / "install.log"
+    if os.name == "nt":
+        # Real .cmd batch for Git Bash -> cmd.exe on Windows hosts.
+        create_launcher = (
+            '  install_dir="$(cursor_agent_install_dir)"\n'
+            '  mkdir -p "$install_dir"\n'
+            "  cat > \"$install_dir/cursor-agent.cmd\" <<'EOF'\n"
+            "@echo off\r\n"
+            'if "%~1"=="--version" (\r\n'
+            "  echo 2026.08.04-win-installed\r\n"
+            "  exit /b 0\r\n"
+            ")\r\n"
+            "exit /b 0\r\n"
+            "EOF\n"
+        )
+    else:
+        # Linux CI: bash executes the .cmd path directly; emit a shebang script.
+        create_launcher = (
+            '  install_dir="$(cursor_agent_install_dir)"\n'
+            '  mkdir -p "$install_dir"\n'
+            "  cat > \"$install_dir/cursor-agent.cmd\" <<'EOF'\n"
+            "#!/bin/sh\n"
+            'if [ "$1" = "--version" ]; then echo 2026.08.04-win-installed; exit 0; fi\n'
+            "exit 0\n"
+            "EOF\n"
+            '  chmod +x "$install_dir/cursor-agent.cmd"\n'
+        )
     result = _run_cursor_agent_probe(
         tmp_path,
         home=home,
@@ -2240,23 +2276,12 @@ def test_cursor_agent_windows_missing_runs_installer(tmp_path):
             f'INSTALL_LOG="{install_log.as_posix()}"\n'
             "powershell.exe() {\n"
             '  echo "$*" >> "$INSTALL_LOG"\n'
-            # Create launcher where update-ccx resolves it (LOCALAPPDATA via windows_path_to_posix).
-            '  install_dir="$(cursor_agent_install_dir)"\n'
-            '  mkdir -p "$install_dir"\n'
-            # Emit a real .cmd batch so Git Bash can execute it via cmd.exe.
-            "  cat > \"$install_dir/cursor-agent.cmd\" <<'EOF'\n"
-            "@echo off\r\n"
-            'if "%~1"=="--version" (\r\n'
-            "  echo 2026.08.04-win-installed\r\n"
-            "  exit /b 0\r\n"
-            ")\r\n"
-            "exit /b 0\r\n"
-            "EOF\n"
-            "  return 0\n"
-            "}\n"
-            "ensure_cursor_agent\n"
-            'printf "ver:%s\\n" "$(get_cursor_agent_version)"\n'
-            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+            + create_launcher
+            + "  return 0\n"
+            + "}\n"
+            + "ensure_cursor_agent\n"
+            + 'printf "ver:%s\n" "$(get_cursor_agent_version)"\n'
+            + 'printf "errors:%s\n" "${#ERRORS[@]}"\n'
         ),
     )
     assert result.returncode == 0, result.stderr + result.stdout
@@ -2264,6 +2289,7 @@ def test_cursor_agent_windows_missing_runs_installer(tmp_path):
     assert "https://cursor.com/install?win32=true" in log
     assert "ver:2026.08.04-win-installed" in result.stdout
     assert "errors:0" in result.stdout
+
 
 
 def test_cursor_agent_installer_failure_is_error(tmp_path):
