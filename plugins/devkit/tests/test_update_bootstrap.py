@@ -1052,7 +1052,9 @@ def _prepare_claude_mem_home(
         "const fs = require('fs');\n"
         "const log = process.env.CLAUDE_MEM_RESTART_LOG;\n"
         "if (log) fs.appendFileSync(log, process.argv.slice(2).join(' ') + '\\n');\n"
-        "if (process.env.CLAUDE_MEM_RESTART_FAIL === '1') process.exit(1);\n",
+        "if (process.env.CLAUDE_MEM_RESTART_FAIL === '1') process.exit(1);\n"
+        "const flag = process.env.CLAUDE_MEM_RESTART_FAIL_FLAG;\n"
+        "if (flag && fs.existsSync(flag)) process.exit(1);\n",
     )
     (scripts / "worker-service.cjs").write_text("// stub\n", encoding="utf-8")
     if settings is not ...:
@@ -1094,6 +1096,7 @@ def _run_claude_mem_section(
     os_type: str = "posix",
     path_convert_fail: bool = False,
     extra_env: dict[str, str] | None = None,
+    post_helpers: str = "",
 ) -> subprocess.CompletedProcess[str]:
     restart_log = tmp_path / "restart.log"
     health_log = tmp_path / "health.log"
@@ -1169,7 +1172,8 @@ def _run_claude_mem_section(
         "}\n"
         + helpers
         + "\n"
-        "section_claude_mem_repair\n"
+        + post_helpers
+        + "section_claude_mem_repair\n"
         'printf "warnings:%s\\n" "${#WARNINGS[@]}"\n'
         'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
         'if ((${#WARNINGS[@]} > 0)); then printf "warning0:%s\\n" "${WARNINGS[0]}"; fi\n'
@@ -1825,6 +1829,120 @@ def test_claude_mem_repair_rehealth_failure_leaves_counter(tmp_path):
         (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
     )
     assert payload["consecutiveFailures"] == 5
+
+
+def test_claude_mem_repair_stale_kill_retry_recovers(tmp_path):
+    # ゾンビ port シナリオ: 初回 restart は port bind 失敗、残留プロセス掃除が
+    # 成功した後の再試行で復旧する。
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=7, marker=True)
+    fail_flag = tmp_path / "restart-fail-flag"
+    fail_flag.write_text("1\n", encoding="utf-8")
+    kill_log = tmp_path / "kill.log"
+    post_helpers = (
+        "claude_mem_kill_stale_processes() {\n"
+        f'  echo killed >> "{kill_log.as_posix()}"\n'
+        f'  rm -f -- "{fail_flag.as_posix()}"\n'
+        "  return 0\n"
+        "}\n"
+        "sleep() { :; }\n"
+    )
+    bodies = [json.dumps({"status": "ok", "version": "13.13.1"})]
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_bodies=bodies,
+        health_fail_times=1,
+        extra_env={"CLAUDE_MEM_RESTART_FAIL_FLAG": fail_flag.as_posix()},
+        post_helpers=post_helpers,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "warnings:0" in result.stdout
+    assert "errors:0" in result.stdout
+    assert kill_log.exists()
+    restart_log = (tmp_path / "restart.log").read_text(encoding="utf-8").strip().splitlines()
+    assert len(restart_log) == 2
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 0
+
+
+def test_claude_mem_repair_stale_kill_noop_skips_retry(tmp_path):
+    # 掃除対象が見つからなければ再試行せず、従来どおり restart 失敗の WARN を残す。
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home, consecutive_failures=2)
+    post_helpers = "claude_mem_kill_stale_processes() { return 1; }\n"
+    result = _run_claude_mem_section(
+        tmp_path,
+        home=home,
+        health_fail_times=1,
+        restart_fail=True,
+        post_helpers=post_helpers,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "warnings:1" in result.stdout
+    assert "worker restart failed" in result.stdout
+    restart_log = (tmp_path / "restart.log").read_text(encoding="utf-8").strip().splitlines()
+    assert len(restart_log) == 1
+    payload = json.loads(
+        (home / ".claude-mem" / "state" / "hook-failures.json").read_text(encoding="utf-8")
+    )
+    assert payload["consecutiveFailures"] == 2
+
+
+def test_claude_mem_kill_stale_processes_windows_powershell_contract(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_mem_home(home)
+    helpers = _claude_mem_helpers_source()
+    ps_log = tmp_path / "powershell.log"
+    probe_template = (
+        "OS_TYPE=windows\n"
+        "windows_path_from_posix() {\n"
+        "  printf 'C:\\\\converted\\\\%s\\n' \"${1##*/}\"\n"
+        "}\n"
+        "powershell.exe() {\n"
+        f'  printf \'%s\\n\' "$DEVKIT_MEM_CHROMA_DIR" "$DEVKIT_MEM_CACHE_ROOT" >> "{ps_log.as_posix()}"\n'
+        "  echo \"$DEVKIT_TEST_KILL_COUNT\"\n"
+        "}\n"
+        + helpers
+        + "\n"
+        "if claude_mem_kill_stale_processes; then echo KILLED; else echo NOKILL; fi\n"
+    )
+    probe_path = tmp_path / "claude-mem-kill-stale-probe.sh"
+    probe_path.write_text(probe_template, encoding="utf-8", newline="\n")
+    env = {
+        **{
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("CLAUDE_MEM_WORKER_PORT", "CLAUDE_MEM_DATA_DIR")
+        },
+        "HOME": str(home),
+    }
+    result = subprocess.run(
+        [_bash_path(), str(probe_path.as_posix())],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**env, "DEVKIT_TEST_KILL_COUNT": "3"},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "KILLED" in result.stdout
+    # powershell へは forward slash 化した Windows パスを env で渡す
+    ps_lines = ps_log.read_text(encoding="utf-8").strip().splitlines()
+    assert ps_lines == ["C:/converted/chroma", "C:/converted/claude-mem"]
+
+    result = subprocess.run(
+        [_bash_path(), str(probe_path.as_posix())],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**env, "DEVKIT_TEST_KILL_COUNT": "0"},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "NOKILL" in result.stdout
 
 
 def test_claude_mem_repair_skips_orphaned_cache_and_prefers_latest(tmp_path):

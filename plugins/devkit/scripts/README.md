@@ -22,7 +22,7 @@ DevKit の setup / update / verification scripts を置くディレクトリで�
 - `codex plugin marketplace upgrade murakotaro4` による即時反映
 - Claude Code marketplace `murakotaro4` の source / repo 検証と update / 再登録
 - Claude Code plugin `devkit@murakotaro4` の update / install（実行中セッションには `/reload-plugins` を案内）
-- claude-mem worker の健全性確認と自動修復（不健全・版不一致時のみ。失敗は WARNING）
+- claude-mem worker の健全性確認と自動修復（不健全・版不一致時のみ。restart 失敗時は claude-mem 帰属の残留プロセスを掃除して 1 回だけ再試行。失敗は WARNING）
 - v9 migration marker(`.migrated-v9-dig-goal`) が無い場合の統合前 live skill directory prune
 - v6 migration marker が無い場合の旧 DevKit 管理資産 prune
 
@@ -36,7 +36,7 @@ update-ccx --devkit-only
 ```
 
 Cursor Agent は default / `--cli-only` で install（未導入時）と `cursor-agent update`（導入済み）を行い、`--devkit-only` では扱いません。POSIX / WSL は `https://cursor.com/install`、Windows は `https://cursor.com/install?win32=true` の native installer を使い、解決は `$HOME/.local/bin`（POSIX）または `%LOCALAPPDATA%\cursor-agent`（Windows、`cursor-agent.cmd`）を PATH 先頭へ足してから行います。Cursor IDE 本体の更新、認証、壊れた launcher の再 install は非対象です。
-`section_claude_mem_repair` は `--cli-only` 以外(default / `--devkit-only`)で、`section_claude_plugin` の後に動く。対応する plugin cache root は `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem` のみで、claude-mem hook prelude の他経路(`CLAUDE_PLUGIN_ROOT` / marketplace checkout 等)は再現しない。`~/.claude-mem` 不在、または cache に有効版が無い場合は SKIP。`node` / `curl` / `bun` 不在は WARN で状態ファイルを触らず終了する。有効版は `.orphaned_at` を持たず `scripts/bun-runner.js` と `scripts/worker-service.cjs` が揃う最新版。環境変数 `CLAUDE_MEM_WORKER_PORT` / `CLAUDE_MEM_DATA_DIR` が設定されていれば settings / 既定パスより優先する。版選択は同一 major.minor.patch なら stable を prerelease より優先し、それ以外は core version が高い方を選ぶ。`curl` で `http://127.0.0.1:<port>/api/health` を確認し、返却 `version` が期待版と一致するときだけ健全とする。健全でも `.worker-start-attempted` や `hook-failures.json` の失敗カウンタ残があれば再起動なしで解除する。不健全時だけクールダウン解除 → plugin 自身の `restart` → 再ヘルス成功時のみカウンタ初期化を行い、失敗は WARNING に積んで updater 全体は赤にしない。
+`section_claude_mem_repair` は `--cli-only` 以外(default / `--devkit-only`)で、`section_claude_plugin` の後に動く。対応する plugin cache root は `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem` のみで、claude-mem hook prelude の他経路(`CLAUDE_PLUGIN_ROOT` / marketplace checkout 等)は再現しない。`~/.claude-mem` 不在、または cache に有効版が無い場合は SKIP。`node` / `curl` / `bun` 不在は WARN で状態ファイルを触らず終了する。有効版は `.orphaned_at` を持たず `scripts/bun-runner.js` と `scripts/worker-service.cjs` が揃う最新版。環境変数 `CLAUDE_MEM_WORKER_PORT` / `CLAUDE_MEM_DATA_DIR` が設定されていれば settings / 既定パスより優先する。版選択は同一 major.minor.patch なら stable を prerelease より優先し、それ以外は core version が高い方を選ぶ。`curl` で `http://127.0.0.1:<port>/api/health` を確認し、返却 `version` が期待版と一致するときだけ健全とする。健全でも `.worker-start-attempted` や `hook-failures.json` の失敗カウンタ残があれば再起動なしで解除する。不健全時だけクールダウン解除 → plugin 自身の `restart` → 再ヘルス成功時のみカウンタ初期化を行い、失敗は WARNING に積んで updater 全体は赤にしない。restart 失敗または再ヘルス失敗時は、claude-mem に帰属すると特定できる残留プロセスだけを強制終了してから 1 回だけ再試行する(`claude_mem_kill_stale_processes`)。対象は chroma data-dir(`<data_dir>/chroma`)をコマンドラインに含むプロセス(死んだ worker の子が listen socket handle を継承する「LISTENING だが接続拒否」のゾンビ port の典型原因)と、plugin cache 配下の `worker-service.cjs` プロセス(`hook` / `restart` 起動は除外)。Windows は PowerShell(`Get-CimInstance Win32_Process` + `Stop-Process`)、POSIX は `ps -Ao pid=,args=` + `kill -9` で行い、1 件も終了できなければ再試行しない。
 
 自動修復が失敗した場合の手動復旧:
 
