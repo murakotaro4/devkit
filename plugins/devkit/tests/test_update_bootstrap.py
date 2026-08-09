@@ -2845,3 +2845,239 @@ def test_cursor_agent_main_flag_boundaries_runtime(tmp_path):
         version.call_log.read_text(encoding="utf-8") == ""
     )
     assert "=== [" not in version.stdout
+
+
+def _claude_native_probe_source() -> str:
+    return (
+        _shell_function("get_claude_version", "get_codex_version")
+        + _shell_function("claude_native_versions_dir", "claude_native_latest_version")
+        + _shell_function("claude_native_latest_version", "claude_native_version_is_newer")
+        + _shell_function("claude_native_version_is_newer", "claude_native_repair_launcher")
+        + _shell_function(
+            "claude_native_repair_launcher", "claude_native_report_update_result"
+        )
+        + _shell_function("claude_native_report_update_result", "update_claude")
+        + _shell_function("update_claude", "update_codex")
+    )
+
+
+def _prepare_claude_native_home(
+    home: Path,
+    *,
+    launcher_version: str | None,
+    versions: list[str],
+    create_versions_dir: bool = True,
+) -> None:
+    bin_dir = home / ".local" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    if launcher_version is not None:
+        (bin_dir / "claude.exe").write_text(launcher_version + "\n", encoding="utf-8")
+    if create_versions_dir:
+        versions_dir = home / ".local" / "share" / "claude" / "versions"
+        versions_dir.mkdir(parents=True, exist_ok=True)
+        for name in versions:
+            (versions_dir / name).write_text(name + "\n", encoding="utf-8")
+
+
+def _run_claude_native_update_probe(tmp_path, *, home: Path, os_type: str, body: str):
+    # Fake `claude`: --version reports the current launcher file's content, so a
+    # successful launcher swap changes the reported version (mirrors production).
+    probe = (
+        "set -o pipefail\n"
+        f"OS_TYPE={json.dumps(os_type)}\n"
+        "ERRORS=()\n"
+        "WARNINGS=()\n"
+        + _claude_native_probe_source()
+        + "claude() {\n"
+        '  if [[ "$1" == "--version" ]]; then\n'
+        '    cat "$HOME/.local/bin/claude.exe" 2>/dev/null\n'
+        "    return 0\n"
+        "  fi\n"
+        '  if [[ "$1" == "update" ]]; then return 0; fi\n'
+        "  return 0\n"
+        "}\n"
+        + body
+        + 'echo "warnings:${#WARNINGS[@]}"\n'
+        + 'echo "errors:${#ERRORS[@]}"\n'
+        + 'if ((${#WARNINGS[@]} > 0)); then echo "warning0:${WARNINGS[0]}"; fi\n'
+    )
+    probe_path = tmp_path / "claude_native_update_probe.sh"
+    probe_path.write_text(probe, encoding="utf-8", newline="\n")
+    return subprocess.run(
+        [_bash_path(), str(probe_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(home)},
+    )
+
+
+def test_claude_native_update_repairs_locked_launcher_on_windows(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(
+        home, launcher_version="2.1.225", versions=["2.1.9", "2.1.225", "2.1.226"]
+    )
+    versions_dir = home / ".local" / "share" / "claude" / "versions"
+    (versions_dir / "install.log").write_text("junk\n", encoding="utf-8")
+    (versions_dir / "tmp").mkdir()
+    bin_dir = home / ".local" / "bin"
+    (bin_dir / "claude.exe.stale.1234").write_text("2.1.220\n", encoding="utf-8")
+    result = _run_claude_native_update_probe(
+        tmp_path, home=home, os_type="windows", body="update_claude native\n"
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "OK (repaired launcher to 2.1.226)" in result.stdout
+    assert "warnings:0" in result.stdout
+    assert "errors:0" in result.stdout
+    assert (bin_dir / "claude.exe").read_text(encoding="utf-8").strip() == "2.1.226"
+    assert not (bin_dir / "claude.exe.stale.1234").exists()
+    stale = [p for p in bin_dir.iterdir() if p.name.startswith("claude.exe.stale.")]
+    assert len(stale) == 1
+    assert stale[0].read_text(encoding="utf-8").strip() == "2.1.225"
+
+
+def test_claude_native_latest_version_sorts_numerically(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(home, launcher_version=None, versions=["2.1.9", "2.1.10"])
+    result = _run_claude_native_update_probe(
+        tmp_path, home=home, os_type="windows", body="claude_native_latest_version\n"
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "2.1.10" in result.stdout.splitlines()
+
+
+def test_claude_native_update_ok_when_launcher_matches(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(
+        home, launcher_version="2.1.226", versions=["2.1.225", "2.1.226"]
+    )
+    result = _run_claude_native_update_probe(
+        tmp_path, home=home, os_type="windows", body="update_claude native\n"
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Claude Code (native)... OK" in result.stdout
+    assert "repaired" not in result.stdout
+    assert "warnings:0" in result.stdout
+    bin_dir = home / ".local" / "bin"
+    stale = [p for p in bin_dir.iterdir() if p.name.startswith("claude.exe.stale.")]
+    assert stale == []
+
+
+def test_claude_native_update_warns_without_repair_on_posix(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(home, launcher_version="2.1.225", versions=["2.1.226"])
+    result = _run_claude_native_update_probe(
+        tmp_path, home=home, os_type="linux", body="update_claude native\n"
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Claude Code (native)... WARN" in result.stdout
+    assert "warnings:1" in result.stdout
+    assert "expected 2.1.226" in result.stdout
+    bin_dir = home / ".local" / "bin"
+    assert (bin_dir / "claude.exe").read_text(encoding="utf-8").strip() == "2.1.225"
+    stale = [p for p in bin_dir.iterdir() if p.name.startswith("claude.exe.stale.")]
+    assert stale == []
+
+
+def test_claude_native_update_warns_and_rolls_back_when_repair_fails(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(home, launcher_version="2.1.225", versions=["2.1.226"])
+    result = _run_claude_native_update_probe(
+        tmp_path,
+        home=home,
+        os_type="windows",
+        body="cp() { return 1; }\nupdate_claude native\n",
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Claude Code (native)... WARN" in result.stdout
+    assert "warnings:1" in result.stdout
+    assert "expected 2.1.226" in result.stdout
+    bin_dir = home / ".local" / "bin"
+    assert (bin_dir / "claude.exe").read_text(encoding="utf-8").strip() == "2.1.225"
+    stale = [p for p in bin_dir.iterdir() if p.name.startswith("claude.exe.stale.")]
+    assert stale == []
+
+
+def test_claude_native_update_ok_when_versions_dir_missing(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(
+        home, launcher_version="2.1.225", versions=[], create_versions_dir=False
+    )
+    result = _run_claude_native_update_probe(
+        tmp_path, home=home, os_type="windows", body="update_claude native\n"
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Claude Code (native)... OK" in result.stdout
+    assert "warnings:0" in result.stdout
+
+
+def test_claude_native_update_never_downgrades_newer_launcher(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(home, launcher_version="2.1.230", versions=["2.1.226"])
+    result = _run_claude_native_update_probe(
+        tmp_path, home=home, os_type="windows", body="update_claude native\n"
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Claude Code (native)... OK" in result.stdout
+    assert "repaired" not in result.stdout
+    assert "warnings:0" in result.stdout
+    bin_dir = home / ".local" / "bin"
+    assert (bin_dir / "claude.exe").read_text(encoding="utf-8").strip() == "2.1.230"
+    stale = [p for p in bin_dir.iterdir() if p.name.startswith("claude.exe.stale.")]
+    assert stale == []
+
+
+def test_claude_native_update_warns_when_stale_rename_fails(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(home, launcher_version="2.1.225", versions=["2.1.226"])
+    result = _run_claude_native_update_probe(
+        tmp_path,
+        home=home,
+        os_type="windows",
+        body="mv() { return 1; }\nupdate_claude native\n",
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Claude Code (native)... WARN" in result.stdout
+    assert "warnings:1" in result.stdout
+    assert "still runs 2.1.225" in result.stdout
+    bin_dir = home / ".local" / "bin"
+    assert (bin_dir / "claude.exe").read_text(encoding="utf-8").strip() == "2.1.225"
+    stale = [p for p in bin_dir.iterdir() if p.name.startswith("claude.exe.stale.")]
+    assert stale == []
+
+
+def test_claude_native_update_rolls_back_when_repaired_launcher_mismatches(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(home, launcher_version="2.1.225", versions=["2.1.226"])
+    # cp places a binary that reports the wrong version: repair "succeeds" but the
+    # post-repair verification must restore the original launcher.
+    result = _run_claude_native_update_probe(
+        tmp_path,
+        home=home,
+        os_type="windows",
+        body='cp() { printf "9.9.9\n" > "$2"; }\nupdate_claude native\n',
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Claude Code (native)... WARN" in result.stdout
+    assert "warnings:1" in result.stdout
+    assert "still runs 2.1.225 (expected 2.1.226)" in result.stdout
+    bin_dir = home / ".local" / "bin"
+    assert (bin_dir / "claude.exe").read_text(encoding="utf-8").strip() == "2.1.225"
+    stale = [p for p in bin_dir.iterdir() if p.name.startswith("claude.exe.stale.")]
+    assert stale == []
+
+
+def test_claude_native_update_repairs_launcher_reporting_unknown_version(tmp_path):
+    home = tmp_path / "home"
+    _prepare_claude_native_home(
+        home, launcher_version="not-a-version", versions=["2.1.226"]
+    )
+    result = _run_claude_native_update_probe(
+        tmp_path, home=home, os_type="windows", body="update_claude native\n"
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "OK (repaired launcher to 2.1.226)" in result.stdout
+    assert "warnings:0" in result.stdout
+    bin_dir = home / ".local" / "bin"
+    assert (bin_dir / "claude.exe").read_text(encoding="utf-8").strip() == "2.1.226"
