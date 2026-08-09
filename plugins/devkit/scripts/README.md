@@ -14,7 +14,7 @@ DevKit の setup / update / verification scripts を置くディレクトリで�
 
 主な責務:
 
-- Claude Code / Codex CLI / Cursor Agent の install / update
+- Claude Code / Codex CLI / Cursor Agent の install / update（Claude native は更新後にランチャー実体の版を検証し、Windows でロック起因の差し替え失敗を自己修復）
 - managed script の配置更新
 - v10.1.0 の manifest が存在する場合の旧 Cursor 同期資産の安全 prune
 - Codex marketplace `murakotaro4/devkit` の登録確認
@@ -34,6 +34,8 @@ update-ccx --version
 update-ccx --cli-only
 update-ccx --devkit-only
 ```
+
+Claude Code の native install(`claude update`)は、Windows で実行中セッションが `~/.local/bin/claude.exe` をロックしているとランチャー差し替えに失敗したまま exit 0 で成功を報告する。このため `update_claude` は native 更新成功後に `~/.local/share/claude/versions/` の最新版と `claude --version` の実体を突き合わせ(`claude_native_report_update_result`)、実体が古い場合に Windows に限り自己修復する: ロック中でもリネームは可能という Windows の性質を使い、旧 `claude.exe` を `claude.exe.stale.<pid>` へ退避してから versions の最新バイナリを配置し、過去の退避残骸(`claude.exe.stale.*`)は削除を試みる(ロック中のものは残る)。配置失敗時、および配置後の版検証が失敗した場合は退避を巻き戻す。実体が versions 最新より新しい場合(ロールバック直後等)はダウングレードせず OK 扱い。修復後も不一致、または POSIX での不一致は WARNING に積んで updater 全体は赤にしない。
 
 Cursor Agent は default / `--cli-only` で install（未導入時）と `cursor-agent update`（導入済み）を行い、`--devkit-only` では扱いません。POSIX / WSL は `https://cursor.com/install`、Windows は `https://cursor.com/install?win32=true` の native installer を使い、解決は `$HOME/.local/bin`（POSIX）または `%LOCALAPPDATA%\cursor-agent`（Windows、`cursor-agent.cmd`）を PATH 先頭へ足してから行います。Cursor IDE 本体の更新、認証、壊れた launcher の再 install は非対象です。
 `section_claude_mem_repair` は `--cli-only` 以外(default / `--devkit-only`)で、`section_claude_plugin` の後に動く。対応する plugin cache root は `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/thedotmack/claude-mem` のみで、claude-mem hook prelude の他経路(`CLAUDE_PLUGIN_ROOT` / marketplace checkout 等)は再現しない。`~/.claude-mem` 不在、または cache に有効版が無い場合は SKIP。`node` / `curl` / `bun` 不在は WARN で状態ファイルを触らず終了する。有効版は `.orphaned_at` を持たず `scripts/bun-runner.js` と `scripts/worker-service.cjs` が揃う最新版。環境変数 `CLAUDE_MEM_WORKER_PORT` / `CLAUDE_MEM_DATA_DIR` が設定されていれば settings / 既定パスより優先する。版選択は同一 major.minor.patch なら stable を prerelease より優先し、それ以外は core version が高い方を選ぶ。`curl` で `http://127.0.0.1:<port>/api/health` を確認し、返却 `version` が期待版と一致するときだけ健全とする。健全でも `.worker-start-attempted` や `hook-failures.json` の失敗カウンタ残があれば再起動なしで解除する。不健全時だけクールダウン解除 → plugin 自身の `restart` → 再ヘルス成功時のみカウンタ初期化を行い、失敗は WARNING に積んで updater 全体は赤にしない。restart 失敗または再ヘルス失敗時は、claude-mem に帰属すると特定できる残留プロセスだけを強制終了してから 1 回だけ再試行する(`claude_mem_kill_stale_processes`)。対象は chroma data-dir(`<data_dir>/chroma`)をコマンドラインに含むプロセス(死んだ worker の子が listen socket handle を継承する「LISTENING だが接続拒否」のゾンビ port の典型原因)と、plugin cache 配下の `worker-service.cjs` プロセス(`hook` / `restart` 起動は除外)。Windows は PowerShell(`Get-CimInstance Win32_Process` + `Stop-Process`)、POSIX は `ps -Ao pid=,args=` + `kill -9` で行い、1 件も終了できなければ再試行しない。

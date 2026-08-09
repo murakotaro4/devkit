@@ -684,13 +684,99 @@ section_setup() {
     ensure_cursor_agent
 }
 
+claude_native_versions_dir() {
+    printf '%s\n' "$HOME/.local/share/claude/versions"
+}
+
+claude_native_latest_version() {
+    local versions_dir="" entry="" name=""
+    local -a names=()
+    versions_dir="$(claude_native_versions_dir)"
+    [[ -d "$versions_dir" ]] || return 1
+    for entry in "$versions_dir"/*; do
+        [[ -f "$entry" ]] || continue
+        name="${entry##*/}"
+        [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+        names+=("$name")
+    done
+    (( ${#names[@]} > 0 )) || return 1
+    # Numeric per-field sort: portable version ordering without GNU `sort -V`.
+    printf '%s\n' "${names[@]}" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
+}
+
+claude_native_version_is_newer() {
+    # True when $1 is strictly newer than $2 (a non-semver value sorts lowest).
+    local a="$1" b="$2"
+    [[ "$a" == "$b" ]] && return 1
+    [[ "$(printf '%s\n%s\n' "$a" "$b" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" == "$a" ]]
+}
+
+claude_native_repair_launcher() {
+    # Windows cannot overwrite a running claude.exe, but renaming it is allowed:
+    # park the locked launcher aside, then place the downloaded version binary.
+    local expected="$1"
+    local launcher="$HOME/.local/bin/claude.exe"
+    local source_binary=""
+    source_binary="$(claude_native_versions_dir)/$expected"
+    CLAUDE_NATIVE_REPAIR_STALE=""
+    [[ -f "$launcher" && -f "$source_binary" ]] || return 1
+    # Parked copies from earlier repairs; ones still locked survive rm and stay.
+    rm -f "$HOME/.local/bin"/claude.exe.stale.* 2>/dev/null || true
+    local stale="$launcher.stale.$$"
+    mv "$launcher" "$stale" 2>/dev/null || return 1
+    if ! cp "$source_binary" "$launcher" 2>/dev/null; then
+        mv "$stale" "$launcher" 2>/dev/null || true
+        return 1
+    fi
+    CLAUDE_NATIVE_REPAIR_STALE="$stale"
+    return 0
+}
+
+claude_native_report_update_result() {
+    # `claude update` exits 0 and claims success even when the launcher swap
+    # failed (running sessions lock claude.exe on Windows). Verify the launcher
+    # actually serves the newest downloaded version and self-heal if it does not.
+    local expected="" actual=""
+    local launcher="$HOME/.local/bin/claude.exe"
+    expected="$(claude_native_latest_version || true)"
+    actual="$(get_claude_version)"
+    if [[ -z "$expected" || "$actual" == "$expected" ]]; then
+        echo "OK"
+        return 0
+    fi
+    if ! claude_native_version_is_newer "$expected" "$actual"; then
+        # The launcher already runs something newer than the freshest download
+        # (e.g. an intentional rollback left old files behind); never downgrade.
+        echo "OK"
+        return 0
+    fi
+    if [[ "$OS_TYPE" == "windows" ]] && claude_native_repair_launcher "$expected"; then
+        actual="$(get_claude_version)"
+        if [[ "$actual" == "$expected" ]]; then
+            echo "OK (repaired launcher to $expected)"
+            return 0
+        fi
+        # The placed binary does not serve the expected version; put the
+        # original launcher back instead of leaving a suspect binary behind.
+        if [[ -n "$CLAUDE_NATIVE_REPAIR_STALE" ]]; then
+            rm -f "$launcher" 2>/dev/null || true
+            mv "$CLAUDE_NATIVE_REPAIR_STALE" "$launcher" 2>/dev/null || true
+            CLAUDE_NATIVE_REPAIR_STALE=""
+            actual="$(get_claude_version)"
+        fi
+    fi
+    echo "WARN"
+    WARNINGS+=("Claude Code: claude update reported success but the launcher still runs $actual (expected $expected); close Claude sessions and rerun, or replace the launcher in ~/.local/bin manually")
+    return 0
+}
+
 update_claude() {
     local install_method="$1"
     echo -n "Updating Claude Code ($install_method)... "
     case "$install_method" in
         native)
             if claude update </dev/null 2>/dev/null; then
-                echo "OK"
+                claude_native_report_update_result
             else
                 local exit_code=$?
                 echo "ERROR"

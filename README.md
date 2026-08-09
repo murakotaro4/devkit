@@ -101,7 +101,7 @@ update-ccx --version
 
 `update-ccx` が行うこと:
 
-- Claude Code / Codex CLI / Cursor Agent の install / update
+- Claude Code / Codex CLI / Cursor Agent の install / update（Claude native は更新後にランチャー実体の版を検証し、Windows でロック起因の差し替え失敗を自己修復）
 - DevKit 管理 script の配置更新
 - v10.1.0 の manifest が存在する場合の旧 Cursor skills / templates / scripts / statusline 安全 prune
 - Codex marketplace `murakotaro4/devkit` の登録確認
