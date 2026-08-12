@@ -121,7 +121,7 @@ frontmatter に `allowed-tools` を置かず、利用可能なツールもこの
 
 | 役割 | 既定 |
 |------|------|
-| 実装 | cursor-agent `cursor-grok-4.5-high` |
+| 実装 | cursor-agent `cursor-grok-4.6-high` |
 | 計画レビュー | codex `gpt-5.6-sol` / medium |
 | diff レビュー | codex `gpt-5.6-sol` / medium |
 
@@ -189,7 +189,7 @@ cursor-agent はジョブごとに chatId を保存する。stdout / stderr は�
 
 ```bash
 JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-job.XXXXXX") && set -o pipefail && CHAT_ID="$(cursor-agent create-chat < /dev/null | tr -d '\r\n')" && test -n "$CHAT_ID" && printf '%s\n' "$CHAT_ID" > "$JOB_DIR/chat-id.txt" && echo "JOB_DIR=$JOB_DIR"
-JOB_DIR=<記録済みパス> && set -o pipefail && cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model cursor-grok-4.5-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null 2>&1 | tee "$JOB_DIR/cursor-agent.log"
+JOB_DIR=<記録済みパス> && set -o pipefail && cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model cursor-grok-4.6-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null 2>&1 | tee "$JOB_DIR/cursor-agent.log"
 ```
 
 cursor-agent は sandbox なしで動くため write_scope と commit 禁止を指示する。すべての非対話 codex / cursor-agent コマンドで stdin を `< /dev/null` に閉じる。
