@@ -1038,7 +1038,7 @@ def mutate_enum_table_cells(docs: Docs) -> Docs:
 ROLE_TABLE_HEADER = ("役割", "既定")
 FALLBACK_TABLE_HEADER = ("親", "実装 lane", "レビュー lane（計画 / diff 共通）")
 BACKEND_SECTION = "### 3. backend 固定とフォールバック"
-CURSOR_MODEL = "cursor-grok-4.5-high"
+CURSOR_MODEL = "cursor-grok-4.6-high"
 CODEX_MODEL = "gpt-5.6-sol"
 EXPECTED_ROLES = ("実装", "計画レビュー", "diff レビュー")
 EXPECTED_FALLBACK_LANES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {

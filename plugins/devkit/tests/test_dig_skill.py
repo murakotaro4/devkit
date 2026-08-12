@@ -152,7 +152,7 @@ def test_approval_puts_summary_first():
 
 def test_fixed_backend_assignment_and_python_gate_contract():
     backend = _section(_skill_text(), "### 3. backend 固定とフォールバック")
-    assert "| 実装 | cursor-agent `cursor-grok-4.5-high` |" in backend
+    assert "| 実装 | cursor-agent `cursor-grok-4.6-high` |" in backend
     assert "| 計画レビュー | codex `gpt-5.6-sol` / medium |" in backend
     assert "| diff レビュー | codex `gpt-5.6-sol` / medium |" in backend
     assert "| Claude 親 |" in backend
@@ -163,7 +163,7 @@ def test_fixed_backend_assignment_and_python_gate_contract():
     # 分からなくなっていた([P2])。
     assert "`Agent(general-purpose, model=sonnet)`" in backend
     assert "`Agent(general-purpose, model=opus)`" in backend
-    assert "cursor-grok-4.5-high" in backend
+    assert "cursor-grok-4.6-high" in backend
     assert "可用性判定の失敗" in backend
     assert "chat 作成が非ゼロ終了" in backend
     assert "agent 起動前に失敗" in backend
@@ -284,7 +284,7 @@ def test_cursor_and_worktree_delegation_contract():
     text = _skill_text()
     delegation = _section(text, "### 6. worktree 作成と実装委譲")
     repair = _section(text, "### 8. 修正ループ")
-    for token in ("--model cursor-grok-4.5-high", "--trust", "--force", "chat-id.txt"):
+    for token in ("--model cursor-grok-4.6-high", "--trust", "--force", "chat-id.txt"):
         assert token in delegation
     assert 'codex -a never exec -C "<worktree>"' in delegation
     assert '--workspace "<worktree>"' in delegation + repair
