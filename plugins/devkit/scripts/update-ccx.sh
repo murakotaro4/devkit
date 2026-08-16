@@ -36,7 +36,7 @@ windows_path_to_posix() {
     if [[ -z "$normalized" ]]; then
         local slash_path="${input_path//\\//}"
         if [[ "$slash_path" =~ ^([A-Za-z]):/(.*)$ ]]; then
-            normalized="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}"
+            normalized="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}" # bash32-allow: Windows drive path, Git Bash (4+) only
         fi
     fi
 

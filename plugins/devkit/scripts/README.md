@@ -115,8 +115,9 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 2. `check_skill_surface.py`
 3. `check_legacy_migration.py`
 4. `check_external_premises.py`
-5. detect-secrets baseline 照合
-6. pytest
+5. `check_bash32_compat.py`
+6. detect-secrets baseline 照合
+7. pytest
 
 checks の外側で最後に `report_doc_size.py` が走る（終了コードは無視する）。
 
@@ -156,6 +157,10 @@ git 追跡下の text metadata file に UTF-8 BOM が混入していないかを
 `plugins/devkit/premises.json` のスキーマ、宣言 occurrence の正確な出現数、未登録出現を検査します。`obsolete_value_patterns` に移した旧値は走査対象でゼロ件であることを強制し、部分移行の取り残しも検出します。走査には tracked file と未追跡 file の両方を含め、モデル名・CLI フラグ・ハーネス判定キー・marketplace 名の repo 内インベントリを同期させます。
 
 この check は `current_value` が外部世界で最新かどうかを検出しません。外部 release note と実機での裏取り、値の追従更新は `catch-up` skill の責務です。実装は CRLF と OS 非依存の path 処理を考慮していますが、Windows 対応設計であり、現 CI (`ubuntu-latest`) では未実証です。
+
+### check_bash32_compat.py
+
+git 追跡下の `*.sh` 全部と `plugins/devkit/tests/*.py`(テストが bash で実行する埋め込み shell fixture)に、bash 4+ 専用構文(`mapfile` / `readarray` / `declare -A` / `;;&` / `${var^^}` 等)が混入していないかを検査します。macOS の stock `/bin/bash` は 3.2 のため、CI(bash 5)では通るのに macOS ローカルでだけ失敗する退行を防ぎます。意図的な bash 4+ 使用は行内に `bash32-allow` と書いて waive できます。コメント行(`#` 始まり)は対象外です。
 
 ### check_plugin_version_bump.py
 
