@@ -853,8 +853,20 @@ update_cursor_agent() {
             return 0
         fi
     fi
+    # The update subcommand prints its progress to stderr (discarded here),
+    # so compare launcher versions before/after to surface what happened.
+    local before_version="" after_version=""
+    before_version="$(get_cursor_agent_version)"
     if "$CURSOR_AGENT_CMD" update </dev/null 2>/dev/null; then
-        echo "OK"
+        after_version="$(get_cursor_agent_version)"
+        if [[ "$before_version" == "unknown" || "$after_version" == "unknown" ]]; then
+            # Either probe failed; cannot tell what happened, so stay terse.
+            echo "OK"
+        elif [[ "$before_version" == "$after_version" ]]; then
+            echo "OK (already up to date: $after_version)"
+        else
+            echo "OK (updated $before_version -> $after_version)"
+        fi
     else
         local exit_code=$?
         echo "ERROR"

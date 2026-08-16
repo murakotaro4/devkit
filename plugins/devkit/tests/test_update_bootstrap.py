@@ -2469,6 +2469,104 @@ def test_cursor_agent_update_failure_is_error(tmp_path):
     assert "exit code 7" in result.stdout
 
 
+def test_cursor_agent_update_reports_already_up_to_date(tmp_path):
+    home = tmp_path / "home"
+    _write_fake_cursor_agent(
+        home / ".local" / "bin" / "cursor-agent",
+        version="2026.08.04-same",
+    )
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "resolve_cursor_agent_command >/dev/null\n"
+            "update_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "OK (already up to date: 2026.08.04-same)" in result.stdout
+    assert "errors:0" in result.stdout
+
+
+def test_cursor_agent_update_reports_version_change(tmp_path):
+    home = tmp_path / "home"
+    launcher = home / ".local" / "bin" / "cursor-agent"
+    launcher.parent.mkdir(parents=True)
+    version_file = tmp_path / "cursor-agent-version"
+    version_file.write_text("2026.08.04-old\n", encoding="utf-8")
+    # Launcher whose `update` swaps the version it reports, like the real
+    # symlink flip. Shell builtins only: the probe PATH has no coreutils.
+    _write_exec(
+        launcher,
+        "#!/bin/sh\n"
+        f'VERSION_FILE="{version_file.as_posix()}"\n'
+        'if [ "$1" = "--version" ]; then\n'
+        '  IFS= read -r v < "$VERSION_FILE"\n'
+        '  printf "%s\\n" "$v"\n'
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$1" = "update" ]; then\n'
+        '  printf "%s\\n" "2026.08.11-new" > "$VERSION_FILE"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "resolve_cursor_agent_command >/dev/null\n"
+            "update_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "OK (updated 2026.08.04-old -> 2026.08.11-new)" in result.stdout
+    assert "errors:0" in result.stdout
+
+
+def test_cursor_agent_update_with_unknown_before_version_stays_terse(tmp_path):
+    home = tmp_path / "home"
+    launcher = home / ".local" / "bin" / "cursor-agent"
+    launcher.parent.mkdir(parents=True)
+    version_file = tmp_path / "cursor-agent-version"
+    # --version fails until `update` creates the version file: before=unknown,
+    # after=known. The result line must not claim an update happened.
+    _write_exec(
+        launcher,
+        "#!/bin/sh\n"
+        f'VERSION_FILE="{version_file.as_posix()}"\n'
+        'if [ "$1" = "--version" ]; then\n'
+        '  [ -f "$VERSION_FILE" ] || exit 1\n'
+        '  IFS= read -r v < "$VERSION_FILE"\n'
+        '  printf "%s\\n" "$v"\n'
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$1" = "update" ]; then\n'
+        '  printf "%s\\n" "2026.08.11-new" > "$VERSION_FILE"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    result = _run_cursor_agent_probe(
+        tmp_path,
+        home=home,
+        os_type="linux",
+        body=(
+            "resolve_cursor_agent_command >/dev/null\n"
+            "update_cursor_agent\n"
+            'printf "errors:%s\\n" "${#ERRORS[@]}"\n'
+        ),
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Updating Cursor Agent... OK" in result.stdout
+    assert "OK (" not in result.stdout
+    assert "errors:0" in result.stdout
+
+
 def test_cursor_agent_install_without_launcher_is_error(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
