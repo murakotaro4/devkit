@@ -39,7 +39,7 @@ devkit_source_root_to_shell_path() {
   if [[ -z "$normalized" ]]; then
     local slash_path="${source_root//\\//}"
     if [[ "$slash_path" =~ ^([A-Za-z]):/(.*)$ ]]; then
-      normalized="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}"
+      normalized="/${BASH_REMATCH[1],,}/${BASH_REMATCH[2]}" # bash32-allow: Windows drive path, Git Bash (4+) only
     fi
   fi
 

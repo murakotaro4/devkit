@@ -180,6 +180,7 @@ uv run --project plugins/devkit python plugins/devkit/scripts/devkit_harness.py 
 - UTF-8 BOM 検査
 - skill surface / marketplace / smoke 検査
 - legacy migration token 検査
+- bash 3.2 互換検査（bash 4+ 専用構文の検出）
 - detect-secrets baseline 照合
 - pytest
 - plugin version bump gate (`verify-full` のみ)
