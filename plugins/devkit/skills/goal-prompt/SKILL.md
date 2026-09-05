@@ -1,6 +1,6 @@
 ---
 name: "goal-prompt"
-description: "会話・仕様・計画から /goal 実行用の Goal プロンプトを .claude/goal-runs/ へ保存生成し、起動プロンプトを出力する軽量スキル。「Goal プロンプトを作って」「/goal で実行できる形にして」「/goal-prompt」で起動"
+description: "固まった会話・仕様・計画を /goal 用ファイルと起動文へ変換する。『Goal プロンプトを作って』『/goal で実行できる形にして』『/goal-prompt』で起動"
 argument-hint: "[source]"
 ---
 
@@ -45,6 +45,8 @@ $ARGUMENTS
 保存先は `.claude/goal-runs/YYYY-MM-DD-<slug>-goal.md`。既存ファイルがある場合は上書きせず、`-goal` の前へ連番を入れて `YYYY-MM-DD-<slug>-2-goal.md` から採番する。commit せず、`plugins/devkit/premises.json` へ登録しない。
 
 `.claude/goal-runs/.gitignore` が無ければ `*` 1 行で新規作成し、既存の `.gitignore` は変更しない。git repo では `git check-ignore` で保存ファイルを確認し、未 ignore なら警告する。非 git では skip する。
+
+保存後に、採番したファイルが 1 件だけ存在し、内容に目的・成功条件・scope・非対象・検証・上限停止・完了証拠・完了レポート保存先があることを再読込で確認する。git repo では `git check-ignore` の終了コードも記録する。ファイルパス、ignore 確認、抽出した各項目、下記の起動文を完了証拠として報告する。
 
 ## 起動プロンプト出力
 

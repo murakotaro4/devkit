@@ -41,3 +41,40 @@
 - `推奨修正`
 - `確認事項`
 - `完了条件`
+
+各項目は `対象ファイル` / `理由` / `期待状態` を含める。
+
+## セッション抽出と生成
+
+必要なら SKILL.md のディレクトリを基準に、先に現在セッションの要約を `/tmp/current-session.txt` へ書き出す。read-only sandbox 等で `/tmp` を使えなければ会話コンテキストから直接作る。
+
+```bash
+SKILL_DIR="<この SKILL.md があるディレクトリの絶対パス>"
+uv run --no-project --python ">=3.10" python "$SKILL_DIR/scripts/session_extract.py" --input-file /tmp/current-session.txt --format json > /tmp/improve-skill-session.json
+```
+
+`refresh` は対象スキルの絶対パスを `TARGET_SKILL_DIR`、`create` は skills 親の絶対パスを `BASE_SKILLS_DIR` として次を実行する。
+共通起動形は `uv run --no-project --python ">=3.10" python` とする。
+
+| モード | 生成 |
+|---|---|
+| `refresh` | `"$SKILL_DIR/scripts/refresh_mapper.py" --skill "$TARGET_SKILL_DIR" --session-json /tmp/improve-skill-session.json --format markdown` |
+| `create` | `"$SKILL_DIR/scripts/create_blueprint.py" --session-json /tmp/improve-skill-session.json --base-path "$BASE_SKILLS_DIR" --format markdown` |
+
+`create` は demand-pull、2 repo またはセッションの証拠、最小手段の梯子、反復性 / 即興リスク / ハーネス非重複 / 監査可能性 / 撤退性へ照合する。満たさなければ理由と梯子上の代替手段を示す。
+
+## 出力形式
+
+```markdown
+## 必須修正
+- [ ] 対象: `path/to/file` | 理由: ... | 期待状態: ...
+
+## 推奨修正
+- [ ] 対象: `path/to/file` | 理由: ... | 期待状態: ...
+
+## 確認事項
+- [ ] ...
+
+## 完了条件
+- [ ] ...
+```

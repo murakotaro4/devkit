@@ -41,7 +41,16 @@ PLUGIN_DESCRIPTION_SURFACES = (
 
 
 def _read(relpath: str) -> str:
-    return (REPO_ROOT / relpath).read_text(encoding="utf-8")
+    path = REPO_ROOT / relpath
+    text = path.read_text(encoding="utf-8")
+    if path.name != "SKILL.md":
+        return text
+    references = path.parent / "references"
+    if references.is_dir():
+        text += "\n" + "\n".join(
+            item.read_text(encoding="utf-8") for item in sorted(references.glob("*.md"))
+        )
+    return text
 
 
 def _markdown_section(text: str, heading: str) -> str:
@@ -71,6 +80,17 @@ def _backtick_fence(line: str) -> tuple[int, str] | None:
     if not match:
         return None
     return len(match.group(1)), match.group(2).strip()
+
+
+def test_improve_skill_progressive_references_are_reachable():
+    skill = REPO_ROOT / "plugins/devkit/skills/improve-skill/SKILL.md"
+    text = skill.read_text(encoding="utf-8")
+    for name in ("question-flow.md", "checklist.md"):
+        target = skill.parent / "references" / name
+        assert target.is_file()
+        assert f"references/{name}" in text
+    assert "質問前に" in text
+    assert "評価・承認・適用前" in text
 
 
 def _line_patterns_in_blocks(
@@ -597,7 +617,7 @@ def test_layered_output_contract_is_canonical_and_referenced():
     shared_contract = _markdown_section(agents, "スキル共通契約")
 
     layer_sections = {
-        "dig": "2. 調査 + 計画(親)",
+            "dig": "調査と計画",
         "refactor": "3. 優先順位付け",
         "backlog": "4. ダッシュボード提示",
         "catch-up": "4. 更新計画と承認",
@@ -805,9 +825,10 @@ def test_pr_merge_completion_contract_stays_in_sync():
         for retired in retired_contracts:
             assert retired not in text, f"{doc_name} に旧 PR 統合契約が残っている: {retired}"
 
-    dig = documents["plugins/devkit/skills/dig/SKILL.md"]
-    planning = _markdown_section(dig, "2. 調査 + 計画(親)")
-    integration = _markdown_section(dig, "9. 統合・後始末・完了報告")
+    planning = _markdown_section(
+        _read("plugins/devkit/skills/dig/references/planning.md"), "調査と計画"
+    )
+    integration = _read("plugins/devkit/skills/dig/references/integration.md")
     for invariant in (
         "同じ SHA に束縛された checks",
         "merge queue / auto-merge",
@@ -890,10 +911,7 @@ def test_rebase_conflict_resolution_contract_stays_in_sync():
     for keyword in ("追加のみ", "和集合", "削除", "停止", "git rebase --abort", "verify-full", "片側"):
         assert keyword in contract, f"rebase 衝突の標準解消手順に契約キーワードがない: {keyword}"
 
-    dig = _read("plugins/devkit/skills/dig/SKILL.md")
-    integration = dig.split("### 9. 統合・後始末・完了報告", 1)[1].split(
-        "\n## ", 1
-    )[0]
+    integration = _read("plugins/devkit/skills/dig/references/integration.md")
     assert "標準解消規則" in integration, "dig の統合手順が標準解消規則を参照していない"
     assert any(
         all(token in line for token in ("conflict", "abort", "停止"))

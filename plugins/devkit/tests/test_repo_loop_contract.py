@@ -10,14 +10,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILL_PATH = REPO_ROOT / "plugins/devkit/skills/repo-loop/SKILL.md"
 OPENAI_YAML_PATH = REPO_ROOT / "plugins/devkit/skills/repo-loop/agents/openai.yaml"
+REFERENCE_DIR = SKILL_PATH.parent / "references"
 
 EXPECTED_FRONTMATTER = """name: "repo-loop"
-description: "手動・定期・イベント起点でリポジトリの目的と状態を調査し、価値が高く安全で検証可能な改善を1件だけ選び、実装・検証・独立レビューを経てDraft PRまたは提案Issueまで完遂する。『リポジトリを自動改善して』『定期メンテナンスして』『CI failureを直して』『/repo-loop』で起動"
+description: "手動・定期・イベント起点で改善を1件選び、Draft PRか提案Issueまで進める。『リポジトリを自動改善して』『定期メンテナンスして』『CI failureを直して』『/repo-loop』で起動"
 argument-hint: "[objective or repo-loop/v1 trigger envelope]\""""
 
 
 def _skill_text() -> str:
-    return SKILL_PATH.read_text(encoding="utf-8")
+    parts = [SKILL_PATH.read_text(encoding="utf-8")]
+    parts.extend(path.read_text(encoding="utf-8") for path in sorted(REFERENCE_DIR.glob("*.md")))
+    return "\n".join(parts)
 
 
 def _frontmatter_and_body() -> tuple[str, str]:
@@ -43,6 +46,14 @@ def test_immutable_metadata_and_heading():
 def test_agent_metadata_exists():
     assert OPENAI_YAML_PATH.is_file()
     assert "display_name" in OPENAI_YAML_PATH.read_text(encoding="utf-8")
+
+
+def test_progressive_references_are_reachable():
+    main = SKILL_PATH.read_text(encoding="utf-8")
+    for name in ("selection.md", "delivery.md"):
+        assert (REFERENCE_DIR / name).is_file()
+        assert f"references/{name}" in main
+    assert "始める直前" in main
 
 
 def test_trigger_envelope_and_noninteractive_contract():
@@ -119,6 +130,8 @@ def test_independent_review_and_downgrade_contract():
     # commit 済み branch ではなくそちらを対象にし、空 diff や無関係な diff を
     # レビューして Draft PR を出しうる。2026-07-25 の圧縮で消えていた([P1])。
     assert text.count('-C "<worktree>"') >= 2
+    assert "レビュー必須 repo なら Draft PR を公開せず `proposal` へ降格" in text
+    assert "レビュー必須でない repo だけ、未実施を明記した Draft PR を許可" in text
 
 
 def test_security_and_publication_guardrails():
@@ -127,8 +140,13 @@ def test_security_and_publication_guardrails():
         "untrusted input",
         "secret 検査",
         "staged diff",
+        "push 前の commit 群",
+        "導入済み scanner を優先",
+        "なければ pattern grep",
         "private vulnerability reporting",
         "<!-- repo-loop-run:<run_key> -->",
+        "Draft PR・提案・失敗 Issue を許可",
+        "Draft PR / 提案・失敗 Issue 以外の publish も許可しない",
     ):
         assert required in text
     for forbidden in (

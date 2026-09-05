@@ -27,6 +27,9 @@ SIZE_BASELINE: dict[str, int] = {
     "plugins/devkit/skills/catch-up/SKILL.md": 2963,
     "plugins/devkit/skills/commit-push/SKILL.md": 3092,
     "plugins/devkit/skills/dig/SKILL.md": 11231,
+    "plugins/devkit/skills/dig/references/execution.md": 0,
+    "plugins/devkit/skills/dig/references/integration.md": 0,
+    "plugins/devkit/skills/dig/references/planning.md": 0,
     "plugins/devkit/skills/goal-prompt/SKILL.md": 1898,
     "plugins/devkit/skills/handoff/SKILL.md": 2226,
     "plugins/devkit/skills/improve-skill/SKILL.md": 3878,
@@ -35,7 +38,11 @@ SIZE_BASELINE: dict[str, int] = {
     "plugins/devkit/skills/memory-review/SKILL.md": 4246,
     "plugins/devkit/skills/refactor/SKILL.md": 2451,
     "plugins/devkit/skills/repo-loop/SKILL.md": 8261,
+    "plugins/devkit/skills/repo-loop/references/delivery.md": 0,
+    "plugins/devkit/skills/repo-loop/references/selection.md": 0,
     "plugins/devkit/skills/setup/SKILL.md": 5926,
+    "plugins/devkit/skills/setup/references/environment.md": 0,
+    "plugins/devkit/skills/setup/references/sync-matrix.md": 0,
 }
 
 YAML_TOTAL_BASELINE = 2886
