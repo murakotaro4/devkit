@@ -1,15 +1,12 @@
 ---
 name: "dig"
-description: "要求を深掘りし、調査・計画・独立レビュー・worktree 実装から PR 統合まで完遂する主ワークフロー。「深掘りして」「実装して」「相談したい」「/dig」で起動"
+description: "開発要求を深掘りし、計画承認後に実装・検証・統合まで完遂する。『深掘りして』『実装して』『相談したい』『/dig』で起動"
 argument-hint: "[task]"
 ---
 
 # /dig - 深掘り + 実装完遂
 
-**dig の既定は実装完遂**。開始時に実行形態を質問しない。ユーザーが明示した場合だけ次へ分岐する。
-
-- 「計画だけ」「調査だけ」「相談だけ」「実装しない」等: read-only で終了
-- 「Goal プロンプトにして」「/goal で動かしたい」「後で実行したい」等: 「goal-prompt への引き継ぎ」へ
+**dig の既定は実装完遂**。開始時に実行形態を質問しない。ユーザーが「計画だけ」「調査だけ」「相談だけ」「実装しない」と明示した場合は read-only で終了する。「Goal プロンプトにして」「/goal で動かしたい」「後で実行したい」と明示した場合は goal-prompt へ引き継ぐ。
 
 ## 対象
 
@@ -18,246 +15,59 @@ $ARGUMENTS
 ## ハーネス判定と実行差分
 
 | 条件 | 親 | 質問 / 承認 |
-|------|----|-------------|
+|---|---|---|
 | `AskUserQuestion` が使える | Claude 親 | 質問は AskUserQuestion。step 1 で `EnterPlanMode`、承認は `ExitPlanMode`。利用不能時だけ計画全文への明示承認 |
 | AskUserQuestion がなく `spawn_agent` が使える | Codex 親 | plan mode は `request_user_input`、通常 mode は選択肢を提示して自由文回答 / 明示承認 |
 | どちらもない | 判定不能 | 選択肢を提示して自由文回答 / 明示承認 |
 
-`request_user_input` はハーネス判定に使わない。step 1-5 は read-only のため plan mode と整合する。承認前に step 6 へ進まない。
-
-工程ごとの委譲差分は次の表を正本とし、各 step では再掲しない。backend の固定とフォールバックは step 3 を正本とする。
-
-| 工程 | 既定 |
-|------|------|
-| 調査 | 親 / read-only agent（Codex 親は `spawn_agent` explorer） |
-| 計画レビュー | codex CLI（フォールバックは step 3） |
-| 実装 | cursor-agent（既定。フォールバックは step 3） |
-| diff レビュー | codex CLI（フォールバックは step 3） |
-| 修正 | 同じ thread / chat で resume（降格後は新規ジョブ、step 8） |
-
-Claude 親の CLI 委譲は `run_in_background` と完了通知で回収する。Codex 親は `wait_agent` で黙って待たず進捗を提示し、指摘解消まで `close_agent` を遅らせる。実体の進捗は `git status` / `git diff` とジョブログで確認し、resume は進捗確認に使わない。
-
-## 共通契約
+`request_user_input` はハーネス判定に使わない。step 1-5 は対象 repo に対して read-only とし、承認前に step 6 へ進まない。前半の書き込み例外は独立レビュー用の一時領域・ログと、ユーザー明示による goal-prompt 引き継ぎ時の `.claude/plans/` だけ。step 6-9 は承認済み write_scope 内だけを書き込む。sandbox の緩和や write_scope 外の変更が必要なら、実行前にユーザー確認を得る。frontmatter に `allowed-tools` を置かず、秘密情報・資格情報・個人情報は委譲プロンプトへ転記しない。
 
 ### タスクと進捗
 
-- step 1-9 と各委譲・長時間ジョブをタスクリストへ登録し、開始 / 完了状態を更新する。Codex 親は plan または進捗報告で同等に示す。
-- 1 ジョブ = 1 タスク。Claude 親は通知駆動で回収し、出力増分が数分止まった場合だけ停滞時間と推定原因を報告する。Codex 親は定期的に進捗を示す。
-
-### Codex モデル / effort
-
-- Codex のモデルは `gpt-5.6-sol` を `-m` で明示し、`model_reasoning_effort="medium"` に固定する。ユーザーが別モデルを明示した場合だけ従う。世代追従は catch-up と `premises.json` で管理する。
-- Max は対応 surface の最深推論、Ultra は並列オーケストレーションの説明にだけ使う。並列化はモデルと独立に、依存関係と write_scope で判断する。
-- Codex 親の `spawn_agent` では子ごとの effort を選ばない。
-
-非対話実行の基本形:
-
-```bash
-codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>" < /dev/null
-```
-
-### 書き込み契約
-
-step 1-5 は対象 repo に対して read-only、step 6-9 は承認済み write_scope 内だけを書き込む。前半の例外は次の 2 つだけ。
-
-1. step 4 / 7 の独立レビュー用 `mktemp` JOB_DIR とログ
-2. goal-prompt 引き継ぎ時の `.claude/plans/` への計画保存
-
-frontmatter に `allowed-tools` を置かず、利用可能なツールもこの境界に従う。秘密情報・資格情報・個人情報はプロンプトへ転記しない。
+step 1-9 と各委譲・長時間ジョブをタスク化し、1 ジョブ = 1 タスクとする。Claude 親の外部 CLI は `run_in_background` と完了通知で回収する。Codex 親は定期的に進捗を示す。`wait_agent` で黙って待たず、指摘解消まで `close_agent` を遅らせる。実体の進捗は `git status` / `git diff` とジョブログで確認し、resume を進捗確認に使わない。出力増分が数分止まった場合だけ、停滞の継続時間と推定原因を報告する。
 
 ## フロー
 
 ### 1. 深掘り(棚卸し駆動面談、親)
 
-タスク型と要求（目的、成功条件、非対象、優先度、好み）を確定する。毎ラウンド、更新した表を提示する。
-
-| 未知 | 影響 | 扱い |
-|------|------|------|
-| <未確定事項> | <成功条件・安全性・設計への影響> | 質問する / 仮定で進める / 確定済み |
-
-- 扱いは表の 3 値だけ。「質問する」行がゼロで終了し、目的 / 成功条件 / 非対象 / 採用した仮定をまとめる。
-- 成功条件や後戻りの大きさに効く未知を質問し、小さい未知は仮定で進める。1 ラウンド最大 4 問、選択肢と推奨を付ける。
-- 統合方法は質問せず、step 2 の調査で確定する。
+タスク型と要求を確定する。質問対象、表の形式、終了条件は、この工程を始める直前に [計画と承認](references/planning.md) の「深掘り」を読む。統合方法は質問せず step 2 の調査で確定する。
 
 ### 2. 調査 + 計画(親)
 
-対象を read-only で調べ、decision-complete な計画を作る。調査は read-only agent へ並列委譲できるが、計画は親が統合する。
-
-計画は「## 承認用サマリー」「## 詳細」の 2 層にする。第 1 層だけで承認判断できるよう次の 7 カテゴリを欠かさない。
-
-1. 何を / なぜ
-2. 判断してほしい点（推奨付き、最大 3 件程度。なければ「なし」）
-3. 既定からの逸脱・採用した仮定（なければ「既定どおり」）
-4. 後戻りしにくい操作・外部影響
-5. 計画レビュー / 実装 / diff レビューの固定 backend（降格時は降格先と理由。不能なら「適用なし」）
-6. green とする検証
-7. 独立レビュー状態（`実施済み(指摘 N 件反映)` / `skip(理由)` / `適用なし`）
-
-カテゴリ 5-7 は次の工程表へ統合し、承認の現在地を強調する。
-
-| 工程 | 状態 | backend |
-|------|------|---------|
-| 調査 | ✓ | 親 / agent |
-| 計画 | ✓ | 親 |
-| 計画レビュー | 実施済み(指摘 0 件反映) | 固定 backend（降格時は降格先と理由） |
-| **承認** | **← 今ここ** | ユーザー |
-| 実装 | — | 固定 backend（降格時は降格先と理由） |
-| diff レビュー | — | 固定 backend（降格時は降格先と理由） |
-| 検証 | — | green 条件 |
-| 統合 | — | 計画した方法 |
-
-散文部（カテゴリ 1-4）は約 1,000 字を目標とし、表は行数で管理する。約 1,000 字は hard limit ではない。第 2 層へ送るのは根拠・経緯・選択肢の詳細・手順だけとし、字数と完全性が衝突したら完全性を優先する。
-
-詳細には次を含める。
-
-| タスク | 必須項目 |
-|--------|----------|
-| 実装 | write_scope、ファイル別変更、検証、非対象、ブランチ、統合方法、commit 案、固定 backend と降格状態 |
-| 非実装 | read_scope、成功条件と検証、非対象と外部状態変更、実行形態。branch / commit / 統合 / 実装 backend は適用なし |
-
-統合は PR 提出 + CI green 確認 + merge が既定。origin なし、非 GitHub origin、または `gh` 不在なら計画時に直接統合へ決める。GitHub origin で API・認証・通信が失敗した場合は直接統合へ切り替えず停止する。PR 計画では repo 内 CI と GitHub 側設定を調べ、チェック 0 件の扱いと待機上限（既定 30 分）を明記する。
+対象を read-only で調べ、decision-complete な計画を親が統合する。計画を作る直前に [計画と承認](references/planning.md) の「調査と計画」を読み、承認用サマリー、工程表、write_scope、検証、統合方法を欠かさない。
 
 ### 3. backend 固定とフォールバック
 
-| 役割 | 既定 |
-|------|------|
-| 実装 | cursor-agent `cursor-grok-4.6-high` |
-| 計画レビュー | codex `gpt-5.6-sol` / medium |
-| diff レビュー | codex `gpt-5.6-sol` / medium |
-
-backend をユーザーに質問しない。ユーザーが明示指定した場合だけ従い、明示指定はフォールバック禁止の固定指定として扱う（使えなければ降格せず停止して報告する）。
-
-親種別ごとのフォールバック階段:
-
-| 親 | 実装 lane | レビュー lane（計画 / diff 共通） |
-|----|-----------|--------------------------------|
-| Claude 親 | cursor-agent → codex CLI → `Agent(general-purpose, model=sonnet)` → 停止 | codex CLI → `Agent(general-purpose, model=opus)` → 終端処理 |
-| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | `spawn_agent` explorer → 終端処理 |
-| 判定不能 | cursor-agent → codex CLI → 停止 | codex CLI → 終端処理 |
-
-- 上から順に、利用可能かつ降格条件に当たらない最初の段を使う。降格は前進のみ（有限段）。
-- Codex 親は `codex exec` 入れ子と `claude` CLI 逆委譲を禁じるため、実装階段から codex CLI 段を飛ばす。
-- 実装 lane の降格前に前段ジョブの終了を確認する。応答不能時も停止または終了確認してから次段を起こし、同一 worktree に 2 つの実装 actor を同時に走らせない。
-- 実装 lane が尽きたら停止して報告する（親が勝手に実装しない）。
-- レビュー lane 終端: 独立レビュー必須なら自動 skip せず停止。必須でない repo だけ未実施を明記して続行可。
-- 降格したら step 2 の工程表と完了報告へ「cursor-agent → codex（理由: rate limit）」の形で記す。**報告なしに fallback しない。**
-
-降格条件は全段共通の 3 分類。レート制限キーワード（大小文字無視）: `rate limit` / `rate_limit` / `ratelimit` / `quota` / `usage limit` / `too many requests` / `429`。
-
-1. 可用性判定の失敗
-2. 起動失敗
-3. レート制限: 非ゼロ終了かつログ末尾の CLI 終了時エラー出力（発話・tool 出力ではない）が上記キーワードに一致。曖昧ならレート制限に分類せず降格しない
-
-段ごとの具体形:
-- cursor-agent: 可用性=`command -v cursor-agent`、起動失敗=chat 作成が非ゼロ終了 / `CHAT_ID` 空、または実行呼び出しが agent 起動前に失敗（モデル利用不可・引数拒否など）、レート制限=条件 3
-- codex CLI: 可用性=`command -v codex`（実装 / resume はさらに `command -v uv`。レビューに `uv` 不要）、レート制限=条件 3。起動失敗は lane 別—実装 / resume: 非ゼロ終了し thread_id を採れない。レビュー: 起動そのものに失敗（実行不能・認証や設定不備で起動に至らない）。レビュー実行後の非ゼロは起動失敗にせず、降格せず停止して報告する
-- サブエージェント（`Agent(...)` / `spawn_agent`）: 起動不能または応答不能
-
-上記 3 分類に当たらない非ゼロ終了は降格しない。実装 lane は通常の実装失敗として step 8 の修正ループで処理し、レビュー lane は停止して報告する。
+backend を起動する直前に [実行経路](references/execution.md) の「backend 固定とフォールバック」を読む。モデル、effort、親別 lane、降格条件、停止・報告条件を変更せず適用する。backend は質問せず、ユーザー明示指定はフォールバック禁止の固定指定として扱う。
 
 ### 4. 計画レビュー
 
-計画レビュー backend に計画全文を渡し、decision-complete 性・矛盾・見落としを審査する。指摘を反映してから承認へ進む。レビュー lane の終端処理で未実施とした場合だけ省略する。
-
-codex の例:
-
-```bash
-codex -a never exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort="medium" "<計画レビュー指示>" < /dev/null
-```
+計画全文を独立 backend へ渡し、decision-complete 性・矛盾・見落としを審査する。起動直前に [計画と承認](references/planning.md) の「計画レビュー」を読み、指摘を反映してから承認へ進む。
 
 ### 5. 計画承認
 
-レビュー済み計画（未実施時はその状態を明記）を第 1 層から提示し、明示承認を得る。工程表に計画レビュー / 実装 / diff レビューの固定割り当てと降格状態を記す。承認後だけ plan mode を抜け、承認済み write_scope を有効にする。
+レビュー済み計画を第 1 層から提示して明示承認を得る。承認後だけ plan mode を抜け、承認済み write_scope を有効にする。提示直前に [計画と承認](references/planning.md) の「計画承認」を読む。
 
 ### 6. worktree 作成と実装委譲
 
-実装系は必ず worktree を使う。親が既定 branch を origin/HEAD、main、現在 branch の順で決める。origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする。remote 名は `origin` 固定で扱う(`upstream` など別名だけの repo は origin なし扱いになり、統合も直接統合へ倒れる)。一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。branch 名が既存なら `-2` から連番を付けて一意にする(他セッションの branch は正常に存在するため、衝突で停止しない)。作成失敗時は主 worktree へ移らず停止する。以後の実装・検証・レビューは worktree 内だけで行う。
-
-委譲指示は目的 / write_scope / 変更内容 / 受け入れ条件 / 検証 / commit 禁止を 1 ブロックにする。実装 backend は commit しない。
-
-#### CLI 起動形
-
-codex はジョブごとの JOB_DIR に JSONL を保存し、`thread.started` の非空 thread_id が厳密に 1 件の場合だけ `thread-id.txt` へ保存する。
-
-```bash
-JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-codex-job.XXXXXX") && echo "JOB_DIR=$JOB_DIR"
-JOB_DIR=<記録済みパス> && set -o pipefail && codex -a never exec -C "<worktree>" --sandbox workspace-write -m gpt-5.6-sol -c model_reasoning_effort="medium" --json "<実装指示>" < /dev/null | tee "$JOB_DIR/codex-events.jsonl"
-JOB_DIR=<記録済みパス> && uv run --no-project --python ">=3.10" python -c 'import json,sys; ids=[event.get("thread_id") for line in open(sys.argv[1], encoding="utf-8") if line.strip() for event in [json.loads(line)] if event.get("type") == "thread.started"]; (len(ids) == 1 and isinstance(ids[0], str) and ids[0]) or sys.exit("expected exactly one non-empty thread.started thread_id"); print(ids[0])' "$JOB_DIR/codex-events.jsonl" > "$JOB_DIR/thread-id.txt" && test -s "$JOB_DIR/thread-id.txt"
-```
-
-cursor-agent はジョブごとに chatId を保存する。stdout / stderr は合流して JOB_DIR に保存し、ログ増分で進捗を示す。
-
-```bash
-JOB_DIR=$(mktemp -d "${TMPDIR:-/tmp}/devkit-dig-job.XXXXXX") && set -o pipefail && CHAT_ID="$(cursor-agent create-chat < /dev/null | tr -d '\r\n')" && test -n "$CHAT_ID" && printf '%s\n' "$CHAT_ID" > "$JOB_DIR/chat-id.txt" && echo "JOB_DIR=$JOB_DIR"
-JOB_DIR=<記録済みパス> && set -o pipefail && cursor-agent -p --resume "$(cat "$JOB_DIR/chat-id.txt")" --trust --force --model cursor-grok-4.6-high --workspace "<worktree>" --output-format text "<実装指示>" < /dev/null 2>&1 | tee "$JOB_DIR/cursor-agent.log"
-```
-
-cursor-agent は sandbox なしで動くため write_scope と commit 禁止を指示する。すべての非対話 codex / cursor-agent コマンドで stdin を `< /dev/null` に閉じる。
-
-依存がなく write_scope が互いに素なジョブだけを並列化する。同一 worktree 内でも担当外変更と各ジョブ内のテスト実行を禁じ、親が統合後に一括検証する。
+git repo の実装系は必ず worktree を使う。非 git repo には worktree / commit / 統合を適用せず、diff と結果を報告する。作成・委譲直前に [実行経路](references/execution.md) の「worktree 作成と実装委譲」を読み、origin なし・branch 衝突の分岐、stdin、ジョブ識別子、write_scope、commit 禁止を適用する。
 
 #### 節目 commit
 
-実装 backend は commit しない。親がジョブを回収して diff を確認するたびに、そのジョブの write_scope をパス限定で add して commit する。`git add .` / `git add -A` は使わない。pre-commit が unstaged 変更を stash する repo では、並列ジョブ実行中は保留し、全ジョブ回収後にジョブ単位で順に commit する。
+実装 backend は commit しない。親がジョブ回収後、そのジョブの write_scope をパス限定で add して commit する。`git add .` / `git add -A` は使わない。詳細は [実行経路](references/execution.md) の同名節を読む。
 
 ### 7. 自レビューと独立 diff レビュー
 
-**レビュー前に実装を作業 branch へ commit しておく。** `review --base` は commit 済み差分だけを対象とするため、未 commit のままだと空 diff を「指摘なし」と誤報し、必須の独立レビューが空振りする。
-
-親が基点からの diff 全文を計画と照合し、逸脱の理由・リスク・要確認点を判断する。プロジェクトのテスト・lint を実行する。diff レビュー backend にブランチ全体をレビューさせ、実装 worker と同一 agent は使わない。レビュー lane が尽きた場合は step 3 の終端処理に従う（必須 repo は停止、必須でない repo だけ未実施を明記して続行）。
-
-codex review の例（origin なしは `--base <default>`）。**`-C "<worktree>"` で worktree を指定する**。通常 checkout で走らせると commit 済み branch ではなくそちらを対象にし、空 diff を「指摘なし」と誤報する:
-
-```bash
-codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base origin/<default> < /dev/null
-```
+レビュー前に実装を作業 branch へ commit する。自レビューと独立レビューを始める直前に [実行経路](references/execution.md) の「自レビューと独立 diff レビュー」を読む。
 
 ### 8. 修正ループ
 
-指摘を実装 backend へ戻し、親の確認・検証・独立レビューを繰り返す。CLI の共通引数は step 6 の起動形を維持し、resume 側の差分だけ次に示す。
-
-| backend | resume 差分 |
-|---------|-------------|
-| codex | `exec resume` + `"$(cat "$JOB_DIR/thread-id.txt")"` + `"<指摘と修正指示>"` |
-| cursor-agent | `--resume "$(cat "$JOB_DIR/chat-id.txt")"` + `"<指摘と修正指示>"` |
-| Codex 親 worker | 生存中は `send_input`、close 済みは新しい `spawn_agent` worker |
-
-修正ループ中に実装 backend が降格条件に当たった場合、step 3 の親別階段に従って次段へ降格する。chat / thread の文脈は引き継がず、現在の diff と未解消 findings を渡して新規ジョブを起こす。以後そのタスクで前段へ戻らない。
-
-codex の resume 完全形（非対話 stdin 契約の確認用）:
-
-```bash
-JOB_DIR=<記録済みパス> && test -s "$JOB_DIR/thread-id.txt" && codex -a never -C "<worktree>" --sandbox workspace-write exec resume -m gpt-5.6-sol -c model_reasoning_effort="medium" "$(cat "$JOB_DIR/thread-id.txt")" "<指摘と修正指示>" < /dev/null
-```
-
-cursor-agent は step 6 の完全形の最終引数だけ `"<指摘と修正指示>"` に替える。同じログ保存形を維持し、ログ増分で進捗を示す。diff が計画と一致し、テストが green、指摘がゼロで終了する。第 1 巡は最初の独立レビュー。件数は重複除去後の actionable findings 総数（severity は区別しない）。次のいずれかで停止し判断を求める: 件数が前巡以上の状態が 2 巡連続した / 同一 finding（同じファイル・箇所・根本原因。文言一致ではない）が 2 巡連続で再出した / 20 巡に達した。
+指摘がゼロになるまで修正・再検証・独立レビューを繰り返す。再開直前に [実行経路](references/execution.md) の「修正ループ」を読み、同じ thread / chat、降格後の新規ジョブ、収束停止条件を適用する。
 
 ### 9. 統合・後始末・完了報告
 
-計画した統合方法だけを実行する。PR 経路の骨格は提出 → CI 待機 → green 判定 → merge → 完了確認 → cleanup。
-
-- 統合直前に fetch / rebase し、必要な単調増加値を origin から再計算して再検証する。repo に標準解消規則のない conflict は abort して停止する。
-- checks の取得前後に head SHA を取得し、同じ SHA に束縛された checks だけを判定する。SHA が動いた checks は破棄する。
-- `gh` の API・認証・通信エラーをチェック 0 件の成功と混同しない。0 件の扱いは計画した CI 有無と登録猶予に従い、観測した checks を優先する。
-- green は全 checks が pass（skipping は許容）のときだけ。赤・pending・期限超過は merge しない。
-- merge queue / auto-merge が有効、または preflight が確認不能なら merge せず停止・報告する。
-- merge 直前の head が検証済み SHA と同じ場合だけ `gh pr merge <PR番号> --merge --match-head-commit <検証済みSHA>` を実行する。repo 規則の方式フラグを必ず明示し、`--delete-branch` は使わず、失敗時に別方式へ切り替えない。
-- `gh pr view <PR番号> --json state,mergedAt` で `MERGED` を確認するまで統合完了としない。
-- cleanup は remote tip が検証済み SHA と一致することを確認してから行う。不在時も PR の headRefOid で同一性を確認する。remote branch の削除は期待 tip を束縛した `git push --force-with-lease=refs/heads/<branch>:<検証済みSHA> origin :refs/heads/<branch>` で行う（束縛なしで消すと、確認後に他者が push した commit を捨てうる）。確認不能・不一致・lease 失敗は remote を削除せず「統合成功・cleanup 未完了」として残存物を報告する。
-- CI 赤・merge 失敗では PR を open のまま残し、worktree・branch・commit を破棄せず停止する。
-
-直接統合は主 worktree が clean、既定 branch 上、非 diverged のときだけ ff-only merge / push する。push reject は fetch / rebase / 再検証からやり直す。origin なしは ff-only merge で完了とする。
-
-cleanup は統合確認後だけ行い、`git worktree remove <worktree>` → ローカル branch 削除の順で進める。merge commit 方式は `git merge-base --is-ancestor` で取り込み済みを確認して `git branch -d <branch>`、squash / rebase 方式は PR の `state` / `mergedAt` / `headRefOid` 一致を根拠に記録してから `git branch -D <branch>`。ローカル branch を残したまま完了にしない。未追跡ファイル等で worktree remove が拒否されたら `--force` を使わない。節目 commit は親だけが行い、ジョブの write_scope をパス限定で add する。`git add .` / `git add -A` は使わない。
-
-失敗時は変更を破棄せず、branch、worktree、停止操作、再開方法を報告する。完了報告には変更、検証、逸脱・仮定、残課題、commit、PR、CI、merge の `MERGED` 確認、cleanup 状態を含める。
+計画した統合方法だけを実行する。統合開始直前に [統合と完了](references/integration.md) を読み、標準解消規則に沿う fetch / rebase、再検証、PR、CI green、head SHA、merge、削除の安全条件、失敗時の保存、完了報告を順に適用する。
 
 ## goal-prompt への引き継ぎ(ユーザー明示時のみ)
 
-レビュー済み計画を `.claude/plans/YYYY-MM-DD-<slug>.md` へ保存して実装せず終了し、`/goal-prompt` を案内する。goal-prompt は意味を変えず Goal プロンプトへ変換するだけで、追加承認や独立レビューを行わない。dig は組み込み `/goal` を自動発動しない。
-
-## 実装の注意
-
-- sandbox 緩和や write_scope 外の変更はユーザー確認を得る。
-- backend が使えなければ step 3 のフォールバック階段に従って降格し、必ず報告する。
-- 非 git repo は worktree / commit / 統合を適用せず、diff と結果を報告する。
+レビュー済み計画を `.claude/plans/YYYY-MM-DD-<slug>.md` へ保存して実装せず終了し、`/goal-prompt` を案内する。goal-prompt は意味を変えず Goal プロンプトへ変換するだけで、追加承認や独立レビューを行わない。dig は組み込み `/goal` を自動発動しない。詳細は [統合と完了](references/integration.md) の「goal-prompt への引き継ぎ」を読む。

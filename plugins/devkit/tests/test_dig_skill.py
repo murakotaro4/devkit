@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILL_PATH = REPO_ROOT / "plugins" / "devkit" / "skills" / "dig" / "SKILL.md"
+REFERENCE_DIR = SKILL_PATH.parent / "references"
 
 
 def _read(relpath: str) -> str:
@@ -15,7 +16,9 @@ def _read(relpath: str) -> str:
 
 
 def _skill_text() -> str:
-    return SKILL_PATH.read_text(encoding="utf-8")
+    parts = [SKILL_PATH.read_text(encoding="utf-8")]
+    parts.extend(path.read_text(encoding="utf-8") for path in sorted(REFERENCE_DIR.glob("*.md")))
+    return "\n".join(parts)
 
 
 def _frontmatter() -> str:
@@ -25,6 +28,20 @@ def _frontmatter() -> str:
 
 
 def _section(text: str, heading: str) -> str:
+    routed = {
+        "### 書き込み契約": (SKILL_PATH, "## ハーネス判定と実行差分"),
+        "### 1. 深掘り(棚卸し駆動面談、親)": (REFERENCE_DIR / "planning.md", "## 深掘り"),
+        "### 2. 調査 + 計画(親)": (REFERENCE_DIR / "planning.md", "## 調査と計画"),
+        "### 3. backend 固定とフォールバック": (REFERENCE_DIR / "execution.md", "## backend 固定とフォールバック"),
+        "### 4. 計画レビュー": (REFERENCE_DIR / "planning.md", "## 計画レビュー"),
+        "### 6. worktree 作成と実装委譲": (REFERENCE_DIR / "execution.md", "## worktree 作成と実装委譲"),
+        "### 7. 自レビューと独立 diff レビュー": (REFERENCE_DIR / "execution.md", "## 自レビューと独立 diff レビュー"),
+        "### 8. 修正ループ": (REFERENCE_DIR / "execution.md", "## 修正ループ"),
+        "### 9. 統合・後始末・完了報告": (REFERENCE_DIR / "integration.md", "# 統合と完了"),
+    }
+    if heading in routed:
+        path, routed_heading = routed[heading]
+        return _section(path.read_text(encoding="utf-8"), routed_heading)
     start = text.index(heading)
     level = len(heading) - len(heading.lstrip("#"))
     match = re.search(rf"^#{{1,{level}}} (?!#)", text[start + len(heading) :], re.MULTILINE)
@@ -50,6 +67,17 @@ def test_skill_exists_and_frontmatter_contract():
         "/dig",
     ):
         assert trigger in frontmatter
+    assert "開発要求を深掘り" in frontmatter
+    assert "曖昧な開発要求" not in frontmatter
+    assert len(re.search(r'^description: "(.*)"$', frontmatter, re.MULTILINE).group(1)) <= 100
+
+
+def test_progressive_references_are_reachable_and_loaded_just_in_time():
+    main = SKILL_PATH.read_text(encoding="utf-8")
+    for name in ("planning.md", "execution.md", "integration.md"):
+        assert (REFERENCE_DIR / name).is_file()
+        assert f"references/{name}" in main
+    assert all(term in main for term in ("直前に", "始める直前に", "統合開始直前に"))
 
 
 def test_frontmatter_does_not_limit_allowed_tools():
@@ -66,6 +94,8 @@ def test_default_is_implementation_completion_without_asking_mode():
 def test_write_contract_phase_boundaries():
     write_contract = _section(_skill_text(), "### 書き込み契約")
     assert "step 1-5" in write_contract
+    assert "sandbox の緩和や write_scope 外の変更" in write_contract
+    assert "実行前にユーザー確認を得る" in write_contract
 
 
 def test_inventory_driven_interview_contract():
@@ -243,6 +273,13 @@ def test_worktree_creation_keeps_its_exception_paths():
     creation = _section(_skill_text(), "### 6. worktree 作成と実装委譲")
     assert "fetch を省略" in creation
     assert "`-2` から連番" in creation
+
+
+def test_non_git_repo_skips_git_only_lifecycle():
+    creation = _section(_skill_text(), "### 6. worktree 作成と実装委譲")
+    assert "git repo の実装系は必ず worktree" in creation
+    assert "非 git repo には worktree / commit / 統合を適用せず" in creation
+    assert "diff と結果を報告" in creation
 
 
 def test_delegation_records_explicit_thread_id_and_resumes_it():

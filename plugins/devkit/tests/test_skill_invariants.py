@@ -639,13 +639,13 @@ def mutate_remote_delete_lease_targets_other_ref(docs: Docs) -> Docs:
 # 計画レビュー(step 4)は worktree 作成より前なので含めない。
 WORKTREE_SECTIONS = {
     "plugins/devkit/skills/dig/SKILL.md": (
-        "### 6. worktree 作成と実装委譲",
-        "### 7. 自レビューと独立 diff レビュー",
-        "### 8. 修正ループ",
+        "## worktree 作成と実装委譲",
+        "## 自レビューと独立 diff レビュー",
+        "## 修正ループ",
     ),
     "plugins/devkit/skills/repo-loop/SKILL.md": (
-        "### worktree・実装・検証",
-        "### 独立レビュー",
+        "## worktree・実装・検証",
+        "## 独立レビュー",
     ),
 }
 
@@ -1037,7 +1037,7 @@ def mutate_enum_table_cells(docs: Docs) -> Docs:
 
 ROLE_TABLE_HEADER = ("役割", "既定")
 FALLBACK_TABLE_HEADER = ("親", "実装 lane", "レビュー lane（計画 / diff 共通）")
-BACKEND_SECTION = "### 3. backend 固定とフォールバック"
+BACKEND_SECTION = "## backend 固定とフォールバック"
 CURSOR_MODEL = "cursor-grok-4.6-high"
 CODEX_MODEL = "gpt-5.6-sol"
 EXPECTED_ROLES = ("実装", "計画レビュー", "diff レビュー")
@@ -1288,9 +1288,9 @@ DIG = "plugins/devkit/skills/dig/SKILL.md"
 REPAIR_LOOP_BACKSTOP = 20
 REPAIR_LOOP_STREAK = 2
 REPAIR_LOOP_SURFACES = {
-    "plugins/devkit/skills/dig/SKILL.md": "### 8. 修正ループ",
+    "plugins/devkit/skills/dig/SKILL.md": "## 修正ループ",
     "plugins/devkit/skills/goal-prompt/SKILL.md": "## 上限停止の自動算出",
-    "plugins/devkit/skills/repo-loop/SKILL.md": "### 独立レビュー",
+    "plugins/devkit/skills/repo-loop/SKILL.md": "## 独立レビュー",
 }
 REPAIR_LOOP_BACKSTOP_RE = re.compile(r"(\d+)\s*巡(?:に達した|到達)")
 REPAIR_LOOP_STREAK_RE = re.compile(r"(\d+)\s*巡連続")
@@ -1536,7 +1536,7 @@ def mutate_approval_before_implementation(docs: Docs) -> Docs:
 CI_MERGE_SURFACES = {
     "AGENTS.md": ("## Workflow", "## 並行開発と worktree"),
     "plugins/devkit/skills/dig/SKILL.md": (
-        "### 9. 統合・後始末・完了報告",
+        "## PR 統合",
         "## goal-prompt への引き継ぎ",
     ),
 }
@@ -2164,9 +2164,20 @@ EXPECTED_CATEGORIES = {
 }
 
 
-REAL_DOCS = {
-    path: (REPO_ROOT / path).read_text(encoding="utf-8") for path in TARGET_PATHS
-}
+def _read_target(path: str) -> str:
+    target = REPO_ROOT / path
+    text = target.read_text(encoding="utf-8")
+    if target.name == "SKILL.md":
+        references = target.parent / "references"
+        if references.is_dir():
+            text += "\n" + "\n".join(
+                item.read_text(encoding="utf-8")
+                for item in sorted(references.glob("*.md"))
+            )
+    return text
+
+
+REAL_DOCS = {path: _read_target(path) for path in TARGET_PATHS}
 
 
 def test_all_invariants_hold_on_real_docs():

@@ -98,6 +98,22 @@ def test_audit_taxonomies_are_complete():
     assert "4 役(監査役 / 矛盾検出役 / 安全性レビュー役 / 修正案作成役)" in audit_section
 
 
+def test_progressive_loading_and_constraint_distinction_are_audited():
+    text = _skill_text()
+    audit_section = text[text.index("## 監査対象 × 観点") : text.index("## フロー")]
+    for phrase in (
+        "起動条件どうしの競合",
+        "段階的読込",
+        "一律に全参照を先読みさせる手順",
+        "失敗の影響から必要な制約",
+        "適用条件と失敗時影響の根拠で区別",
+    ):
+        assert phrase in audit_section
+    loading = text[text.index("### 2. 正本特定 + 対象読み込み") : text.index("### 3. 監査")]
+    assert "入口文書と参照関係だけを読み" in loading
+    assert "監査直前に段階的に読む" in loading
+
+
 def test_report_has_fixed_ordered_sections():
     text = _skill_text()
     report = text[text.index("### 5. 監査レポート出力") : text.index("### 6. 修正の承認と適用")]

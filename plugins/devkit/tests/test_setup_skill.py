@@ -22,6 +22,13 @@ UPDATER_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_upda
 CURSOR_PRUNE_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/prune_legacy_cursor_sync.py"
 CLAUDE_ENV_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_claude_env.py"
 CURSOR_SHIM_SCRIPT_PATH = REPO_ROOT / "plugins/devkit/skills/setup/scripts/sync_cursor_agent_shims.py"
+REFERENCE_DIR = SKILL_PATH.parent / "references"
+
+
+def _skill_text() -> str:
+    parts = [SKILL_PATH.read_text(encoding="utf-8")]
+    parts.extend(path.read_text(encoding="utf-8") for path in sorted(REFERENCE_DIR.glob("*.md")))
+    return "\n".join(parts)
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -58,13 +65,13 @@ def _run_sync_json(repo: Path, template: Path, *extra_args: str) -> dict[str, ob
 
 
 def test_skill_frontmatter():
-    text = SKILL_PATH.read_text(encoding="utf-8")
+    text = _skill_text()
     match = re.match(r"^---\n(.*?)\n---\n\n(.*)$", text, re.DOTALL)
     assert match, "frontmatter が見つからない"
     frontmatter = match.group(1)
     assert frontmatter == (
         'name: "setup"\n'
-        'description: "対象リポジトリへ DevKit 標準ルールを、ユーザー環境へ updater・compaction env・cursor-agent シムを同期し旧 updater 名と Cursor 同期資産の残骸を prune する。「セットアップして」「ルール同期して」「/setup」で起動"\n'
+        'description: "DevKitのルールを対象リポジトリへ、利用資産をユーザー環境へ同期する。『セットアップして』『ルール同期して』『/setup』で起動"\n'
         'argument-hint: "[target]"\n'
         'allowed-tools: ["Read", "Grep", "Glob", "Bash", "Write", "Edit", '
         '"AskUserQuestion", "request_user_input", "TaskCreate", "TaskUpdate"]'
@@ -73,16 +80,24 @@ def test_skill_frontmatter():
 
 
 def test_harness_matrix_and_approval_boundary():
-    text = SKILL_PATH.read_text(encoding="utf-8")
+    text = _skill_text()
     harness = text.split("## ハーネス判定", 1)[1].split("## 実行前提", 1)[0]
     assert "request_user_input` は判定キーに使わない" in harness
     assert "通常の同期・prune に差分承認ゲートは置かない" in text
     assert "承認が必要なのは statusline と Windows Terminal font だけ" in text
 
 
+def test_progressive_references_are_reachable():
+    main = SKILL_PATH.read_text(encoding="utf-8")
+    for name in ("environment.md", "sync-matrix.md"):
+        assert (REFERENCE_DIR / name).is_file()
+        assert f"references/{name}" in main
+    assert "直前に" in main
+
+
 def test_environment_prerequisite_matrix():
-    text = SKILL_PATH.read_text(encoding="utf-8")
-    section = text.split("### 環境前提チェック", 1)[1].split("## 同期", 1)[0]
+    text = (REFERENCE_DIR / "environment.md").read_text(encoding="utf-8")
+    section = text.split("## 環境前提チェック", 1)[1].split("## statusline 適用", 1)[0]
     for cmd in ("claude", "codex", "cursor-agent", "node", "uv"):
         assert f"`{cmd}`" in section
     assert "tmux" not in section
@@ -94,8 +109,7 @@ def test_environment_prerequisite_matrix():
 
 
 def test_sync_target_matrix_is_complete():
-    text = SKILL_PATH.read_text(encoding="utf-8")
-    sync = text.split("## 同期", 1)[1].split("## 承認が必要な適用", 1)[0]
+    sync = (REFERENCE_DIR / "sync-matrix.md").read_text(encoding="utf-8")
     expected = {
         "repo rules": "sync_rules.py",
         "thought-db": "sync_thought_db.py",
@@ -137,7 +151,7 @@ def test_sync_target_matrix_is_complete():
 
 
 def test_marker_compaction_and_cursor_safety_invariants():
-    text = SKILL_PATH.read_text(encoding="utf-8")
+    text = _skill_text()
     for marker in (
         "devkit:rules:start",
         "devkit:rules:end",
@@ -152,7 +166,7 @@ def test_marker_compaction_and_cursor_safety_invariants():
 
 
 def test_compaction_env_values_are_literal_and_scoped():
-    text = SKILL_PATH.read_text(encoding="utf-8")
+    text = _skill_text()
     assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW=1000000" in text
     assert "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=50" in text
     assert "project / local / managed scope" in text
@@ -160,10 +174,8 @@ def test_compaction_env_values_are_literal_and_scoped():
 
 
 def test_windows_font_approval_and_failure_boundary():
-    text = SKILL_PATH.read_text(encoding="utf-8")
-    section = text.split("### ターミナルフォント適用(Windows のみ)", 1)[1].split(
-        "### 検証とレポート", 1
-    )[0]
+    text = (REFERENCE_DIR / "environment.md").read_text(encoding="utf-8")
+    section = text.split("## ターミナルフォント適用(Windows のみ)", 1)[1]
     assert "UDEV Gothic NF" in text
     assert "setup_terminal_font.py" in section
     assert "--check --format json" in section
@@ -342,7 +354,7 @@ def _run_thought_sync(
 
 
 def test_skill_contract_mentions_thought_db_sync():
-    text = SKILL_PATH.read_text(encoding="utf-8")
+    text = _skill_text()
 
     assert "devkit:thought-db:start" in text
     assert "devkit:thought-db:end" in text

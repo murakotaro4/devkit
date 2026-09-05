@@ -34,6 +34,7 @@ def test_skill_exists_and_frontmatter_contract():
     assert 'name: "goal-prompt"' in frontmatter
     assert "description:" in frontmatter
     assert 'argument-hint: "[source]"' in frontmatter
+    assert "固まった会話・仕様・計画" in frontmatter
 
 
 def test_openai_yaml_surface():
@@ -62,6 +63,18 @@ def test_gitignore_creation_contract():
     assert "git repo では `git check-ignore` で保存ファイルを確認" in save_contract
     assert "未 ignore なら警告" in save_contract
     assert "非 git では skip" in save_contract
+
+
+def test_saved_goal_has_readback_completion_evidence():
+    save_contract = _section(_skill_text(), "## 保存契約")
+    for phrase in (
+        "採番したファイルが 1 件だけ存在",
+        "再読込で確認",
+        "git check-ignore` の終了コード",
+        "ファイルパス、ignore 確認、抽出した各項目",
+        "完了証拠として報告",
+    ):
+        assert phrase in save_contract
 
 
 def test_launch_prompt_output_basic_form():
