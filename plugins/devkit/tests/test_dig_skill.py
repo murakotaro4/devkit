@@ -215,9 +215,17 @@ def test_codex_parent_fallback_lanes_without_effort_selection():
     text = _skill_text()
     backend = _section(text, "### 3. backend 固定とフォールバック")
     assert "| Codex 親 |" in backend
-    assert "cursor-agent → `spawn_agent` worker → 親実装 → 停止" in backend
-    assert "`spawn_agent` explorer → 終端処理" in backend
+    assert "| Codex 親 | 親実装 | `spawn_agent` reviewer → 終端処理 |" in backend
+    assert "`spawn_agent` worker" not in text
+    assert "子には再レビューだけ" in text
+    assert "調査・実装・修正を委譲しない" in SKILL_PATH.read_text(encoding="utf-8")
+    assert "`spawn_agent` reviewer → 終端処理" in backend
     assert "model_reasoning_effort" not in backend
+    environment = _read("plugins/devkit/skills/setup/references/environment.md")
+    for cli in ("codex", "cursor-agent"):
+        row = next(line for line in environment.splitlines() if line.startswith(f"| `{cli}` |"))
+        assert "Claude 親・判定不能" in row
+        assert "Codex 親" in row and "不要" in row
 
 
 def test_pinned_model_effort_and_stdin_contract():

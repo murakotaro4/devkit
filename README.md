@@ -36,7 +36,9 @@ v6 の置き換え先は marketplace 配布の `dig` と `improve-skill` です�
 
 `dig` と `setup` は Claude Code と Codex の両親ハーネスを想定します。`dig` の Claude 親は計画作成・承認に plan mode / `ExitPlanMode` を既定で使い、Codex 親では plan mode と組み込み plan / agent 機能へ読み替えます。`refactor` は read-only の計画化で終了し、実装は `/dig` 側へ接続します。`memory-review` の監査は read-only とし、書き込みはレポート保存と承認済み軽微修正だけに限定します。構成変更を伴う大きい修正は `/dig` へ引き継ぎます。`handoff` は書き出し専用で、読み込み・自動復元・commit / push は行いません。`backlog` は read-only の横断棚卸しで、handoff が書き出した引継ぎや、goal-prompt が保存した Goal プロンプトや dig の計画を読む側の工程を担い、実装は `/dig` へ接続します。`catch-up` は外部値の追従専用で、内部メモリ監査は `memory-review`、セッション内エラー起点の改善は `improve-skill retro`、workflow contract の変更は `/dig` を使います。`commit-push` はレビュアー機能を持たない commit / push 専用の工程で、レビューが必要な実装は `/dig` を使います。`repo-loop` はユーザー要求ではなく trigger 起点で改善を自選し、low/medium risk は Draft PR まで(auto-merge・ready 化はしない)、high risk は提案 Issue へ降格する点で dig と分離します。
 
-実装の既定は cursor-agent `cursor-grok-4.6-high` です。Codex への委譲ではモデルを `gpt-5.6-sol`、effort を Medium に固定します（計画レビュー・diff レビュー、および実装のフォールバック時。世代追従は `catch-up` スキルと `premises.json` で管理します）。Max は対応 surface の最深推論、Ultra は並列オーケストレーションとして説明だけに使い、DevKit の選択肢・CLI effort・config 値にはしません。
+Codex 親（Astra を含む）は調査・設計・実装・検証・修正・最終判断を一貫して担当する。サブエージェントへの委譲は読み取り専用の独立レビューに限定し、調査・実装・修正を委譲しない。レビュー担当はファイル編集、Git の変更操作、外部への書き込み、追加のサブエージェント起動を行わず、指摘と根拠を親へ返す。 親とレビュー担当のモデル・effort は現在の親設定を基本とします。
+
+Claude 親・判定不能の場合、実装の既定は cursor-agent `cursor-grok-4.6-high` です。Codex への委譲ではモデルを `gpt-5.6-sol`、effort を Medium に固定します（計画レビュー・diff レビュー、および実装のフォールバック時。世代追従は `catch-up` スキルと `premises.json` で管理します）。Max は対応 surface の最深推論、Ultra は並列オーケストレーションとして説明だけに使い、DevKit の選択肢・CLI effort・config 値にはしません。
 
 ## Statusline
 
@@ -230,4 +232,4 @@ version 運用ルールの正本は `AGENTS.md` の「Release Rules」です。�
 
 この repo でファイル変更を伴う作業は、親エージェントの diff 自レビューに加えて独立 review を 1 回以上実施します。指摘が出た場合は修正後に再 review し、追加 findings がなくなるまで繰り返します。
 
-`dig` を使う場合は、実装を cursor-agent、計画レビュー / diff レビューを codex に固定し、利用不能時は親種別のフォールバック階段で降格します。backend の選択質問はせず、降格したら必ず報告します。通常の手作業でも `verify-full` を最終 gate として扱います。
+`dig` の Codex 親は自身で実装・修正し、子は独立レビューだけを行います。Claude 親・判定不能の場合は、実装を cursor-agent、計画レビュー / diff レビューを codex に固定し、利用不能時は親種別のフォールバック階段で降格します。backend の選択質問はせず、降格したら必ず報告します。通常の手作業でも `verify-full` を最終 gate として扱います。

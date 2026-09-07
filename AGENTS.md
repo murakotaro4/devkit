@@ -27,7 +27,7 @@
 
 ## 並行開発と worktree
 
-- dig の実装は 1 ブランチ = 1 worktree とし、複数機能を main 作業ツリーで並行しない。同一 worktree の並列委譲は write_scope を互いに素にする
+- dig の実装は 1 ブランチ = 1 worktree とし、複数機能を main 作業ツリーで並行しない。Claude 親・判定不能の場合だけ実装を委譲でき、同一 worktree の並列委譲は write_scope を互いに素にする
 - `plugins/devkit/**` に触る作業の開始時と version bump 直前に `git fetch origin` し、origin/main に遅れていれば取り込む
 - 他セッション由来の worktree・ブランチ・open PR は常に存在しうる進行中の正常な作業として扱う。削除・checkout・rebase・「残骸がある」等の報告の対象にしない。後始末は自セッションが作成した worktree・ブランチ・PR に限り、他 worktree の調査・掃除はユーザーが明示依頼した場合のみ行う
 - origin/main の進行を通常運転とし、統合前に fetch + rebase と version 再計算を行う
@@ -121,6 +121,11 @@ dig に限り、カテゴリ 5〜7(backend 表 / 検証 / 独立レビュー状�
 
 ### Codex 契約
 
+- Codex 親（Astra を含む）は調査・設計・実装・検証・修正・最終判断を一貫して担当する。サブエージェントへの委譲は読み取り専用の独立レビューに限定し、調査・実装・修正を委譲しない。レビュー担当はファイル編集、Git の変更操作、外部への書き込み、追加のサブエージェント起動を行わず、指摘と根拠を親へ返す。
+- 親のモデルと effort は現在の設定を維持し、レビュー担当も原則として親の設定を引き継ぐ。ユーザーが指定した場合はその指定に従う。
+
+以下の CLI 契約は Claude 親・判定不能の場合だけ適用する。
+
 ```bash
 codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>" < /dev/null
 ```
@@ -165,4 +170,4 @@ codex -a never exec -m gpt-5.6-sol -c model_reasoning_effort="medium" "<内容>"
 
 ## Codex Exec 相談ルール
 
-行き詰まりや設計判断の検証には「Codex 契約」の実行形で外部モデルへ相談できる。結果は参考意見とし、最終判断は親エージェントが行う。
+Codex 親は外部 CLI へ相談を委譲せず、自身で判断し、必要なら判断案をサブエージェントの独立レビューへ渡す。Claude 親・判定不能の場合、行き詰まりや設計判断の検証には「Codex 契約」の実行形で外部モデルへ相談できる。結果は参考意見とし、最終判断は親エージェントが行う。

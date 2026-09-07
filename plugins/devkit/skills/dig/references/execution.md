@@ -4,6 +4,8 @@
 
 ## backend 固定とフォールバック
 
+Codex 親は親実装に固定し、子は独立レビューだけに使う。次の役割表の CLI 既定は Claude 親・判定不能の場合だけ適用する。
+
 | 役割 | 既定 |
 |---|---|
 | 実装 | cursor-agent `cursor-grok-4.6-high` |
@@ -13,10 +15,10 @@
 | 親 | 実装 lane | レビュー lane（計画 / diff 共通） |
 |---|---|---|
 | Claude 親 | cursor-agent → codex CLI → `Agent(general-purpose, model=sonnet)` → 停止 | codex CLI → `Agent(general-purpose, model=opus)` → 終端処理 |
-| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | `spawn_agent` explorer → 終端処理 |
+| Codex 親 | 親実装 | `spawn_agent` reviewer → 終端処理 |
 | 判定不能 | cursor-agent → codex CLI → 停止 | codex CLI → 終端処理 |
 
-上から順に利用可能かつ降格条件に当たらない最初の段を使い、降格は前進だけとする。Codex 親は `codex exec` 入れ子と `claude` CLI 逆委譲を禁じるため codex CLI 段を飛ばす。実装 lane の降格前に前段ジョブの終了を確認し、同一 worktree に 2 つの実装 actor を同時に走らせない。実装 lane が尽きたら停止する。独立レビュー必須 repo でレビュー lane が尽きたら自動 skip せず停止する。必須でない repo だけ未実施を明記できる。降格先と理由を工程表と完了報告へ記し、**報告なしに fallback しない。**
+上から順に利用可能かつ降格条件に当たらない最初の段を使い、降格は前進だけとする。Codex 親は `codex exec` 入れ子、`claude` CLI 逆委譲、Cursor への実装委譲を行わない。親実装が続行不能なら子や外部 CLI へ降格せず停止して報告する。以下の実装 lane の降格は Claude 親・判定不能だけに適用する。実装 lane の降格前に前段ジョブの終了を確認し、同一 worktree に 2 つの実装 actor を同時に走らせない。実装 lane が尽きたら停止する。独立レビュー必須 repo でレビュー lane が尽きたら自動 skip せず停止する。必須でない repo だけ未実施を明記できる。降格先と理由を工程表と完了報告へ記し、**報告なしに fallback しない。**
 
 降格条件は、可用性判定の失敗、起動失敗、レート制限の 3 分類。レート制限は非ゼロ終了かつ CLI 終了時エラーが `rate limit` / `rate_limit` / `ratelimit` / `quota` / `usage limit` / `too many requests` / `429` に一致する場合だけ。曖昧ならレート制限に分類せず降格しない。
 
@@ -28,6 +30,8 @@
 
 ## Codex モデルと推論強度
 
+Codex 親とレビュー担当は現在の親のモデル・effort を基本とし、ユーザー指定があれば従う。子に特定モデルを強制しない。以下は Claude 親・判定不能から呼ぶ CLI の設定だけを定める。
+
 Codex のモデルは `gpt-5.6-sol` を `-m` で明示し、`model_reasoning_effort="medium"` に固定する。ユーザーが別モデルを明示した場合だけ従う。Max は対応 surface の最深推論、Ultra は並列オーケストレーションの説明にだけ使う。世代追従は catch-up と `premises.json` で管理する。Codex 親の `spawn_agent` では子ごとの effort を選ばない。
 
 ## worktree 作成と実装委譲
@@ -35,6 +39,8 @@ Codex のモデルは `gpt-5.6-sol` を `-m` で明示し、`model_reasoning_eff
 git repo の実装系は必ず worktree を使う。非 git repo には worktree / commit / 統合を適用せず、diff と結果を報告する。
 
 親が既定 branch を origin/HEAD、main、現在 branch の順で決める。origin があれば fetch し、無ければ fetch を省略して基点を `HEAD` にする。remote 名は `origin` 固定とし、`upstream` 等の別名だけの repo は origin なし扱いにする。一時 worktree と `<type>/<slug>` branch を作り、開始 commit を記録する。作業 branch が既存なら `-2` から連番を付ける。作成失敗時は主 worktree へ移らず停止する。
+
+Codex 親は作成した worktree で自身が調査・実装・検証を行う。以下の委譲指示・CLI 起動・ジョブ回収は Claude 親・判定不能の場合だけ適用する。
 
 委譲指示は目的 / write_scope / 変更内容 / 受け入れ条件 / 検証 / commit 禁止を 1 ブロックにする。依存がなく write_scope が互いに素なジョブだけ並列化し、各担当は担当外変更とテスト実行を行わない。
 
@@ -57,11 +63,11 @@ JOB_DIR=<記録済みパス> && set -o pipefail && cursor-agent -p --resume "$(c
 
 ### 節目 commit
 
-実装 backend は commit しない。親がジョブを回収し、そのジョブの write_scope をパス限定で add して commit する。pre-commit が unstaged 変更を stash する repo では全ジョブ回収後にジョブ単位で順に commit する。
+Codex 親は自身の差分を確認し、write_scope をパス限定で add して commit する。Claude 親・判定不能の場合、実装 backend は commit しない。親がジョブを回収し、そのジョブの write_scope をパス限定で add して commit する。pre-commit が unstaged 変更を stash する repo では全ジョブ回収後にジョブ単位で順に commit する。
 
 ## 自レビューと独立 diff レビュー
 
-親が基点からの diff 全文を計画と照合し、テスト・lint を実行する。**レビュー前に実装を作業 branch へ commit しておく。** `review --base` は commit 済み差分だけを対象とする。独立 backend は実装 worker と同じ agent を使わない。
+親が基点からの diff 全文を計画と照合し、テスト・lint を実行する。**レビュー前に実装を作業 branch へ commit しておく。** `review --base` は commit 済み差分だけを対象とする。独立 backend は実装 worker と同じ agent を使わない。Codex 親は読み取り専用のサブエージェントへ目的・成功条件・対象範囲・基点からの差分・検証結果を渡す。レビュー担当は根拠確認だけを行い、編集・外部書き込み・再委譲は禁止する。指摘の採否と修正は親が担当する。以下の CLI 例は Claude 親・判定不能だけに適用する。
 
 ```bash
 codex -a never exec -C "<worktree>" -m gpt-5.6-sol -c model_reasoning_effort="medium" review --base origin/<default> < /dev/null
@@ -71,11 +77,12 @@ origin なしは `--base <default>`。必須 repo でレビュー lane が尽き
 
 ## 修正ループ
 
+Codex 親は指摘を根拠と照合して自身で修正・検証し、子には再レビューだけを依頼する。以下の resume 表と CLI 再開は Claude 親・判定不能だけに適用する。収束停止条件は全ての親に適用する。
+
 | backend | resume 差分 |
 |---|---|
 | codex | `exec resume` + `"$(cat "$JOB_DIR/thread-id.txt")"` + `"<指摘と修正指示>"` |
 | cursor-agent | `--resume "$(cat "$JOB_DIR/chat-id.txt")"` + `"<指摘と修正指示>"` |
-| Codex 親 worker | 生存中は `send_input`、close 済みは新しい `spawn_agent` worker |
 
 修正中に降格条件へ当たった場合は次段へ進み、chat / thread の文脈を引き継がず現在の diff と未解消 findings を渡す。以後は前段へ戻らない。
 

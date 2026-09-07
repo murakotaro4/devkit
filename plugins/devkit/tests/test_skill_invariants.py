@@ -1057,13 +1057,10 @@ EXPECTED_FALLBACK_LANES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     ),
     "Codex 親": (
         (
-            "cursor-agent",
-            "`spawn_agent` worker",
             "親実装",
-            "停止",
         ),
         (
-            "`spawn_agent` explorer",
+            "`spawn_agent` reviewer",
             "終端処理",
         ),
     ),
@@ -1237,11 +1234,11 @@ def mutate_fixed_backend_assignment_duplicates_parent(docs: Docs) -> Docs:
     return _replace_once(
         docs,
         DIG,
-        "| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | "
-        "`spawn_agent` explorer → 終端処理 |",
-        "| Codex 親 | cursor-agent → 停止 | `spawn_agent` explorer → 終端処理 |\n"
-        "| Codex 親 | cursor-agent → `spawn_agent` worker → 親実装 → 停止 | "
-        "`spawn_agent` explorer → 終端処理 |",
+        "| Codex 親 | 親実装 | "
+        "`spawn_agent` reviewer → 終端処理 |",
+        "| Codex 親 | cursor-agent → 停止 | `spawn_agent` reviewer → 終端処理 |\n"
+        "| Codex 親 | 親実装 | "
+        "`spawn_agent` reviewer → 終端処理 |",
     )
 
 

@@ -22,6 +22,10 @@ $ARGUMENTS
 
 `request_user_input` はハーネス判定に使わない。step 1-5 は対象 repo に対して read-only とし、承認前に step 6 へ進まない。前半の書き込み例外は独立レビュー用の一時領域・ログと、ユーザー明示による goal-prompt 引き継ぎ時の `.claude/plans/` だけ。step 6-9 は承認済み write_scope 内だけを書き込む。sandbox の緩和や write_scope 外の変更が必要なら、実行前にユーザー確認を得る。frontmatter に `allowed-tools` を置かず、秘密情報・資格情報・個人情報は委譲プロンプトへ転記しない。
 
+### Codex 親の作業分担
+
+Codex 親（Astra を含む）は調査・設計・実装・検証・修正・最終判断を一貫して担当する。サブエージェントへの委譲は読み取り専用の独立レビューに限定し、調査・実装・修正を委譲しない。レビュー担当はファイル編集、Git の変更操作、外部への書き込み、追加のサブエージェント起動を行わず、指摘と根拠を親へ返す。 親のモデルと effort は現在の設定を維持し、レビュー担当も原則として引き継ぐ。ユーザー指定があれば従う。外部 CLI への実装委譲も行わない。
+
 ### タスクと進捗
 
 step 1-9 と各委譲・長時間ジョブをタスク化し、1 ジョブ = 1 タスクとする。Claude 親の外部 CLI は `run_in_background` と完了通知で回収する。Codex 親は定期的に進捗を示す。`wait_agent` で黙って待たず、指摘解消まで `close_agent` を遅らせる。実体の進捗は `git status` / `git diff` とジョブログで確認し、resume を進捗確認に使わない。出力増分が数分止まった場合だけ、停滞の継続時間と推定原因を報告する。
@@ -54,7 +58,7 @@ git repo の実装系は必ず worktree を使う。非 git repo には worktree
 
 #### 節目 commit
 
-実装 backend は commit しない。親がジョブ回収後、そのジョブの write_scope をパス限定で add して commit する。`git add .` / `git add -A` は使わない。詳細は [実行経路](references/execution.md) の同名節を読む。
+Codex 親は自身の実装を確認し、write_scope をパス限定で add して commit する。Claude 親・判定不能の場合、実装 backend は commit しない。親がジョブ回収後、そのジョブの write_scope をパス限定で add して commit する。`git add .` / `git add -A` は使わない。詳細は [実行経路](references/execution.md) の同名節を読む。
 
 ### 7. 自レビューと独立 diff レビュー
 
@@ -62,7 +66,7 @@ git repo の実装系は必ず worktree を使う。非 git repo には worktree
 
 ### 8. 修正ループ
 
-指摘がゼロになるまで修正・再検証・独立レビューを繰り返す。再開直前に [実行経路](references/execution.md) の「修正ループ」を読み、同じ thread / chat、降格後の新規ジョブ、収束停止条件を適用する。
+指摘がゼロになるまで修正・再検証・独立レビューを繰り返す。Codex 親は自身で修正し、子には再レビューだけを依頼する。以下の thread / chat 再開は Claude 親・判定不能の場合だけ適用する。再開直前に [実行経路](references/execution.md) の「修正ループ」を読み、同じ thread / chat、降格後の新規ジョブ、収束停止条件を適用する。
 
 ### 9. 統合・後始末・完了報告
 
