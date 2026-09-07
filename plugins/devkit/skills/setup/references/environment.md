@@ -12,8 +12,8 @@
 | `uv` | 必須同期と Windows font を実行できないため、同期前に停止。macOS は `brew install uv`、Windows は `winget install --id astral-sh.uv` |
 | `node` | statusline だけ skip。他の同期と font は継続。必要なら `brew install node` |
 | `claude` | goal-prompt の `/goal` 実行環境がない。同期は継続 |
-| `codex` | dig の実装・計画レビュー・diff レビュー backend が使えない。同期は継続 |
-| `cursor-agent` | dig の任意高速 lane が使えない。同期は継続 |
+| `codex` | Claude 親・判定不能の dig CLI backend が使えない。Codex 親の実装・子レビューには不要。同期は継続 |
+| `cursor-agent` | Claude 親・判定不能の dig 実装 lane が使えない。Codex 親の実装には不要。同期は継続 |
 
 ## statusline 適用
 
