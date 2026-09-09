@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,11 +13,82 @@ from typing import Any
 
 START_MARKER = "<!-- devkit:rules:start -->"
 END_MARKER = "<!-- devkit:rules:end -->"
-METADATA_VERSION = "1"
+METADATA_VERSION = "2"
+CONFIG_PATH = ".agents/devkit-rules-config.json"
+DEFAULT_CONFIG = {"version": 1, "harness": "dual", "policy": "devkit"}
+POLICIES = ("devkit", "repo-local")
+
+
+def ensure_regular_path(repo_root: Path, path: Path) -> None:
+    """Reject redirected or irregular targets before any write (including backups)."""
+    for parent in path.relative_to(repo_root).parents:
+        candidate = repo_root / parent
+        if candidate.is_symlink() or (candidate.exists() and not candidate.is_dir()):
+            raise SystemExit(f"unsafe directory: {candidate}")
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise SystemExit(f"unsafe file: {path}")
+
+
+def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def read_config(repo_root: Path) -> dict[str, Any]:
+    path = repo_root / CONFIG_PATH
+    ensure_regular_path(repo_root, path)
+    if not path.exists():
+        return DEFAULT_CONFIG.copy()
+    try:
+        config = json.loads(read_text(path), object_pairs_hook=unique_object)
+    except (ValueError, UnicodeError) as exc:
+        raise SystemExit(f"invalid rules config: {exc}") from exc
+    if (
+        not isinstance(config, dict)
+        or config.keys() != DEFAULT_CONFIG.keys()
+        or type(config.get("version")) is not int
+        or config["version"] != 1
+        or config.get("harness") not in ("dual", "codex-only")
+        or config.get("policy") not in POLICIES
+    ):
+        raise SystemExit("invalid rules config: expected version=1, harness=dual|codex-only, policy=devkit|repo-local")
+    return config
+
+
+def render_template(template: str, policy: str) -> str:
+    """Select policy without deriving authority from the harness choice."""
+    if "<!-- devkit:policy:" not in template:
+        if policy != "devkit":
+            raise SystemExit("repo-local requires a policy-aware rules template")
+        rendered = template  # Existing custom templates retain their default behavior.
+    else:
+        rendered = template
+        for name in POLICIES:
+            start = f"<!-- devkit:policy:{name}:start -->"
+            end = f"<!-- devkit:policy:{name}:end -->"
+            if rendered.count(start) != 1 or rendered.count(end) != 1:
+                raise SystemExit("malformed template policy markers")
+            first, last = rendered.index(start), rendered.index(end)
+            if last < first:
+                raise SystemExit("malformed template policy markers")
+            body = rendered[first + len(start):last]
+            if "<!-- devkit:policy:" in body:
+                raise SystemExit("nested template policy markers")
+            rendered = rendered[:first] + (body.strip("\n") if name == policy else "") + rendered[last + len(end):]
+        if "<!-- devkit:policy:" in rendered:
+            raise SystemExit("unknown template policy marker")
+    if "<!-- devkit:rules:" in rendered:
+        raise SystemExit("rules template must not contain managed block markers")
+    return rendered.strip("\n") + "\n"
 
 
 def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
 
 
 def write_text(path: Path, content: str) -> None:
@@ -53,6 +125,12 @@ def replace_or_append_agents(existing: str | None, block: str) -> tuple[str, str
     if existing is None:
         return block, "create_agents"
 
+    marker_lines = re.findall(r"<!-- devkit:rules:[^\r\n]*", existing)
+    if any(line not in (START_MARKER, END_MARKER) for line in marker_lines):
+        raise SystemExit("AGENTS.md has malformed devkit rules markers")
+    for line in existing.splitlines():
+        if "<!-- devkit:rules:" in line and line not in (START_MARKER, END_MARKER):
+            raise SystemExit("AGENTS.md has malformed devkit rules markers")
     start_count = existing.count(START_MARKER)
     end_count = existing.count(END_MARKER)
     if start_count != end_count or start_count > 1:
@@ -66,7 +144,9 @@ def replace_or_append_agents(existing: str | None, block: str) -> tuple[str, str
     if start != -1:
         end += len(END_MARKER)
         after = existing[end:]
-        if after.startswith("\n"):
+        if after.startswith("\r\n"):
+            after = after[2:]
+        elif after.startswith("\n"):
             after = after[1:]
         return f"{existing[:start]}{block}{after}", "update_agents_block"
 
@@ -122,11 +202,13 @@ def read_metadata(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def build_metadata(template_hash: str) -> dict[str, str]:
+def build_metadata(template_hash: str, config: dict[str, Any]) -> dict[str, str]:
     return {
         "version": METADATA_VERSION,
         "synced_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "template_sha256": template_hash,
+        "harness": config["harness"],
+        "policy": config["policy"],
     }
 
 
@@ -142,19 +224,31 @@ def dump_result(changed: bool, actions: list[str]) -> None:
 def sync_rules(target: Path, template: Path, dry_run: bool) -> int:
     repo_root = run_git_root(target.resolve())
     ensure_supported_target(repo_root)
-    template_text = read_text(template.resolve())
+    config = read_config(repo_root)
+    # Preserve the existing cross-platform template hash (LF-normalized text).
+    # AGENTS/backup reads remain byte-preserving for repo-owned content.
+    template_text = template.resolve().read_text(encoding="utf-8")
     template_hash = sha256_text(template_text)
-    block = desired_block(template_text)
+    block = desired_block(render_template(template_text, config["policy"]))
 
     agents_path = repo_root / "AGENTS.md"
     claude_path = repo_root / "CLAUDE.md"
-    metadata_path = repo_root / ".claude/devkit-rules.json"
-    backup_path = repo_root / ".claude/devkit-rules-backup/AGENTS.md.bak"
+    metadata_path = repo_root / ".agents/devkit-rules.json"
+    backup_path = repo_root / ".agents/devkit-rules-backup/AGENTS.md.bak"
+
+    for path in (agents_path, metadata_path, backup_path):
+        ensure_regular_path(repo_root, path)
+    if config["harness"] == "dual":
+        ensure_regular_path(repo_root, claude_path)
 
     existing_agents = read_text(agents_path) if agents_path.exists() else None
     desired_agents, agents_action = replace_or_append_agents(existing_agents, block)
-    existing_claude = read_text(claude_path) if claude_path.exists() else None
-    desired_claude, claude_changed = ensure_claude_reference(existing_claude)
+    existing_claude = None
+    desired_claude = ""
+    claude_changed = False
+    if config["harness"] == "dual":
+        existing_claude = read_text(claude_path) if claude_path.exists() else None
+        desired_claude, claude_changed = ensure_claude_reference(existing_claude)
     metadata = read_metadata(metadata_path)
 
     actions: list[str] = []
@@ -165,6 +259,8 @@ def sync_rules(target: Path, template: Path, dry_run: bool) -> int:
         and isinstance(metadata.get("synced_at"), str)
         and bool(metadata.get("synced_at"))
         and metadata.get("template_sha256") == template_hash
+        and metadata.get("harness") == config["harness"]
+        and metadata.get("policy") == config["policy"]
     )
 
     if agents_changed:
@@ -187,7 +283,7 @@ def sync_rules(target: Path, template: Path, dry_run: bool) -> int:
         write_text(agents_path, desired_agents)
     if claude_changed:
         write_text(claude_path, desired_claude)
-    write_text(metadata_path, json.dumps(build_metadata(template_hash), ensure_ascii=False, indent=2) + "\n")
+    write_text(metadata_path, json.dumps(build_metadata(template_hash, config), ensure_ascii=False, indent=2) + "\n")
 
     dump_result(True, actions)
     return 0
