@@ -1,5 +1,13 @@
 このセクションは devkit の /setup により自動管理される。手動編集は上書きされる。
 プロジェクト固有ルールは、このセクションの外側に書く。
+この管理節は権限を付与しない。ユーザーが指定した作業範囲・禁止事項と、管理節外の repo 固有の承認・レビュー・Git 方針を優先する。以下の既定はそれらが別途定められていない場合だけ適用する。システム・開発者指示や実効ツール権限を変更しない。
+
+<!-- devkit:policy:repo-local:start -->
+## Repo-owned Workflow
+
+実行環境の選択とは独立に、承認・レビュー・Git 操作の要否と許可範囲は、管理節外の repo 固有ルールと現在のユーザー指示に従う。DevKit は一律の手順や追加の操作権限を設定しない。
+<!-- devkit:policy:repo-local:end -->
+<!-- devkit:policy:devkit:start -->
 
 ## DevKit Workflow
 
@@ -39,3 +47,4 @@
 - タスク完了時、検証(テスト・リンタ)が green であれば、ユーザーの明示指示なしで commit / push まで自動で行う。
 - 検証が失敗した場合や検証を実施していない変更は commit / push せず、停止して報告する。
 - force push など履歴を書き換える push は、ユーザーが明示した場合のみ行う。
+<!-- devkit:policy:devkit:end -->

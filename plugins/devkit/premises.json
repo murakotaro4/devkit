@@ -631,16 +631,17 @@
     {
       "id": "python-runner",
       "summary": "配布スキルの Python スクリプト実行形",
-      "current_value": "uv run --no-project --python \">=3.10\" python",
+      "current_value": "uv run --no-project --python \">=3.10\" python / repo-only: $RULES_PYTHON (existing Python >=3.10)",
       "value_patterns": [
-        "(?<![A-Za-z0-9_])uv run --no-project --python \">=3\\.10\" python(?![A-Za-z0-9_])"
+        "(?<![A-Za-z0-9_])uv run --no-project --python \">=3\\.10\" python(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_])\\$RULES_PYTHON(?![A-Za-z0-9_])"
       ],
       "obsolete_value_patterns": [
         "(?<![A-Za-z0-9_])command -v python3(?![A-Za-z0-9_])",
         "(?<![A-Za-z0-9_])python3 \\\"(?![A-Za-z0-9_])"
       ],
       "verify_hint": "uv --help / astral-sh/uv releases",
-      "update_notes": "対象 3 SKILL.md・README・AGENTS・テストを同時更新",
+      "update_notes": "対象 3 SKILL.md・README・AGENTS・テストを同時更新。repo-only は既存 Python の絶対パスを RULES_PYTHON に明示し、uv の環境準備を起動しない。通常同期の uv 実行形は維持",
       "last_verified": "2026-07-18",
       "exclude_paths": [
         "plugins/devkit/scripts/update-ccx.sh",
@@ -661,7 +662,7 @@
         },
         {
           "path": "plugins/devkit/skills/setup/references/sync-matrix.md",
-          "count": 1
+          "count": 2
         },
         {
           "path": "plugins/devkit/tests/test_dig_skill.py",
@@ -764,6 +765,10 @@
         {
           "path": "plugins/devkit/tests/test_update_bootstrap.py",
           "count": 5
+        },
+        {
+          "path": "plugins/devkit/skills/setup/references/sync-matrix.md",
+          "count": 3
         }
       ]
     },

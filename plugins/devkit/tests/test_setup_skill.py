@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
 from hashlib import sha256
 from pathlib import Path
+
+import pytest
+
+from conftest import require_symlink_support
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -238,13 +243,13 @@ def test_sync_rules_script_is_idempotent_and_preserves_user_content(tmp_path):
     assert "Managed rules v1" in agents
     assert "Keep this line." in agents
     assert (repo / "CLAUDE.md").read_text(encoding="utf-8").splitlines().count("@./AGENTS.md") == 1
-    metadata = json.loads((repo / ".claude/devkit-rules.json").read_text(encoding="utf-8"))
-    assert metadata["version"] == "1"
+    metadata = json.loads((repo / ".agents/devkit-rules.json").read_text(encoding="utf-8"))
+    assert metadata["version"] == "2"
     assert isinstance(metadata["synced_at"], str) and metadata["synced_at"]
     normalized_template = template.read_text(encoding="utf-8").encode("utf-8")
     expected_template_sha256 = sha256(normalized_template).hexdigest()
     assert metadata["template_sha256"] == expected_template_sha256
-    assert (repo / ".claude/devkit-rules-backup/AGENTS.md.bak").exists()
+    assert (repo / ".agents/devkit-rules-backup/AGENTS.md.bak").exists()
 
     second = _run_sync_json(repo, template)
 
@@ -278,7 +283,7 @@ def test_sync_rules_dry_run_does_not_write(tmp_path):
     assert result["changed"] is True
     assert "<!-- devkit:rules:start -->" not in (repo / "AGENTS.md").read_text(encoding="utf-8")
     assert not (repo / "CLAUDE.md").exists()
-    assert not (repo / ".claude/devkit-rules.json").exists()
+    assert not (repo / ".agents/devkit-rules.json").exists()
 
 
 def test_sync_rules_normalizes_duplicate_claude_reference(tmp_path):
@@ -485,3 +490,265 @@ def test_sync_rules_rejects_devkit_repository_itself(tmp_path):
 
     assert result.returncode != 0
     assert "DevKit repository itself" in result.stderr
+
+
+CONFIG_REL = ".agents/devkit-rules-config.json"
+
+
+def _configured_repo(tmp_path, harness="codex-only", policy="repo-local"):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    (repo / ".agents").mkdir()
+    (repo / CONFIG_REL).write_text(
+        json.dumps({"version": 1, "harness": harness, "policy": policy}), encoding="utf-8"
+    )
+    return repo
+
+
+def _snapshot(root):
+    # Include directories, content and mtimes: no-op must not rewrite identical data.
+    return {
+        str(path.relative_to(root)): (
+            "dir" if path.is_dir() else path.read_bytes(), path.stat().st_mtime_ns
+        )
+        for path in root.rglob("*")
+    }
+
+
+def _protected_home():
+    home = Path(os.environ["HOME"])
+    assert home == Path(os.environ["USERPROFILE"])
+    for name in (".claude/settings.json", ".codex/AGENTS.md", ".local/bin/update-ccx", "font.ttf"):
+        path = home / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("protected user environment", encoding="utf-8")
+    return home
+
+
+@pytest.mark.parametrize("harness", ["dual", "codex-only"])
+@pytest.mark.parametrize("policy", ["devkit", "repo-local"])
+def test_rules_harness_and_authority_are_independent(tmp_path, harness, policy):
+    repo = _configured_repo(tmp_path, harness, policy)
+    home = _protected_home()
+    home_before = _snapshot(home)
+    config_before = (repo / CONFIG_REL).read_bytes()
+    assert _run_sync_json(repo, TEMPLATE_PATH)["changed"]
+    text = (repo / "AGENTS.md").read_text(encoding="utf-8")
+    assert (repo / "CLAUDE.md").exists() == (harness == "dual")
+    assert not (repo / ".claude").exists()
+    assert "devkit:policy:" not in text
+    assert ("## Review Rules" in text) == (policy == "devkit")
+    assert ("ユーザーの明示指示なしで commit / push" in text) == (policy == "devkit")
+    assert "管理節外" in text
+    metadata = json.loads((repo / ".agents/devkit-rules.json").read_text())
+    assert metadata["harness"] == harness
+    assert metadata["policy"] == policy
+    before = _snapshot(repo)
+    assert _run_sync_json(repo, TEMPLATE_PATH) == {"actions": [], "changed": False, "skipped": True}
+    assert _snapshot(repo) == before
+    assert (repo / CONFIG_REL).read_bytes() == config_before
+    assert _snapshot(home) == home_before
+
+
+def test_codex_only_preserves_legacy_and_outside_bytes_and_removes_old_authority(tmp_path):
+    repo = _configured_repo(tmp_path)
+    legacy_paths = (
+        "CLAUDE.md", ".claude/devkit-rules.json",
+        ".claude/devkit-rules-backup/AGENTS.md.bak", ".claude/state/protected.json",
+    )
+    for name in legacy_paths:
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"protected\r\ninvalid json too\r\n")
+    legacy_before = {name: ((repo / name).read_bytes(), (repo / name).stat().st_mtime_ns) for name in legacy_paths}
+    prefix = "# Repo authority\r\n承認済み範囲は継続。レビューは条件付き。stage/commit/pushは禁止。\r\n".encode()
+    suffix = "\r\n## 固有規則\r\n保護データは変更しない。\r\n".encode()
+    old = prefix + (
+        "<!-- devkit:rules:start -->\r\n"
+        "実装前に計画を提示し、ユーザー承認を得る。\r\n"
+        "独立した review を 1 回以上実施する。\r\n"
+        "ユーザーの明示指示なしで commit / push まで自動で行う。\r\n"
+        "<!-- devkit:rules:end -->\r\n"
+    ).encode() + suffix
+    (repo / "AGENTS.md").write_bytes(old)
+    assert _run_sync_json(repo, TEMPLATE_PATH)["changed"]
+    current = (repo / "AGENTS.md").read_bytes()
+    assert current.startswith(prefix) and current.endswith(suffix)
+    block = current.decode().split("<!-- devkit:rules:start -->")[1].split("<!-- devkit:rules:end -->")[0]
+    for unwanted in ("## Commit Rules", "## Review Rules", "ユーザー承認を得る", "独立した review", "自動で行う", "`/dig`"):
+        assert unwanted not in block
+    assert (repo / ".agents/devkit-rules-backup/AGENTS.md.bak").read_bytes() == old
+    before = _snapshot(repo)
+    assert not _run_sync_json(repo, TEMPLATE_PATH)["changed"]
+    assert _snapshot(repo) == before
+    assert {name: ((repo / name).read_bytes(), (repo / name).stat().st_mtime_ns) for name in legacy_paths} == legacy_before
+
+
+@pytest.mark.parametrize("config", [
+    "{", "[]", "null", '{}',
+    '{"version":1,"harness":"codex-only"}',
+    '{"version":true,"harness":"codex-only","policy":"repo-local"}',
+    '{"version":2,"harness":"codex-only","policy":"repo-local"}',
+    '{"version":1,"harness":"codex","policy":"repo-local"}',
+    '{"version":1,"harness":"codex-only","policy":"unknown"}',
+    '{"version":1,"harness":[],"policy":"repo-local"}',
+    '{"version":1,"harness":"codex-only","policy":"repo-local","extra":1}',
+    '{"version":1,"harness":"dual","harness":"codex-only","policy":"repo-local"}',
+])
+@pytest.mark.parametrize("dry_args", [(), ("--dry-run",)])
+def test_invalid_rules_config_has_no_partial_writes(tmp_path, config, dry_args):
+    repo = _configured_repo(tmp_path)
+    (repo / CONFIG_REL).write_text(config)
+    (repo / "AGENTS.md").write_text("unchanged")
+    home = _protected_home()
+    before, home_before = _snapshot(repo), _snapshot(home)
+    result = _run_sync(repo, TEMPLATE_PATH, *dry_args, check=False)
+    assert result.returncode != 0
+    assert "invalid rules config" in result.stderr
+    assert _snapshot(repo) == before
+    assert _snapshot(home) == home_before
+
+
+@pytest.mark.parametrize("markers", [
+    "<!-- devkit:rules:start -->\n",
+    "<!-- devkit:rules:end -->\n",
+    "<!-- devkit:rules:end -->\n<!-- devkit:rules:start -->\n",
+    "<!-- devkit:rules:start -->\n<!-- devkit:rules:end -->\n" * 2,
+    "<!-- devkit:rules:start ->\n<!-- devkit:rules:end -->\n",
+    "prefix <!-- devkit:rules:start -->\n<!-- devkit:rules:end -->\n",
+])
+def test_invalid_rules_markers_preflight_all_writes(tmp_path, markers):
+    repo = _configured_repo(tmp_path)
+    (repo / "AGENTS.md").write_text(markers)
+    before = _snapshot(repo)
+    assert _run_sync(repo, TEMPLATE_PATH, check=False).returncode != 0
+    assert _snapshot(repo) == before
+
+
+@pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("harness", ["dual", "codex-only"])
+def test_repo_rules_dry_run_preserves_all_surfaces(tmp_path, existing, harness):
+    repo = _configured_repo(tmp_path, harness)
+    home = _protected_home()
+    (repo / "AGENTS.md").write_text("# local authority\n")
+    if existing:
+        _run_sync_json(repo, TEMPLATE_PATH)
+        # Force a planned AGENTS/backup/metadata update on the next run.
+        with (repo / "AGENTS.md").open("a") as handle:
+            handle.write("\n<!-- no managed edit -->\n")
+        template = tmp_path / "template.md"
+        template.write_text(TEMPLATE_PATH.read_text() + "\nUpdated shared text.\n")
+    else:
+        template = TEMPLATE_PATH
+    before, home_before = _snapshot(repo), _snapshot(home)
+    assert _run_sync_json(repo, template, "--dry-run")["changed"]
+    assert _snapshot(repo) == before
+    assert _snapshot(home) == home_before
+
+
+@pytest.mark.parametrize("relative", [
+    "AGENTS.md", CONFIG_REL, ".agents/devkit-rules.json",
+    ".agents/devkit-rules-backup/AGENTS.md.bak", ".agents", ".agents/devkit-rules-backup",
+])
+def test_rules_rejects_symlink_write_paths_before_partial_update(tmp_path, relative):
+    require_symlink_support()
+    repo = _configured_repo(tmp_path)
+    external = tmp_path / "external"
+    external.mkdir()
+    path = repo / relative
+    if path.is_dir():
+        path.rename(external / "saved")
+        path.symlink_to(external / "saved", target_is_directory=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            path.rename(external / "saved")
+        else:
+            (external / "saved").write_text("protected")
+        path.symlink_to(external / "saved")
+    before, external_before = _snapshot(repo), _snapshot(external)
+    result = _run_sync(repo, TEMPLATE_PATH, check=False)
+    assert result.returncode != 0
+    assert "unsafe" in result.stderr
+    assert _snapshot(repo) == before
+    assert _snapshot(external) == external_before
+
+
+def test_repo_local_rejects_unscoped_custom_template(tmp_path):
+    repo = _configured_repo(tmp_path)
+    template = tmp_path / "custom.md"
+    template.write_text("Automatically commit and push")
+    before = _snapshot(repo)
+    assert _run_sync(repo, template, check=False).returncode != 0
+    assert _snapshot(repo) == before
+
+
+def test_repo_only_skill_routes_before_user_environment_checks():
+    text = SKILL_PATH.read_text()
+    section = text.split("## 同期範囲", 1)[1].split("## 実行前提", 1)[0]
+    assert "--repo-only" in section and "sync_rules.py" in section
+    assert "だけを実行して検証・報告後に終了" in section
+    for target in ("thought-db", "updater", "prune", "Claude 環境変数", "shim", "statusline", "font"):
+        assert target in section
+    assert "ユーザー環境用の環境前提チェックも実行しない" in section
+
+
+def test_default_dual_then_explicit_codex_only_keeps_legacy_metadata(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    legacy = repo / ".claude"
+    legacy.mkdir()
+    (legacy / "devkit-rules.json").write_text('{"version":"1"}')
+    (legacy / "devkit-rules-backup").mkdir()
+    (legacy / "devkit-rules-backup/AGENTS.md.bak").write_text("protected old backup")
+    old = _snapshot(legacy)
+    _run_sync_json(repo, TEMPLATE_PATH)
+    assert (repo / "CLAUDE.md").is_file()
+    assert "## DevKit Workflow" in (repo / "AGENTS.md").read_text()
+    assert not _run_sync_json(repo, TEMPLATE_PATH)["changed"]
+    assert _snapshot(legacy) == old
+    claude_before = (repo / "CLAUDE.md").read_bytes()
+    (repo / CONFIG_REL).write_text(json.dumps({"version": 1, "harness": "codex-only", "policy": "repo-local"}))
+    _run_sync_json(repo, TEMPLATE_PATH)
+    assert "## DevKit Workflow" not in (repo / "AGENTS.md").read_text()
+    assert _snapshot(legacy) == old
+    assert (repo / "CLAUDE.md").read_bytes() == claude_before
+    assert not _run_sync_json(repo, TEMPLATE_PATH)["changed"]
+
+
+@pytest.mark.parametrize("mutation", ["missing", "duplicate", "nested", "managed"])
+def test_invalid_policy_template_does_not_partially_write(tmp_path, mutation):
+    repo = _configured_repo(tmp_path)
+    text = TEMPLATE_PATH.read_text()
+    marker = "<!-- devkit:policy:repo-local:end -->"
+    if mutation == "missing":
+        text = text.replace(marker, "")
+    elif mutation == "duplicate":
+        text += marker
+    elif mutation == "nested":
+        text = text.replace(marker, "<!-- devkit:policy:unknown:start -->" + marker)
+    else:
+        text += "<!-- devkit:rules:start -->"
+    template = tmp_path / "template.md"
+    template.write_text(text)
+    before = _snapshot(repo)
+    assert _run_sync(repo, template, check=False).returncode != 0
+    assert _snapshot(repo) == before
+
+
+def test_codex_only_does_not_follow_protected_claude_links(tmp_path):
+    require_symlink_support()
+    repo = _configured_repo(tmp_path)
+    external = tmp_path / "protected"
+    external.mkdir()
+    (external / "entry.md").write_text("protected")
+    (repo / ".claude").symlink_to(external, target_is_directory=True)
+    (repo / "CLAUDE.md").symlink_to(external / "entry.md")
+    before = _snapshot(external)
+    assert _run_sync_json(repo, TEMPLATE_PATH)["changed"]
+    assert not _run_sync_json(repo, TEMPLATE_PATH)["changed"]
+    assert _snapshot(external) == before
+    assert (repo / ".claude").is_symlink()
+    assert (repo / "CLAUDE.md").is_symlink()

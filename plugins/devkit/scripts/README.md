@@ -169,3 +169,9 @@ git 追跡下の `*.sh` 全部と `plugins/devkit/tests/*.py`(テストが bash 
 ## Removed Runners
 
 v6 では browser automation runner と cross-repo maintenance runner は配布しません。関連する skill / scaffold / tests も配布面から外しています。現在の scripts README に載っていない runner はサポート対象外です。
+
+### repo rules だけの同期と Codex-only
+
+`/setup --repo-only [target]`（または「ルール同期だけ」）は `sync_rules.py` だけで終了し、thought-db・updater・prune・Claude 環境変数・shim・statusline・font を変更しません。通常の `/setup` は従来の repo + ユーザー環境同期です。
+対象 repo の `.agents/devkit-rules-config.json` に `{"version":1,"harness":"codex-only","policy":"repo-local"}` を明示保存すると、再同期でもその選択を維持します。環境（dual / codex-only）と権限方針（devkit / repo-local）は独立で、未設定時は dual / devkit です。repo-local は管理節外の承認・レビュー・Git 方針に委ね、従来の一律規則を生成しません。全環境で metadata / backup は `.agents/devkit-rules.json` / `.agents/devkit-rules-backup/AGENTS.md.bak` へ記録し、旧 `.claude` の記録は保持します。Codex-only はルート CLAUDE と `.claude` に触れません。
+設定・marker・対象パスは書込み前に検証し、`--dry-run` は無書込み、再実行は最新なら no-op です。詳細・直接実行形・配布後の確認手順・既存 Issue との整合案は setup の `references/sync-matrix.md` を参照してください。repo 選択はマシン全体の updater 選択・配布や実環境適用を許可しません。
