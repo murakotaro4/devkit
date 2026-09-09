@@ -225,7 +225,9 @@ def sync_rules(target: Path, template: Path, dry_run: bool) -> int:
     repo_root = run_git_root(target.resolve())
     ensure_supported_target(repo_root)
     config = read_config(repo_root)
-    template_text = read_text(template.resolve())
+    # Preserve the existing cross-platform template hash (LF-normalized text).
+    # AGENTS/backup reads remain byte-preserving for repo-owned content.
+    template_text = template.resolve().read_text(encoding="utf-8")
     template_hash = sha256_text(template_text)
     block = desired_block(render_template(template_text, config["policy"]))
 

@@ -541,7 +541,7 @@ def test_rules_harness_and_authority_are_independent(tmp_path, harness, policy):
     assert ("## Review Rules" in text) == (policy == "devkit")
     assert ("ユーザーの明示指示なしで commit / push" in text) == (policy == "devkit")
     assert "管理節外" in text
-    metadata = json.loads((repo / ".agents/devkit-rules.json").read_text())
+    metadata = json.loads((repo / ".agents/devkit-rules.json").read_text(encoding="utf-8"))
     assert metadata["harness"] == harness
     assert metadata["policy"] == policy
     before = _snapshot(repo)
@@ -599,8 +599,8 @@ def test_codex_only_preserves_legacy_and_outside_bytes_and_removes_old_authority
 @pytest.mark.parametrize("dry_args", [(), ("--dry-run",)])
 def test_invalid_rules_config_has_no_partial_writes(tmp_path, config, dry_args):
     repo = _configured_repo(tmp_path)
-    (repo / CONFIG_REL).write_text(config)
-    (repo / "AGENTS.md").write_text("unchanged")
+    (repo / CONFIG_REL).write_text(config, encoding="utf-8")
+    (repo / "AGENTS.md").write_text("unchanged", encoding="utf-8")
     home = _protected_home()
     before, home_before = _snapshot(repo), _snapshot(home)
     result = _run_sync(repo, TEMPLATE_PATH, *dry_args, check=False)
@@ -620,7 +620,7 @@ def test_invalid_rules_config_has_no_partial_writes(tmp_path, config, dry_args):
 ])
 def test_invalid_rules_markers_preflight_all_writes(tmp_path, markers):
     repo = _configured_repo(tmp_path)
-    (repo / "AGENTS.md").write_text(markers)
+    (repo / "AGENTS.md").write_text(markers, encoding="utf-8")
     before = _snapshot(repo)
     assert _run_sync(repo, TEMPLATE_PATH, check=False).returncode != 0
     assert _snapshot(repo) == before
@@ -631,14 +631,14 @@ def test_invalid_rules_markers_preflight_all_writes(tmp_path, markers):
 def test_repo_rules_dry_run_preserves_all_surfaces(tmp_path, existing, harness):
     repo = _configured_repo(tmp_path, harness)
     home = _protected_home()
-    (repo / "AGENTS.md").write_text("# local authority\n")
+    (repo / "AGENTS.md").write_text("# local authority\n", encoding="utf-8")
     if existing:
         _run_sync_json(repo, TEMPLATE_PATH)
         # Force a planned AGENTS/backup/metadata update on the next run.
         with (repo / "AGENTS.md").open("a") as handle:
             handle.write("\n<!-- no managed edit -->\n")
         template = tmp_path / "template.md"
-        template.write_text(TEMPLATE_PATH.read_text() + "\nUpdated shared text.\n")
+        template.write_text(TEMPLATE_PATH.read_text(encoding="utf-8") + "\nUpdated shared text.\n", encoding="utf-8")
     else:
         template = TEMPLATE_PATH
     before, home_before = _snapshot(repo), _snapshot(home)
@@ -665,7 +665,7 @@ def test_rules_rejects_symlink_write_paths_before_partial_update(tmp_path, relat
         if path.exists():
             path.rename(external / "saved")
         else:
-            (external / "saved").write_text("protected")
+            (external / "saved").write_text("protected", encoding="utf-8")
         path.symlink_to(external / "saved")
     before, external_before = _snapshot(repo), _snapshot(external)
     result = _run_sync(repo, TEMPLATE_PATH, check=False)
@@ -678,14 +678,14 @@ def test_rules_rejects_symlink_write_paths_before_partial_update(tmp_path, relat
 def test_repo_local_rejects_unscoped_custom_template(tmp_path):
     repo = _configured_repo(tmp_path)
     template = tmp_path / "custom.md"
-    template.write_text("Automatically commit and push")
+    template.write_text("Automatically commit and push", encoding="utf-8")
     before = _snapshot(repo)
     assert _run_sync(repo, template, check=False).returncode != 0
     assert _snapshot(repo) == before
 
 
 def test_repo_only_skill_routes_before_user_environment_checks():
-    text = SKILL_PATH.read_text()
+    text = SKILL_PATH.read_text(encoding="utf-8")
     section = text.split("## 同期範囲", 1)[1].split("## 実行前提", 1)[0]
     assert "--repo-only" in section and "sync_rules.py" in section
     assert "だけを実行して検証・報告後に終了" in section
@@ -700,19 +700,19 @@ def test_default_dual_then_explicit_codex_only_keeps_legacy_metadata(tmp_path):
     _git(repo, "init")
     legacy = repo / ".claude"
     legacy.mkdir()
-    (legacy / "devkit-rules.json").write_text('{"version":"1"}')
+    (legacy / "devkit-rules.json").write_text('{"version":"1"}', encoding="utf-8")
     (legacy / "devkit-rules-backup").mkdir()
-    (legacy / "devkit-rules-backup/AGENTS.md.bak").write_text("protected old backup")
+    (legacy / "devkit-rules-backup/AGENTS.md.bak").write_text("protected old backup", encoding="utf-8")
     old = _snapshot(legacy)
     _run_sync_json(repo, TEMPLATE_PATH)
     assert (repo / "CLAUDE.md").is_file()
-    assert "## DevKit Workflow" in (repo / "AGENTS.md").read_text()
+    assert "## DevKit Workflow" in (repo / "AGENTS.md").read_text(encoding="utf-8")
     assert not _run_sync_json(repo, TEMPLATE_PATH)["changed"]
     assert _snapshot(legacy) == old
     claude_before = (repo / "CLAUDE.md").read_bytes()
-    (repo / CONFIG_REL).write_text(json.dumps({"version": 1, "harness": "codex-only", "policy": "repo-local"}))
+    (repo / CONFIG_REL).write_text(json.dumps({"version": 1, "harness": "codex-only", "policy": "repo-local"}), encoding="utf-8")
     _run_sync_json(repo, TEMPLATE_PATH)
-    assert "## DevKit Workflow" not in (repo / "AGENTS.md").read_text()
+    assert "## DevKit Workflow" not in (repo / "AGENTS.md").read_text(encoding="utf-8")
     assert _snapshot(legacy) == old
     assert (repo / "CLAUDE.md").read_bytes() == claude_before
     assert not _run_sync_json(repo, TEMPLATE_PATH)["changed"]
@@ -721,7 +721,7 @@ def test_default_dual_then_explicit_codex_only_keeps_legacy_metadata(tmp_path):
 @pytest.mark.parametrize("mutation", ["missing", "duplicate", "nested", "managed"])
 def test_invalid_policy_template_does_not_partially_write(tmp_path, mutation):
     repo = _configured_repo(tmp_path)
-    text = TEMPLATE_PATH.read_text()
+    text = TEMPLATE_PATH.read_text(encoding="utf-8")
     marker = "<!-- devkit:policy:repo-local:end -->"
     if mutation == "missing":
         text = text.replace(marker, "")
@@ -732,7 +732,7 @@ def test_invalid_policy_template_does_not_partially_write(tmp_path, mutation):
     else:
         text += "<!-- devkit:rules:start -->"
     template = tmp_path / "template.md"
-    template.write_text(text)
+    template.write_text(text, encoding="utf-8")
     before = _snapshot(repo)
     assert _run_sync(repo, template, check=False).returncode != 0
     assert _snapshot(repo) == before
@@ -743,7 +743,7 @@ def test_codex_only_does_not_follow_protected_claude_links(tmp_path):
     repo = _configured_repo(tmp_path)
     external = tmp_path / "protected"
     external.mkdir()
-    (external / "entry.md").write_text("protected")
+    (external / "entry.md").write_text("protected", encoding="utf-8")
     (repo / ".claude").symlink_to(external, target_is_directory=True)
     (repo / "CLAUDE.md").symlink_to(external / "entry.md")
     before = _snapshot(external)
@@ -752,3 +752,16 @@ def test_codex_only_does_not_follow_protected_claude_links(tmp_path):
     assert _snapshot(external) == before
     assert (repo / ".claude").is_symlink()
     assert (repo / "CLAUDE.md").is_symlink()
+
+
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+def test_rules_template_hash_normalizes_line_endings(tmp_path, newline):
+    repo = _configured_repo(tmp_path, policy="devkit")
+    template = tmp_path / "template.md"
+    normalized = b"Managed rules\n\n- Keep authority local.\n"
+    template.write_bytes(normalized.replace(b"\n", newline))
+    _run_sync_json(repo, template)
+    metadata = json.loads((repo / ".agents/devkit-rules.json").read_text(encoding="utf-8"))
+    assert metadata["template_sha256"] == sha256(normalized).hexdigest()
+    assert b"\r" not in (repo / "AGENTS.md").read_bytes()
+    assert not _run_sync_json(repo, template)["changed"]

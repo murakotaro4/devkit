@@ -38,7 +38,7 @@ repo rules は `version` / 同期時刻 / template SHA-256 を記録する。tho
 - `harness`: `dual` / `codex-only`。Codex-only はルート `CLAUDE.md` を読み書きせず、`.claude` 内の metadata / backup / state に触れない。既存の入口や保護物も削除・移動しない。
 - `policy`: `devkit` / `repo-local`。harness と独立した選択。`devkit` は従来の workflow / review / commit の既定を同期する。管理節外の repo 固有方針・現在のユーザー指示が優先する。`repo-local` はそれらの既定を生成せず、管理節外に方針を委ねる。一律計画承認・必須レビュー・自動 commit/push を再挿入しない。
 - 設定がない場合だけ `dual` / `devkit`。設定ありの場合は 3 キーすべて必須。未知キー、重複キー、不正 JSON、型・値・version の不一致は書込み前に失敗する。選択を解除する設定削除は暗黙に行わない。
-- 全 harness の metadata は `.agents/devkit-rules.json`（version / 同期時刻 / template SHA-256 / harness / policy）、変更前の AGENTS backup は `.agents/devkit-rules-backup/AGENTS.md.bak`。新規の常設指示書は生成しない。旧 `.claude/devkit-rules.json` と `.claude/devkit-rules-backup/` は読み書き・削除・移動せず保持し、初回に新管理先へ現行結果を記録する。dual の入口・参照正規化・既定規則は維持するが、metadata / backup の参照先は変わる。
+- 全 harness の metadata は `.agents/devkit-rules.json`（version / 同期時刻 / LF 正規化した template SHA-256 / harness / policy）、変更前の AGENTS backup は `.agents/devkit-rules-backup/AGENTS.md.bak`。新規の常設指示書は生成しない。旧 `.claude/devkit-rules.json` と `.claude/devkit-rules-backup/` は読み書き・削除・移動せず保持し、初回に新管理先へ現行結果を記録する。dual の入口・参照正規化・既定規則は維持するが、metadata / backup の参照先は変わる。
 - marker 内だけを置換し、外側の本文を保持する。backup は直前の AGENTS 全文を含むため自動公開しない。新管理先の同名 backup は次の実変更時に更新する。設定は repo で共有可能だが、metadata / backup の追跡・除外は repo 方針で選ぶ（gitignore 自動編集はしない）。
 - 不正 marker、設定、不規則パス（symlink / directory）は backup を含む書込み前に検出して停止する。Codex-only で非対象の CLAUDE / `.claude` は検査もしない。I/O 障害や実行中の並行変更に対する複数ファイル transaction は保証しない。
 - `--dry-run` は `sync_rules.py` の変更予定だけを出し、repo・metadata・backup・ユーザー環境を書き換えない。初回も再実行も指定できる。skill の repo-only dry-run では同スクリプトに渡し、他の同期を実行しない。
@@ -70,7 +70,7 @@ Windows updater の PowerShell 責務は Claude Code native installer、Cursor A
 
 - `AGENTS.md` の rules marker は 1 組。thought-db はユーザー環境同期を選択した場合だけ対象 2 ファイルを確認。
 - dual のみ `CLAUDE.md` の `@./AGENTS.md` は 1 行。Codex-only は新規生成なし・既存 CLAUDE / `.claude` 無変更を確認。
-- `.agents/devkit-rules.json` の `template_sha256` は template と一致し、harness / policy は選択と一致。
+- `.agents/devkit-rules.json` の `template_sha256` は LF 正規化した template と一致し、harness / policy は選択と一致。
 - updater / Cursor prune / compaction env / shim は changed・no-op・skip・failure と path を区別。
 - statusline は installer 結果、font は `status` / `font_installed` / `download` / `settings` / `actions` を報告。
 - MISSING、ユーザーが skip した項目、再実行条件を報告。
