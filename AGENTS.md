@@ -54,6 +54,8 @@ goal-prompt は Goal プロンプトの保存と `/goal` 起動文の出力だ�
 ## Maintenance Rules
 
 - ルートのエージェント向けルールを変更するときは、まずこのファイルを更新する
+- 仕様・挙動を変える場合は、コードより先に既存の正本文書（README、docs、対応する SKILL.md 等）へ目的・期待動作・影響範囲・検証方針を反映し、実装後に文書・実装・検証結果の整合を確認する。正本がない場合だけ既存の文書配置に短い仕様を追加し入口からリンクする。誤字修正、挙動を変えない日次データ・通常 journal 更新は独立した仕様書や全工程を要求しない。
+- 配布する仕様先行ルールは `plugins/devkit/templates/rules/agents-rules.md` の policy 共通部分を正本とし、生成済み managed 範囲へ手書きしない。適用先では nested AGENTS の具体的指示を優先し、既存の承認・独立レビュー規則に従う。既承認の作業に新たな着手承認ゲートを追加しない。
 - スクリプトの仕様変更時は `README.md` と `plugins/devkit/scripts/README.md` を同期する
 - スキル契約を変える場合は対応する `SKILL.md` と必要な templates / scripts を同期する
 - 外部世界由来の値（モデル名・CLI フラグ・marketplace 名等）を docs へ追加・変更するときは `plugins/devkit/premises.json` に登録・更新する（`check_external_premises.py` が同期を強制する）
