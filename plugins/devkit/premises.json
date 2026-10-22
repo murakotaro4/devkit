@@ -891,6 +891,126 @@
       ]
     },
     {
+      "id": "codex-config-thread-unload-delay",
+      "summary": "使われていない Codex スレッドを読み込みから外すまでの秒数(MCP サーバー一式の停止)",
+      "current_value": "thread_unload_delay_secs",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])thread_unload_delay_secs(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "実機の Codex config(~/.codex/config.toml)と Codex の設定警告",
+      "update_notes": "config.shared.toml・devkit-codex-config.ps1・契約テスト・Windows 合成 smoke・README を同時更新",
+      "last_verified": "2026-10-22",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/check_skill_surface.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/templates/codex/config.shared.toml",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_codex_config_templates.py",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "codex-config-suppress-unstable-features-warning",
+      "summary": "Codex の開発中 feature 利用時の警告を抑止する設定",
+      "current_value": "suppress_unstable_features_warning",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])suppress_unstable_features_warning(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "実機の Codex config(~/.codex/config.toml)と Codex の設定警告",
+      "update_notes": "config.shared.toml・devkit-codex-config.ps1・契約テスト・Windows 合成 smoke・README を同時更新",
+      "last_verified": "2026-10-22",
+      "occurrences": [
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/check_skill_surface.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/templates/codex/config.shared.toml",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/tests/test_codex_config_templates.py",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "codex-feature-memories",
+      "summary": "Codex アプリの設定画面が書く memories の feature 設定(config 合成で引き継ぐ)",
+      "current_value": "features.memories",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])features\\.memories(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "実機の Codex config(~/.codex/config.toml)と Codex の設定警告",
+      "update_notes": "config.shared.toml・devkit-codex-config.ps1・契約テスト・Windows 合成 smoke・README を同時更新",
+      "last_verified": "2026-10-22",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/check_skill_surface.py",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/devkit-codex-config.ps1",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "codex-config-service-tier",
+      "summary": "Codex アプリの設定画面が書く service_tier(config 合成で引き継ぐ)",
+      "current_value": "service_tier",
+      "value_patterns": [
+        "(?<![A-Za-z0-9_])service_tier(?![A-Za-z0-9_])"
+      ],
+      "obsolete_value_patterns": [],
+      "verify_hint": "実機の Codex config(~/.codex/config.toml)と Codex の設定警告",
+      "update_notes": "config.shared.toml・devkit-codex-config.ps1・契約テスト・Windows 合成 smoke・README を同時更新",
+      "last_verified": "2026-10-22",
+      "occurrences": [
+        {
+          "path": "README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/README.md",
+          "count": 1
+        },
+        {
+          "path": "plugins/devkit/scripts/check_skill_surface.py",
+          "count": 6
+        },
+        {
+          "path": "plugins/devkit/scripts/devkit-codex-config.ps1",
+          "count": 1
+        }
+      ]
+    },
+    {
       "id": "claude-mem-plugin-cache-contract",
       "summary": "claude-mem plugin cache の探索契約(marketplace・runner・orphan 判定)",
       "current_value": "thedotmack",

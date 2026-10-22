@@ -170,7 +170,7 @@ function Test-DevKitCodexRuntimeSectionName([string]$Section) {
   return (
     $Section -match '^marketplaces\.[A-Za-z0-9_.-]+$' -or
     $Section -match '^plugins\.(?:"[^"]+@[^"]+"|''[^'']+@[^'']+'')$' -or
-    $Section -match '^(?:desktop|memories)$'
+    $Section -match '^(?:desktop|memories)(?:\..+)?$'
   )
 }
 

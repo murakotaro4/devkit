@@ -843,6 +843,18 @@ try {{
   if (-not $topLevel.Contains('features.memories = true')) {{ throw "Codex app memories feature lost from top level" }}
   if (-not $topLevel.Contains('service_tier = "fast"')) {{ throw "Codex app service tier lost from top level" }}
 
+  # template が同じ top-level key を持つ場合は template を優先し、key を重複させない
+  $tierPaths = Get-DevKitCodexConfigPaths -UserHome (Join-Path $Tmp.FullName "tier-home")
+  New-Item -ItemType Directory -Path $tierPaths.TemplateRoot -Force | Out-Null
+  $tierShared = (Get-Content -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.shared.toml") -Raw -Encoding UTF8).TrimEnd() + "`nservice_tier = `"flex`"`n"
+  Set-Content -LiteralPath $tierPaths.SharedTemplatePath -Encoding UTF8 -Value $tierShared
+  Copy-Item -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.windows.toml") -Destination $tierPaths.WindowsTemplatePath -Force
+  Set-Content -LiteralPath $tierPaths.TargetPath -Encoding UTF8 -Value "service_tier = `"fast`"`n`n[desktop.window]`nwidth = 1`n"
+  $tierContent = Get-DevKitCodexConfigContent -SharedTemplatePath $tierPaths.SharedTemplatePath -OsTemplatePath $tierPaths.WindowsTemplatePath -LocalOverlayPath $tierPaths.LocalOverlayPath -ExistingConfigPath $tierPaths.TargetPath
+  if ([regex]::Matches($tierContent, '(?m)^service_tier\s*=').Count -ne 1) {{ throw "service_tier duplicated or lost" }}
+  if (-not $tierContent.Contains('service_tier = "flex"')) {{ throw "template service_tier did not take precedence" }}
+  if (-not $tierContent.Contains("[desktop.window]`nwidth = 1")) {{ throw "Codex app desktop subtable lost" }}
+
   $script:TaskLog = New-Object System.Collections.Generic.List[string]
   $script:LegacyTaskPresent = $true
   function Get-ScheduledTask {{ param([string]$TaskName) if ($script:LegacyTaskPresent -and $TaskName -eq "DevKitSkillsDailyUpdate") {{ return [pscustomobject]@{{ TaskName = $TaskName }} }} }}
