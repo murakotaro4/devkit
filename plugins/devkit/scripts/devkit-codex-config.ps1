@@ -169,8 +169,43 @@ function Ensure-DevKitLocalOverlay([string]$TargetPath, [string]$LocalOverlayPat
 function Test-DevKitCodexRuntimeSectionName([string]$Section) {
   return (
     $Section -match '^marketplaces\.[A-Za-z0-9_.-]+$' -or
-    $Section -match '^plugins\.(?:"[^"]+@[^"]+"|''[^'']+@[^'']+'')$'
+    $Section -match '^plugins\.(?:"[^"]+@[^"]+"|''[^'']+@[^'']+'')$' -or
+    $Section -match '^(?:desktop|memories)$'
   )
+}
+
+# Codex アプリの設定画面が書く top-level key。template が同じ key を持つ場合は template を優先する。
+$script:DevKitCodexRuntimeTopLevelKeys = @("features.memories", "service_tier")
+
+function Get-DevKitCodexRuntimeTopLevelLines([string]$ConfigPath, [string[]]$TemplateContents) {
+  if ([string]::IsNullOrWhiteSpace($ConfigPath) -or -not (Test-Path -LiteralPath $ConfigPath)) {
+    return ""
+  }
+
+  $lines = New-Object System.Collections.Generic.List[string]
+  foreach ($rawLine in (Get-Content -LiteralPath $ConfigPath -Encoding UTF8)) {
+    $trimmed = $rawLine.Trim()
+    if ($trimmed.StartsWith("[")) {
+      break
+    }
+
+    foreach ($key in $script:DevKitCodexRuntimeTopLevelKeys) {
+      $escapedKey = [regex]::Escape($key)
+      if ($trimmed -notmatch ('^' + $escapedKey + '\s*=')) {
+        continue
+      }
+      $definedByTemplate = @($TemplateContents | Where-Object { $_ -match ('(?m)^\s*' + $escapedKey + '\s*=') }).Count -gt 0
+      if (-not $definedByTemplate) {
+        $lines.Add($trimmed) | Out-Null
+      }
+    }
+  }
+
+  if ($lines.Count -eq 0) {
+    return ""
+  }
+
+  return (($lines.ToArray() -join "`n") + "`n")
 }
 
 function Get-DevKitCodexRuntimeSections([string]$ConfigPath) {
@@ -234,6 +269,7 @@ function Get-DevKitCodexConfigContent([string]$SharedTemplatePath, [string]$OsTe
   $sharedContent = Read-DevKitTextFile -Path $SharedTemplatePath
   $osContent = Read-DevKitTextFile -Path $OsTemplatePath
   $overlayContent = ""
+  $runtimeTopLevelLines = Get-DevKitCodexRuntimeTopLevelLines -ConfigPath $ExistingConfigPath -TemplateContents @($sharedContent, $osContent)
   $runtimeSections = Get-DevKitCodexRuntimeSections -ConfigPath $ExistingConfigPath
 
   if (Test-Path -LiteralPath $LocalOverlayPath) {
@@ -241,7 +277,7 @@ function Get-DevKitCodexConfigContent([string]$SharedTemplatePath, [string]$OsTe
     Assert-ValidDevKitLocalOverlay -OverlayPath $LocalOverlayPath -Content $overlayContent
   }
 
-  return Join-DevKitTomlFragments -Fragments @($sharedContent, $osContent, $overlayContent, $runtimeSections)
+  return Join-DevKitTomlFragments -Fragments @($sharedContent, $runtimeTopLevelLines, $osContent, $overlayContent, $runtimeSections)
 }
 
 function Backup-DevKitCodexConfig([string]$TargetPath, [string]$BackupDir) {

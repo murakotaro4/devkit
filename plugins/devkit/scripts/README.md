@@ -81,7 +81,9 @@ Windows の `~/.codex/config.toml` 合成専用です。
 - shared template と windows template を結合する
 - shared template は model を `gpt-5.6-sol` に固定し、通常・Plan の effort を Medium にし、`features.default_mode_request_user_input = true` で Codex 本体側の Default mode 構造化確認を利用可能にする（DevKit skill の質問手段は変更しない）
 - `~/.codex/config.local.toml` があれば結合する
+- shared template は `suppress_unstable_features_warning = true` と `thread_unload_delay_secs = 300`（使われていないスレッドの MCP サーバー一式を5分で止める）を持ち、Codex が無視する `network_access` は持たない
 - Codex が書く marketplace / plugin runtime section を保持する
+- Codex アプリの設定画面が書く `[desktop]` / `[memories]` section と top-level の `features.memories` / `service_tier` を保持する（template が同じキーを持つ場合は template を優先する）。起動ごとに Codex アプリが書き直す `notify` と `[mcp_servers.*]` は保持しない
 - 次回更新時は既存 `config.toml` をバックアップしてから再合成し、旧 DevKit 固定値の `model` は template の `gpt-5.6-sol` へ置き換え、`model_context_window` / `model_auto_compact_token_limit` を削除する
 - 削除する旧固定値は `config.local.toml` へ移送せず、local overlay の許可キーも拡張しない
 - macOS / Linux / WSL では config 合成を行わない

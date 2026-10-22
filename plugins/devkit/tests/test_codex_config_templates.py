@@ -44,6 +44,16 @@ def test_shared_template_pins_model_and_medium_effort():
     assert not ({"max", "ultra"} & {value.lower() for value in _string_values(shared)})
 
 
+def test_shared_template_keeps_codex_app_tuning():
+    shared = _parse(SHARED_PATH)
+
+    # Codex が「無視する」と警告する未対応キー
+    assert "network_access" not in shared
+    assert shared["suppress_unstable_features_warning"] is True
+    # 使われていないスレッドを5分で外し、MCP サーバー一式を止める
+    assert shared["thread_unload_delay_secs"] == 300
+
+
 def test_shared_and_windows_templates_preserve_exact_platform_contract():
     windows = _parse(WINDOWS_PATH)
     merged = tomllib.loads(f"{_read(SHARED_PATH).rstrip()}\n\n{_read(WINDOWS_PATH)}")

@@ -6,8 +6,9 @@ model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 plan_mode_reasoning_effort = "medium"
 personality = "pragmatic"
-network_access = true
 web_search = "live"
+suppress_unstable_features_warning = true
+thread_unload_delay_secs = 300
 
 features.js_repl = true
 features.multi_agent = true
