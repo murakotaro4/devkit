@@ -803,7 +803,7 @@ try {{
   New-Item -ItemType Directory -Path $configPaths.TemplateRoot -Force | Out-Null
   Copy-Item -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.shared.toml") -Destination $configPaths.SharedTemplatePath -Force
   Copy-Item -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.windows.toml") -Destination $configPaths.WindowsTemplatePath -Force
-  Set-Content -LiteralPath $configPaths.TargetPath -Encoding UTF8 -Value "model = `"gpt-5.4`"`nmodel_reasoning_effort = `"xhigh`"`nplan_mode_reasoning_effort = `"xhigh`"`nmodel_context_window = 1000000`nmodel_auto_compact_token_limit = 9000000`n`n[marketplaces.murakotaro4]`nsource_type = `"git`"`nsource = `"murakotaro4/devkit`"`n`n[plugins.`"devkit@murakotaro4`"]`nenabled = true`n"
+  Set-Content -LiteralPath $configPaths.TargetPath -Encoding UTF8 -Value "model = `"gpt-5.4`"`nmodel_reasoning_effort = `"xhigh`"`nplan_mode_reasoning_effort = `"xhigh`"`nmodel_context_window = 1000000`nmodel_auto_compact_token_limit = 9000000`nnetwork_access = true`nfeatures.memories = true`nservice_tier = `"fast`"`n`n[marketplaces.murakotaro4]`nsource_type = `"git`"`nsource = `"murakotaro4/devkit`"`n`n[plugins.`"devkit@murakotaro4`"]`nenabled = true`n`n[desktop]`nappearanceTheme = `"dark`"`n`n[mcp_servers.node_repl]`ncommand = `"node_repl.exe`"`n`n[memories]`nuse_memories = true`n"
 
   $configResult = Install-DevKitCodexConfig -UserHome $configHome -OsName "windows"
   if ([string]::IsNullOrWhiteSpace($configResult.BackupPath)) {{ throw "config backup path missing" }}
@@ -833,6 +833,27 @@ try {{
   if (-not $installed.Contains('sandbox = "unelevated"')) {{ throw "Windows sandbox lost" }}
   if (-not $installed.Contains("[marketplaces.murakotaro4]")) {{ throw "marketplace runtime section lost" }}
   if (-not $installed.Contains("[plugins.`"devkit@murakotaro4`"]")) {{ throw "plugin runtime section lost" }}
+  if ($installed -match '(?m)^network_access\s*=') {{ throw "unsupported network_access retained" }}
+  if (-not $installed.Contains('suppress_unstable_features_warning = true')) {{ throw "unstable feature warning suppression missing" }}
+  if (-not $installed.Contains('thread_unload_delay_secs = 300')) {{ throw "thread unload delay missing" }}
+  if (-not $installed.Contains("[desktop]`nappearanceTheme = `"dark`"")) {{ throw "Codex app desktop section lost" }}
+  if (-not $installed.Contains("[memories]`nuse_memories = true")) {{ throw "Codex app memories section lost" }}
+  if ($installed.Contains("[mcp_servers.node_repl]")) {{ throw "app-regenerated MCP section retained" }}
+  $topLevel = ($installed -split '(?m)^\[', 2)[0]
+  if (-not $topLevel.Contains('features.memories = true')) {{ throw "Codex app memories feature lost from top level" }}
+  if (-not $topLevel.Contains('service_tier = "fast"')) {{ throw "Codex app service tier lost from top level" }}
+
+  # template が同じ top-level key を持つ場合は template を優先し、key を重複させない
+  $tierPaths = Get-DevKitCodexConfigPaths -UserHome (Join-Path $Tmp.FullName "tier-home")
+  New-Item -ItemType Directory -Path $tierPaths.TemplateRoot -Force | Out-Null
+  $tierShared = (Get-Content -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.shared.toml") -Raw -Encoding UTF8).TrimEnd() + "`nservice_tier = `"flex`"`n"
+  Set-Content -LiteralPath $tierPaths.SharedTemplatePath -Encoding UTF8 -Value $tierShared
+  Copy-Item -LiteralPath (Join-Path $Root "plugins/devkit/templates/codex/config.windows.toml") -Destination $tierPaths.WindowsTemplatePath -Force
+  Set-Content -LiteralPath $tierPaths.TargetPath -Encoding UTF8 -Value "service_tier = `"fast`"`n`n[desktop.window]`nwidth = 1`n"
+  $tierContent = Get-DevKitCodexConfigContent -SharedTemplatePath $tierPaths.SharedTemplatePath -OsTemplatePath $tierPaths.WindowsTemplatePath -LocalOverlayPath $tierPaths.LocalOverlayPath -ExistingConfigPath $tierPaths.TargetPath
+  if ([regex]::Matches($tierContent, '(?m)^service_tier\s*=').Count -ne 1) {{ throw "service_tier duplicated or lost" }}
+  if (-not $tierContent.Contains('service_tier = "flex"')) {{ throw "template service_tier did not take precedence" }}
+  if (-not $tierContent.Contains("[desktop.window]`nwidth = 1")) {{ throw "Codex app desktop subtable lost" }}
 
   $script:TaskLog = New-Object System.Collections.Generic.List[string]
   $script:LegacyTaskPresent = $true
